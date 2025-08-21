@@ -3,7 +3,7 @@ import { ConflictException, ForbiddenException, NotFoundException } from '@nestj
 import { UserPositionService } from '../../services/user-position.service';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import { RowLevelSecurityService } from '../../../../security/row-level-security.service';
-import { AuditService } from '../../../../audit/audit.service';
+import { AuditService } from '../../../modules/audit/services/audit.service';
 import { PositionValidator } from '../../../../validators/position.validator';
 import {
   createTestModule,

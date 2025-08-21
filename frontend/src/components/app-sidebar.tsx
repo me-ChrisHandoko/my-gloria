@@ -15,6 +15,10 @@ import {
   PieChart,
   Settings2,
   SquareTerminal,
+  Shield,
+  Key,
+  Users,
+  Lock,
 } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
@@ -65,6 +69,24 @@ const data = {
         {
           title: "Hierarchy",
           url: "/organization/hierarchy",
+        },
+      ],
+    },
+    {
+      title: "Permission Management",
+      url: "#",
+      icon: Shield,
+      isActive: false,
+      items: [
+        {
+          title: "Permissions",
+          url: "/permissions",
+          icon: Key,
+        },
+        {
+          title: "Roles",
+          url: "/roles",
+          icon: Users,
         },
       ],
     },

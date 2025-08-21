@@ -7,7 +7,8 @@ import {
   Delete,
   Query,
   UseGuards,
-  Request,
+  UseInterceptors,
+  Req,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -28,69 +29,73 @@ import {
   UserPermissionSummaryDto,
 } from '../dto/user-permission/effective-permissions.dto';
 import { ClerkAuthGuard } from '../../../auth/guards/clerk-auth.guard';
+import { AuditInterceptor } from '../../../middleware/security.middleware';
+import { Audit } from '../../../middleware/security.middleware';
 import { PermissionGuard } from '../guards/permission.guard';
 import { RequirePermission } from '../decorators/permission.decorator';
 import { PermissionAction, PermissionScope } from '@prisma/client';
 
-@ApiTags('user-permissions')
-@Controller('v1/users')
-@UseGuards(ClerkAuthGuard, PermissionGuard)
+@ApiTags('User Permissions')
 @ApiBearerAuth()
+@Controller('user-permissions')
+@UseGuards(ClerkAuthGuard)
+@UseInterceptors(AuditInterceptor)
 export class UserPermissionController {
   constructor(private readonly userPermissionService: UserPermissionService) {}
 
   @Post(':userId/permissions/grant')
-  @RequirePermission('user-permission', PermissionAction.ASSIGN)
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Grant permission to user' })
   @ApiResponse({ status: 201, description: 'Permission granted successfully' })
   @ApiResponse({ status: 404, description: 'User or permission not found' })
   @ApiResponse({ status: 409, description: 'Permission already granted' })
+  @Audit('GRANT', 'UserPermission')
   async grantPermission(
     @Param('userId') userId: string,
     @Body() grantDto: GrantPermissionDto,
-    @Request() req: any,
+    @Req() req: any,
   ) {
+    const grantedBy = req.user?.clerkUserId;
     return this.userPermissionService.grantPermission(
       userId,
       grantDto,
-      req.user.userId,
+      grantedBy,
     );
   }
 
   @Post(':userId/permissions/revoke')
-  @RequirePermission('user-permission', PermissionAction.ASSIGN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke permission from user' })
   @ApiResponse({ status: 204, description: 'Permission revoked successfully' })
   @ApiResponse({ status: 404, description: 'Permission not found for user' })
+  @Audit('REVOKE', 'UserPermission')
   async revokePermission(
     @Param('userId') userId: string,
     @Body() revokeDto: RevokePermissionDto,
-    @Request() req: any,
+    @Req() req: any,
   ) {
+    const revokedBy = req.user?.clerkUserId;
     await this.userPermissionService.revokePermission(
       userId,
       revokeDto,
-      req.user.userId,
+      revokedBy,
     );
   }
 
   @Post('permissions/bulk-grant')
-  @RequirePermission('user-permission', PermissionAction.ASSIGN)
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bulk grant permissions to user' })
   @ApiResponse({ status: 201, description: 'Permissions granted successfully' })
+  @Audit('BULK_GRANT', 'UserPermission')
   async bulkGrantPermissions(
     @Body() bulkDto: BulkGrantPermissionsDto,
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    return this.userPermissionService.bulkGrantPermissions(
-      bulkDto,
-      req.user.userId,
-    );
+    const grantedBy = req.user?.clerkUserId;
+    return this.userPermissionService.bulkGrantPermissions(bulkDto, grantedBy);
   }
 
   @Get(':userId/permissions/effective')
-  @RequirePermission('user-permission', PermissionAction.READ)
   @ApiOperation({ summary: 'Get effective permissions for user' })
   @ApiResponse({
     status: 200,
@@ -104,7 +109,6 @@ export class UserPermissionController {
   }
 
   @Get(':userId/permissions')
-  @RequirePermission('user-permission', PermissionAction.READ)
   @ApiOperation({ summary: 'Get direct permissions for user' })
   @ApiResponse({ status: 200, description: 'List of user permissions' })
   async getUserPermissions(@Param('userId') userId: string) {
@@ -112,7 +116,6 @@ export class UserPermissionController {
   }
 
   @Get('permissions/expiring')
-  @RequirePermission('user-permission', PermissionAction.READ)
   @ApiOperation({ summary: 'Get expiring temporary permissions' })
   @ApiResponse({ status: 200, description: 'List of expiring permissions' })
   async getExpiringPermissions(@Query('days') days?: string) {
@@ -121,9 +124,9 @@ export class UserPermissionController {
   }
 
   @Post('permissions/cleanup')
-  @RequirePermission('user-permission', PermissionAction.DELETE)
   @ApiOperation({ summary: 'Cleanup expired permissions' })
   @ApiResponse({ status: 200, description: 'Number of permissions cleaned up' })
+  @Audit('CLEANUP', 'UserPermission')
   async cleanupExpiredPermissions() {
     const count = await this.userPermissionService.cleanupExpiredPermissions();
     return { cleanedUp: count };
@@ -136,11 +139,8 @@ export class UserPermissionController {
     description: 'Current user permission summary',
     type: UserPermissionSummaryDto,
   })
-  async getMyPermissions(
-    @Request() req: any,
-  ): Promise<UserPermissionSummaryDto> {
-    return this.userPermissionService.getEffectivePermissions(
-      req.user.profileId,
-    );
+  async getMyPermissions(@Req() req: any): Promise<UserPermissionSummaryDto> {
+    const userId = req.user?.clerkUserId || req.user?.profileId;
+    return this.userPermissionService.getEffectivePermissions(userId);
   }
 }

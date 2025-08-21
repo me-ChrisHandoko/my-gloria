@@ -149,7 +149,7 @@ async function bootstrap() {
   );
   logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.log(`🔒 CORS enabled for: ${corsOrigins.join(', ')}`);
-  
+
   // Log to console as well to ensure we see it
   console.log(`✅ Server is listening on port ${port}`);
 }

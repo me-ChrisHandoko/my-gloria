@@ -35,7 +35,7 @@
     "rls:status": "ts-node scripts/rls-control.ts status"
   },
   "dependencies": {
-    "@clerk/backend": "^2.9.1",
+    "@clerk/backend": "^2.9.3",
     "@clerk/clerk-sdk-node": "^4.13.23",
     "@fastify/compress": "^8.1.0",
     "@fastify/cookie": "^11.0.2",
@@ -67,7 +67,7 @@
     "redis": "^5.8.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "svix": "^1.73.0",
+    "svix": "^1.74.1",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

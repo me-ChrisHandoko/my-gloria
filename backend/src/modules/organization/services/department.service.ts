@@ -15,7 +15,7 @@ import {
 } from '../dto/department.dto';
 import { DepartmentValidator } from '../../../validators/department.validator';
 import { RowLevelSecurityService } from '../../../security/row-level-security.service';
-import { AuditService } from '../../../audit/audit.service';
+import { AuditService } from '../../audit/services/audit.service';
 import { Prisma } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
 

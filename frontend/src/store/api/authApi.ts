@@ -35,7 +35,7 @@ export const authApi = apiSlice.injectEndpoints({
     }),
 
     // Get user permissions for a specific module
-    getUserPermissions: builder.query<any, string>({
+    getUserModulePermissions: builder.query<any, string>({
       query: (moduleCode) => `/v1/auth/permissions/${moduleCode}`,
       providesTags: (result, error, moduleCode) => [
         { type: 'Module', id: moduleCode },
@@ -60,7 +60,7 @@ export const {
   useGetCurrentUserQuery,
   useLazyGetCurrentUserQuery,
   useSyncUserMutation,
-  useGetUserPermissionsQuery,
+  useGetUserModulePermissionsQuery,
   useGetUserModulesQuery,
   useCheckAuthHealthQuery,
 } = authApi;

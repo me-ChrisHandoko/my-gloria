@@ -22,7 +22,7 @@ import { DepartmentValidator } from '../../validators/department.validator';
 
 // Security & Audit
 import { RowLevelSecurityService } from '../../security/row-level-security.service';
-import { AuditService } from '../../audit/audit.service';
+import { AuditService } from '../audit/services/audit.service';
 
 @Module({
   imports: [PrismaModule],

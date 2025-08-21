@@ -28,11 +28,11 @@ import { LocationBasedPolicyEngine } from './engines/location-based-policy.engin
 import { AttributeBasedPolicyEngine } from './engines/attribute-based-policy.engine';
 
 // External Services
-import { AuditService } from '../../audit/audit.service';
+import { AuditService } from '../audit/services/audit.service';
 
 /**
  * Consolidated Permission Module
- * 
+ *
  * This module consolidates all permission-related functionality:
  * - Core permission management
  * - Role management and hierarchy
@@ -40,7 +40,7 @@ import { AuditService } from '../../audit/audit.service';
  * - Permission policies (time, location, attribute-based)
  * - Permission caching
  * - Guards and decorators for authorization
- * 
+ *
  * Architecture follows the organization module pattern for consistency.
  */
 @Module({
@@ -61,18 +61,18 @@ import { AuditService } from '../../audit/audit.service';
     PermissionCacheService,
     PolicyEngineService,
     PermissionGroupService,
-    
+
     // Guards
     PermissionGuard,
-    
+
     // Policy Engines
     TimeBasedPolicyEngine,
     LocationBasedPolicyEngine,
     AttributeBasedPolicyEngine,
-    
+
     // External Services
     AuditService,
-    
+
     // Cache Manager (for PermissionCacheService)
     {
       provide: CACHE_MANAGER,

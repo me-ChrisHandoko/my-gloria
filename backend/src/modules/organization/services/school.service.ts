@@ -11,7 +11,7 @@ import {
   SchoolFilterDto,
 } from '../dto/school.dto';
 import { RowLevelSecurityService } from '../../../security/row-level-security.service';
-import { AuditService } from '../../../audit/audit.service';
+import { AuditService } from '../../audit/services/audit.service';
 import { Prisma } from '@prisma/client';
 import { BaseService } from '../../../common/base/base.service';
 import { v7 as uuidv7 } from 'uuid';

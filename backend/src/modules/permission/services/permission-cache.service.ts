@@ -191,7 +191,9 @@ export class PermissionCacheService {
     // This is a workaround - in production, consider using Redis FLUSHDB or pattern-based deletion
     try {
       // For now, we'll just log that we would clear the cache
-      this.logger.warn('Cache clear requested - implement based on your cache store');
+      this.logger.warn(
+        'Cache clear requested - implement based on your cache store',
+      );
     } catch (error) {
       this.logger.error('Failed to clear cache', error);
     }
@@ -226,7 +228,9 @@ export class PermissionCacheService {
     // This is a workaround - in production, consider using Redis FLUSHDB or pattern-based deletion
     try {
       // For now, we'll just log that we would clear the cache
-      this.logger.warn('Cache clear requested - implement based on your cache store');
+      this.logger.warn(
+        'Cache clear requested - implement based on your cache store',
+      );
     } catch (error) {
       this.logger.error('Failed to clear cache', error);
     }

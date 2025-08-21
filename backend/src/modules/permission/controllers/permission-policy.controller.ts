@@ -8,7 +8,8 @@ import {
   Delete,
   Query,
   UseGuards,
-  Request,
+  UseInterceptors,
+  Req,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -27,14 +28,17 @@ import {
   EvaluatePolicyDto,
 } from '../dto/policy/create-policy.dto';
 import { ClerkAuthGuard } from '../../../auth/guards/clerk-auth.guard';
+import { AuditInterceptor } from '../../../middleware/security.middleware';
+import { Audit } from '../../../middleware/security.middleware';
 import { PermissionGuard } from '../guards/permission.guard';
 import { RequirePermission } from '../decorators/permission.decorator';
 import { PermissionAction, PolicyType } from '@prisma/client';
 
-@ApiTags('permission-policies')
-@Controller('v1/policies')
-@UseGuards(ClerkAuthGuard, PermissionGuard)
+@ApiTags('Permission Policies')
 @ApiBearerAuth()
+@Controller('permission-policies')
+@UseGuards(ClerkAuthGuard)
+@UseInterceptors(AuditInterceptor)
 export class PermissionPolicyController {
   constructor(
     private readonly policyService: PermissionPolicyService,
@@ -42,16 +46,17 @@ export class PermissionPolicyController {
   ) {}
 
   @Post()
-  @RequirePermission('policy', PermissionAction.CREATE)
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new permission policy' })
   @ApiResponse({ status: 201, description: 'Policy created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid policy rules' })
-  async create(@Body() createPolicyDto: CreatePolicyDto, @Request() req: any) {
-    return this.policyService.create(createPolicyDto, req.user.userId);
+  @Audit('CREATE', 'PermissionPolicy')
+  async create(@Body() createPolicyDto: CreatePolicyDto, @Req() req: any) {
+    const userId = req.user?.clerkUserId;
+    return this.policyService.create(createPolicyDto, userId);
   }
 
   @Get()
-  @RequirePermission('policy', PermissionAction.READ)
   @ApiOperation({ summary: 'Get all policies' })
   @ApiResponse({ status: 200, description: 'List of policies' })
   async findAll(
@@ -65,7 +70,6 @@ export class PermissionPolicyController {
   }
 
   @Get(':id')
-  @RequirePermission('policy', PermissionAction.READ)
   @ApiOperation({ summary: 'Get policy by ID' })
   @ApiResponse({ status: 200, description: 'Policy details' })
   @ApiResponse({ status: 404, description: 'Policy not found' })
@@ -74,59 +78,59 @@ export class PermissionPolicyController {
   }
 
   @Patch(':id')
-  @RequirePermission('policy', PermissionAction.UPDATE)
   @ApiOperation({ summary: 'Update policy' })
   @ApiResponse({ status: 200, description: 'Policy updated successfully' })
   @ApiResponse({ status: 404, description: 'Policy not found' })
+  @Audit('UPDATE', 'PermissionPolicy')
   async update(
     @Param('id') id: string,
     @Body() updatePolicyDto: UpdatePolicyDto,
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    return this.policyService.update(id, updatePolicyDto, req.user.userId);
+    const userId = req.user?.clerkUserId;
+    return this.policyService.update(id, updatePolicyDto, userId);
   }
 
   @Delete(':id')
-  @RequirePermission('policy', PermissionAction.DELETE)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete policy' })
   @ApiResponse({ status: 204, description: 'Policy deleted successfully' })
   @ApiResponse({ status: 404, description: 'Policy not found' })
-  async remove(@Param('id') id: string, @Request() req: any) {
-    await this.policyService.remove(id, req.user.userId);
+  @Audit('DELETE', 'PermissionPolicy')
+  async remove(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.clerkUserId;
+    await this.policyService.remove(id, userId);
   }
 
   @Post(':id/assign')
-  @RequirePermission('policy', PermissionAction.ASSIGN)
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Assign policy to user/role/department/position' })
   @ApiResponse({ status: 201, description: 'Policy assigned successfully' })
+  @Audit('ASSIGN', 'PermissionPolicy')
   async assignPolicy(
     @Param('id') id: string,
     @Body() assignPolicyDto: AssignPolicyDto,
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    return this.policyService.assignPolicy(
-      id,
-      assignPolicyDto,
-      req.user.userId,
-    );
+    const userId = req.user?.clerkUserId;
+    return this.policyService.assignPolicy(id, assignPolicyDto, userId);
   }
 
   @Delete(':id/assignments/:assignmentId')
-  @RequirePermission('policy', PermissionAction.ASSIGN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove policy assignment' })
   @ApiResponse({ status: 204, description: 'Assignment removed successfully' })
+  @Audit('UNASSIGN', 'PermissionPolicy')
   async removeAssignment(
     @Param('id') id: string,
     @Param('assignmentId') assignmentId: string,
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    await this.policyService.removeAssignment(assignmentId, req.user.userId);
+    const userId = req.user?.clerkUserId;
+    await this.policyService.removeAssignment(assignmentId, userId);
   }
 
   @Post(':id/evaluate')
-  @RequirePermission('policy', PermissionAction.READ)
   @ApiOperation({ summary: 'Evaluate policy for a user' })
   @ApiResponse({ status: 200, description: 'Policy evaluation result' })
   async evaluatePolicy(
@@ -141,7 +145,6 @@ export class PermissionPolicyController {
   }
 
   @Post('evaluate-all')
-  @RequirePermission('policy', PermissionAction.READ)
   @ApiOperation({ summary: 'Evaluate all applicable policies for a user' })
   @ApiResponse({ status: 200, description: 'All policy evaluation results' })
   async evaluateAllPolicies(@Body() evaluateDto: EvaluatePolicyDto) {
@@ -160,7 +163,6 @@ export class PermissionPolicyController {
   }
 
   @Post('validate-rules')
-  @RequirePermission('policy', PermissionAction.CREATE)
   @ApiOperation({ summary: 'Validate policy rules' })
   @ApiResponse({ status: 200, description: 'Validation result' })
   async validateRules(@Body() body: { policyType: PolicyType; rules: any }) {
@@ -172,7 +174,6 @@ export class PermissionPolicyController {
   }
 
   @Get(':id/assignments')
-  @RequirePermission('policy', PermissionAction.READ)
   @ApiOperation({ summary: 'Get policy assignments' })
   @ApiResponse({ status: 200, description: 'List of policy assignments' })
   async getPolicyAssignments(@Param('id') id: string) {

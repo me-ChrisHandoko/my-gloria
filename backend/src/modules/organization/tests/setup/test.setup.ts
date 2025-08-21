@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import { RowLevelSecurityService } from '../../../../security/row-level-security.service';
-import { AuditService } from '../../../../audit/audit.service';
+import { AuditService } from '../../../audit/services/audit.service';
 import { DepartmentValidator } from '../../../../validators/department.validator';
 import { PositionValidator } from '../../../../validators/position.validator';
 import { HierarchyValidator } from '../../../../validators/hierarchy.validator';

@@ -11,7 +11,7 @@ import {
   CheckPermissionDto,
   PermissionCheckResultDto,
 } from '../dto/permission/check-permission.dto';
-import { AuditService } from '../../../audit/audit.service';
+import { AuditService } from '../../audit/services/audit.service';
 import {
   Prisma,
   Permission,
@@ -62,7 +62,7 @@ export class PermissionService {
     const permission = await this.prisma.$transaction(async (tx) => {
       // Extract dependencies from DTO
       const { dependencies, ...permissionData } = createPermissionDto;
-      
+
       // Create the permission
       const newPermission = await tx.permission.create({
         data: {
@@ -226,7 +226,7 @@ export class PermissionService {
     const permission = await this.prisma.$transaction(async (tx) => {
       // Extract dependencies and other non-direct fields from DTO
       const { dependencies, ...permissionData } = updatePermissionDto;
-      
+
       const updated = await tx.permission.update({
         where: { id },
         data: {

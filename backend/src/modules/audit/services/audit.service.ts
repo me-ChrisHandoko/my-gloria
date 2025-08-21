@@ -1,7 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditAction, Prisma } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
+import {
+  QueryAuditLogDto,
+  QueryAuditStatisticsDto,
+  StatisticsGroupBy,
+  ExportAuditLogDto,
+  ExportFormat,
+  AuditStatisticsResponseDto,
+} from '../dto';
 
 interface AuditContext {
   actorId: string; // Clerk user ID
@@ -35,7 +43,7 @@ export class AuditService {
     // Support both formats - if change is not provided, assume first param has everything
     let context: AuditContext;
     let auditChange: AuditableChange;
-    
+
     if (change) {
       // Two-parameter format
       context = contextOrCombined as AuditContext;
@@ -60,14 +68,17 @@ export class AuditService {
         metadata: combined.metadata,
       };
     }
-    
+
     await this.logInternal(context, auditChange);
   }
 
   /**
    * Internal log method that does the actual work
    */
-  private async logInternal(context: AuditContext, change: AuditableChange): Promise<void> {
+  private async logInternal(
+    context: AuditContext,
+    change: AuditableChange,
+  ): Promise<void> {
     try {
       // Get actor profile if not provided
       let actorProfileId = context.actorProfileId;
@@ -478,5 +489,415 @@ export class AuditService {
     });
 
     return result.count;
+  }
+
+  /**
+   * Query audit logs with advanced filters
+   */
+  async queryAuditLogs(
+    query: QueryAuditLogDto,
+  ): Promise<{ data: any[]; total: number }> {
+    const where: Prisma.AuditLogWhereInput = {};
+
+    if (query.entityType) {
+      where.entityType = query.entityType;
+    }
+
+    if (query.entityId) {
+      where.entityId = query.entityId;
+    }
+
+    if (query.module) {
+      where.module = query.module;
+    }
+
+    if (query.actorId) {
+      where.actorId = query.actorId;
+    }
+
+    if (query.actions && query.actions.length > 0) {
+      where.action = { in: query.actions };
+    }
+
+    if (query.startDate || query.endDate) {
+      where.createdAt = {};
+      if (query.startDate) {
+        where.createdAt.gte = new Date(query.startDate);
+      }
+      if (query.endDate) {
+        where.createdAt.lte = new Date(query.endDate);
+      }
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        include: {
+          actorProfile: {
+            include: {
+              dataKaryawan: {
+                select: {
+                  nama: true,
+                  nip: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          [query.sortBy || 'createdAt']: query.sortOrder || 'desc',
+        },
+        take: query.limit || 50,
+        skip: query.offset || 0,
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    return { data, total };
+  }
+
+  /**
+   * Get statistics based on grouping
+   */
+  async getStatistics(
+    query: QueryAuditStatisticsDto,
+  ): Promise<AuditStatisticsResponseDto[]> {
+    const where: Prisma.AuditLogWhereInput = {
+      createdAt: {
+        gte: new Date(query.startDate),
+        lte: new Date(query.endDate),
+      },
+    };
+
+    if (query.module) {
+      where.module = query.module;
+    }
+
+    if (query.entityType) {
+      where.entityType = query.entityType;
+    }
+
+    let groupBy: any;
+    switch (query.groupBy) {
+      case StatisticsGroupBy.MODULE:
+        groupBy = ['module'];
+        break;
+      case StatisticsGroupBy.ACTION:
+        groupBy = ['action'];
+        break;
+      case StatisticsGroupBy.ACTOR:
+        groupBy = ['actorId'];
+        break;
+      case StatisticsGroupBy.ENTITY_TYPE:
+        groupBy = ['entityType'];
+        break;
+      default:
+        groupBy = ['module'];
+    }
+
+    const result = await this.prisma.auditLog.groupBy({
+      by: groupBy,
+      where,
+      _count: {
+        id: true,
+      },
+      orderBy: {
+        _count: {
+          id: 'desc',
+        },
+      },
+    });
+
+    const total = result.reduce((sum, item) => sum + item._count.id, 0);
+
+    return result.map((item) => ({
+      label: query.groupBy,
+      value: item[groupBy[0]],
+      count: item._count.id,
+      percentage: (item._count.id / total) * 100,
+    }));
+  }
+
+  /**
+   * Export audit logs in various formats
+   */
+  async exportAuditLogs(
+    exportDto: ExportAuditLogDto,
+  ): Promise<{ data: any; filename: string; mimeType: string }> {
+    const where: Prisma.AuditLogWhereInput = {
+      createdAt: {
+        gte: new Date(exportDto.startDate),
+        lte: new Date(exportDto.endDate),
+      },
+    };
+
+    if (exportDto.entityType) {
+      where.entityType = exportDto.entityType;
+    }
+
+    if (exportDto.entityId) {
+      where.entityId = exportDto.entityId;
+    }
+
+    if (exportDto.module) {
+      where.module = exportDto.module;
+    }
+
+    if (exportDto.actorId) {
+      where.actorId = exportDto.actorId;
+    }
+
+    if (exportDto.actions && exportDto.actions.length > 0) {
+      where.action = { in: exportDto.actions };
+    }
+
+    const logs = await this.prisma.auditLog.findMany({
+      where,
+      include: {
+        actorProfile: {
+          include: {
+            dataKaryawan: {
+              select: {
+                nama: true,
+                nip: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    let data: any;
+    let filename: string;
+    let mimeType: string;
+
+    switch (exportDto.format) {
+      case ExportFormat.JSON:
+        data = JSON.stringify(logs, null, 2);
+        filename = `audit-log-${timestamp}.json`;
+        mimeType = 'application/json';
+        break;
+
+      case ExportFormat.CSV:
+        data = this.convertToCSV(logs, exportDto.fields);
+        filename = `audit-log-${timestamp}.csv`;
+        mimeType = 'text/csv';
+        break;
+
+      case ExportFormat.EXCEL:
+        // This would require additional library like exceljs
+        // For now, we'll return CSV format
+        data = this.convertToCSV(logs, exportDto.fields);
+        filename = `audit-log-${timestamp}.csv`;
+        mimeType = 'text/csv';
+        break;
+
+      default:
+        data = this.convertToCSV(logs, exportDto.fields);
+        filename = `audit-log-${timestamp}.csv`;
+        mimeType = 'text/csv';
+    }
+
+    return { data, filename, mimeType };
+  }
+
+  /**
+   * Convert audit logs to CSV format
+   */
+  private convertToCSV(logs: any[], fields?: string[]): string {
+    if (logs.length === 0) {
+      return '';
+    }
+
+    const defaultFields = [
+      'id',
+      'createdAt',
+      'actorId',
+      'actorName',
+      'action',
+      'module',
+      'entityType',
+      'entityId',
+      'entityDisplay',
+      'ipAddress',
+    ];
+
+    const fieldsToExport = fields || defaultFields;
+    const headers = fieldsToExport.join(',');
+
+    const rows = logs.map((log) => {
+      return fieldsToExport
+        .map((field) => {
+          if (field === 'actorName') {
+            return log.actorProfile?.dataKaryawan?.nama || log.actorId;
+          }
+          const value = log[field];
+          if (value === null || value === undefined) {
+            return '';
+          }
+          if (typeof value === 'object') {
+            return JSON.stringify(value);
+          }
+          return String(value).includes(',') ? `"${value}"` : value;
+        })
+        .join(',');
+    });
+
+    return [headers, ...rows].join('\n');
+  }
+
+  /**
+   * Get recent changes across the system
+   */
+  async getRecentChanges(limit: number = 20): Promise<any[]> {
+    return this.prisma.auditLog.findMany({
+      include: {
+        actorProfile: {
+          include: {
+            dataKaryawan: {
+              select: {
+                nama: true,
+                nip: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: limit,
+    });
+  }
+
+  /**
+   * Generate compliance audit report
+   */
+  async generateComplianceReport(startDate: Date, endDate: Date): Promise<any> {
+    const [
+      totalLogs,
+      actionBreakdown,
+      moduleBreakdown,
+      topActors,
+      criticalActions,
+    ] = await Promise.all([
+      // Total audit logs
+      this.prisma.auditLog.count({
+        where: {
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+      }),
+
+      // Action breakdown
+      this.prisma.auditLog.groupBy({
+        by: ['action'],
+        where: {
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+        _count: {
+          id: true,
+        },
+      }),
+
+      // Module breakdown
+      this.prisma.auditLog.groupBy({
+        by: ['module'],
+        where: {
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+        _count: {
+          id: true,
+        },
+      }),
+
+      // Top actors
+      this.prisma.auditLog.groupBy({
+        by: ['actorId'],
+        where: {
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+        _count: {
+          id: true,
+        },
+        orderBy: {
+          _count: {
+            id: 'desc',
+          },
+        },
+        take: 10,
+      }),
+
+      // Critical actions (DELETE, APPROVE, REJECT)
+      this.prisma.auditLog.findMany({
+        where: {
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+          action: {
+            in: [AuditAction.DELETE, AuditAction.APPROVE, AuditAction.REJECT],
+          },
+        },
+        include: {
+          actorProfile: {
+            include: {
+              dataKaryawan: {
+                select: {
+                  nama: true,
+                  nip: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 50,
+      }),
+    ]);
+
+    return {
+      period: {
+        startDate,
+        endDate,
+      },
+      summary: {
+        totalLogs,
+        averagePerDay: totalLogs / this.getDaysBetween(startDate, endDate),
+      },
+      breakdown: {
+        byAction: actionBreakdown,
+        byModule: moduleBreakdown,
+      },
+      topActors,
+      criticalActions,
+      generatedAt: new Date(),
+    };
+  }
+
+  /**
+   * Calculate days between two dates
+   */
+  private getDaysBetween(startDate: Date, endDate: Date): number {
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays || 1;
   }
 }

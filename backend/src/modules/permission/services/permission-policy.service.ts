@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { AuditService } from '../../../audit/audit.service';
+import { AuditService } from '../../audit/services/audit.service';
 import {
   CreatePolicyDto,
   UpdatePolicyDto,

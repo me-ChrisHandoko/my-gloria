@@ -1,7 +1,7 @@
 import { SetMetadata } from '@nestjs/common';
-import { 
-  PermissionAction, 
-  PermissionScope as PrismaPermissionScope 
+import {
+  PermissionAction,
+  PermissionScope as PrismaPermissionScope,
 } from '@prisma/client';
 
 export const PERMISSIONS_KEY = 'permissions';
@@ -48,7 +48,11 @@ export const RequireAnyPermission = (
     propertyKey?: string,
     descriptor?: PropertyDescriptor,
   ) => {
-    SetMetadata(PERMISSIONS_KEY, permissions)(target, propertyKey!, descriptor!);
+    SetMetadata(PERMISSIONS_KEY, permissions)(
+      target,
+      propertyKey!,
+      descriptor!,
+    );
     SetMetadata(PERMISSION_MODE_KEY, 'ANY')(target, propertyKey!, descriptor!);
     return descriptor;
   };

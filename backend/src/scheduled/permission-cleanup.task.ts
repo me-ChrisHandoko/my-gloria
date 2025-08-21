@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression, Interval, Timeout } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionCacheService } from '../cache/services/permission-cache.service';
-import { AuditService } from '../audit/audit.service';
+import { AuditService } from '../modules/audit/services/audit.service';
 
 @Injectable()
 export class PermissionCleanupTask {

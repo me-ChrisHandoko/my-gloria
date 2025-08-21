@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { CreatePermissionGroupDto, UpdatePermissionGroupDto } from '../dto/permission-group.dto';
+import {
+  CreatePermissionGroupDto,
+  UpdatePermissionGroupDto,
+} from '../dto/permission-group.dto';
 
 @Injectable()
 export class PermissionGroupService {
@@ -50,7 +53,7 @@ export class PermissionGroupService {
         name: data.name,
         description: data.description,
         icon: data.icon,
-        sortOrder: data.sortOrder ?? ((maxSortOrder._max.sortOrder ?? 0) + 1),
+        sortOrder: data.sortOrder ?? (maxSortOrder._max.sortOrder ?? 0) + 1,
       },
       include: {
         permissions: true,
@@ -81,7 +84,9 @@ export class PermissionGroupService {
     });
 
     if (permissionsCount > 0) {
-      throw new Error(`Cannot delete group with ${permissionsCount} permissions. Move or delete permissions first.`);
+      throw new Error(
+        `Cannot delete group with ${permissionsCount} permissions. Move or delete permissions first.`,
+      );
     }
 
     await this.prisma.permissionGroup.delete({

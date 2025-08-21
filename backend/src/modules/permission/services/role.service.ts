@@ -12,7 +12,7 @@ import {
   RevokeRoleDto,
   RolePermissionDto,
 } from '../dto/role/assign-role.dto';
-import { AuditService } from '../../../audit/audit.service';
+import { AuditService } from '../../audit/services/audit.service';
 import { Prisma, Role, UserRole, RolePermission } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
 

@@ -4,7 +4,7 @@ import { PermissionModule } from './permission.module';
 
 async function testConsolidatedModule() {
   console.log('Testing consolidated permission module...');
-  
+
   try {
     const moduleRef = await Test.createTestingModule({
       imports: [PermissionModule],

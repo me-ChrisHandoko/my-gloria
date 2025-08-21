@@ -1,7 +1,7 @@
 import { Injectable, NestMiddleware, ForbiddenException } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { RowLevelSecurityService } from '../security/row-level-security.service';
-import { AuditService } from '../audit/audit.service';
+import { AuditService } from '../modules/audit/services/audit.service';
 
 interface AuthenticatedRequest extends Request {
   user?: {

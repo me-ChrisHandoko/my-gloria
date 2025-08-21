@@ -8,7 +8,8 @@ import {
   Delete,
   Query,
   UseGuards,
-  Request,
+  UseInterceptors,
+  Req,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -27,28 +28,32 @@ import {
   RolePermissionDto,
 } from '../dto/role/assign-role.dto';
 import { ClerkAuthGuard } from '../../../auth/guards/clerk-auth.guard';
+import { AuditInterceptor } from '../../../middleware/security.middleware';
+import { Audit } from '../../../middleware/security.middleware';
 import { PermissionGuard } from '../guards/permission.guard';
 import { RequirePermission } from '../decorators/permission.decorator';
 import { PermissionAction, PermissionScope } from '@prisma/client';
 
-@ApiTags('roles')
-@Controller('v1/roles')
-@UseGuards(ClerkAuthGuard, PermissionGuard)
+@ApiTags('Roles')
 @ApiBearerAuth()
+@Controller('roles')
+@UseGuards(ClerkAuthGuard)
+@UseInterceptors(AuditInterceptor)
 export class RoleController {
   constructor(private readonly roleService: RoleService) {}
 
   @Post()
-  @RequirePermission('role', PermissionAction.CREATE)
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new role' })
   @ApiResponse({ status: 201, description: 'Role created successfully' })
   @ApiResponse({ status: 409, description: 'Role already exists' })
-  async create(@Body() createRoleDto: CreateRoleDto, @Request() req: any) {
-    return this.roleService.create(createRoleDto, req.user.userId);
+  @Audit('CREATE', 'Role')
+  async create(@Body() createRoleDto: CreateRoleDto, @Req() req: any) {
+    const userId = req.user?.clerkUserId;
+    return this.roleService.create(createRoleDto, userId);
   }
 
   @Get()
-  @RequirePermission('role', PermissionAction.READ)
   @ApiOperation({ summary: 'Get all roles' })
   @ApiResponse({ status: 200, description: 'List of roles' })
   async findAll(
@@ -67,7 +72,6 @@ export class RoleController {
   }
 
   @Get(':id')
-  @RequirePermission('role', PermissionAction.READ)
   @ApiOperation({ summary: 'Get role by ID' })
   @ApiResponse({ status: 200, description: 'Role details' })
   @ApiResponse({ status: 404, description: 'Role not found' })
@@ -76,7 +80,6 @@ export class RoleController {
   }
 
   @Get('code/:code')
-  @RequirePermission('role', PermissionAction.READ)
   @ApiOperation({ summary: 'Get role by code' })
   @ApiResponse({ status: 200, description: 'Role details' })
   @ApiResponse({ status: 404, description: 'Role not found' })
@@ -85,7 +88,6 @@ export class RoleController {
   }
 
   @Get(':id/permissions/inherited')
-  @RequirePermission('role', PermissionAction.READ)
   @ApiOperation({ summary: 'Get inherited permissions for a role' })
   @ApiResponse({ status: 200, description: 'List of inherited permissions' })
   async getInheritedPermissions(@Param('id') id: string) {
@@ -93,21 +95,21 @@ export class RoleController {
   }
 
   @Patch(':id')
-  @RequirePermission('role', PermissionAction.UPDATE)
   @ApiOperation({ summary: 'Update role' })
   @ApiResponse({ status: 200, description: 'Role updated successfully' })
   @ApiResponse({ status: 404, description: 'Role not found' })
   @ApiResponse({ status: 400, description: 'Cannot modify system role' })
+  @Audit('UPDATE', 'Role')
   async update(
     @Param('id') id: string,
     @Body() updateRoleDto: UpdateRoleDto,
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    return this.roleService.update(id, updateRoleDto, req.user.userId);
+    const userId = req.user?.clerkUserId;
+    return this.roleService.update(id, updateRoleDto, userId);
   }
 
   @Delete(':id')
-  @RequirePermission('role', PermissionAction.DELETE)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete role' })
   @ApiResponse({ status: 204, description: 'Role deleted successfully' })
@@ -116,66 +118,72 @@ export class RoleController {
     status: 400,
     description: 'Cannot delete system role or role with active users',
   })
-  async remove(@Param('id') id: string, @Request() req: any) {
-    await this.roleService.remove(id, req.user.userId);
+  @Audit('DELETE', 'Role')
+  async remove(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.clerkUserId;
+    await this.roleService.remove(id, userId);
   }
 
   @Post(':id/assign')
-  @RequirePermission('role', PermissionAction.ASSIGN)
   @ApiOperation({ summary: 'Assign role to user' })
   @ApiResponse({ status: 201, description: 'Role assigned successfully' })
   @ApiResponse({ status: 404, description: 'Role or user not found' })
   @ApiResponse({ status: 409, description: 'Role already assigned' })
+  @Audit('ASSIGN', 'Role')
   async assignRole(
     @Param('id') id: string,
     @Body() assignRoleDto: AssignRoleDto,
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    return this.roleService.assignRole(id, assignRoleDto, req.user.userId);
+    const userId = req.user?.clerkUserId;
+    return this.roleService.assignRole(id, assignRoleDto, userId);
   }
 
   @Post(':id/revoke')
-  @RequirePermission('role', PermissionAction.ASSIGN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke role from user' })
   @ApiResponse({ status: 204, description: 'Role revoked successfully' })
   @ApiResponse({ status: 404, description: 'Role or assignment not found' })
+  @Audit('REVOKE', 'Role')
   async revokeRole(
     @Param('id') id: string,
     @Body() revokeRoleDto: RevokeRoleDto,
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    await this.roleService.revokeRole(id, revokeRoleDto, req.user.userId);
+    const userId = req.user?.clerkUserId;
+    await this.roleService.revokeRole(id, revokeRoleDto, userId);
   }
 
   @Post(':id/permissions')
-  @RequirePermission('role', PermissionAction.UPDATE)
   @ApiOperation({ summary: 'Assign permissions to role' })
   @ApiResponse({
     status: 201,
     description: 'Permissions assigned successfully',
   })
   @ApiResponse({ status: 400, description: 'Cannot modify system role' })
+  @Audit('ASSIGN_PERMISSIONS', 'Role')
   async assignPermissions(
     @Param('id') id: string,
     @Body() permissions: RolePermissionDto[],
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    return this.roleService.assignPermissions(id, permissions, req.user.userId);
+    const userId = req.user?.clerkUserId;
+    return this.roleService.assignPermissions(id, permissions, userId);
   }
 
   @Delete(':id/permissions/:permissionId')
-  @RequirePermission('role', PermissionAction.UPDATE)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove permission from role' })
   @ApiResponse({ status: 204, description: 'Permission removed successfully' })
   @ApiResponse({ status: 404, description: 'Permission not found on role' })
   @ApiResponse({ status: 400, description: 'Cannot modify system role' })
+  @Audit('REMOVE_PERMISSION', 'Role')
   async removePermission(
     @Param('id') id: string,
     @Param('permissionId') permissionId: string,
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    await this.roleService.removePermission(id, permissionId, req.user.userId);
+    const userId = req.user?.clerkUserId;
+    await this.roleService.removePermission(id, permissionId, userId);
   }
 }

@@ -8,7 +8,8 @@ import {
   Delete,
   Query,
   UseGuards,
-  Request,
+  UseInterceptors,
+  Req,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -26,24 +27,30 @@ import {
   PermissionCheckResultDto,
 } from '../dto/permission/check-permission.dto';
 import { ClerkAuthGuard } from '../../../auth/guards/clerk-auth.guard';
+import { AuditInterceptor } from '../../../middleware/security.middleware';
+import { Audit } from '../../../middleware/security.middleware';
 import { PermissionAction, PermissionScope } from '@prisma/client';
 
-@ApiTags('permissions')
-@Controller('v1/permissions')
-@UseGuards(ClerkAuthGuard)
+@ApiTags('Permissions')
 @ApiBearerAuth()
+@Controller('permissions')
+@UseGuards(ClerkAuthGuard)
+@UseInterceptors(AuditInterceptor)
 export class PermissionController {
   constructor(private readonly permissionService: PermissionService) {}
 
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new permission' })
   @ApiResponse({ status: 201, description: 'Permission created successfully' })
   @ApiResponse({ status: 409, description: 'Permission already exists' })
+  @Audit('CREATE', 'Permission')
   async create(
     @Body() createPermissionDto: CreatePermissionDto,
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    return this.permissionService.create(createPermissionDto, req.user.userId);
+    const userId = req.user?.clerkUserId;
+    return this.permissionService.create(createPermissionDto, userId);
   }
 
   @Get()
@@ -86,16 +93,14 @@ export class PermissionController {
   @ApiResponse({ status: 200, description: 'Permission updated successfully' })
   @ApiResponse({ status: 404, description: 'Permission not found' })
   @ApiResponse({ status: 400, description: 'Cannot modify system permission' })
+  @Audit('UPDATE', 'Permission')
   async update(
     @Param('id') id: string,
     @Body() updatePermissionDto: UpdatePermissionDto,
-    @Request() req: any,
+    @Req() req: any,
   ) {
-    return this.permissionService.update(
-      id,
-      updatePermissionDto,
-      req.user.userId,
-    );
+    const userId = req.user?.clerkUserId;
+    return this.permissionService.update(id, updatePermissionDto, userId);
   }
 
   @Delete(':id')
@@ -104,8 +109,10 @@ export class PermissionController {
   @ApiResponse({ status: 204, description: 'Permission deleted successfully' })
   @ApiResponse({ status: 404, description: 'Permission not found' })
   @ApiResponse({ status: 400, description: 'Cannot delete system permission' })
-  async remove(@Param('id') id: string, @Request() req: any) {
-    await this.permissionService.remove(id, req.user.userId);
+  @Audit('DELETE', 'Permission')
+  async remove(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user?.clerkUserId;
+    await this.permissionService.remove(id, userId);
   }
 
   @Post('check')

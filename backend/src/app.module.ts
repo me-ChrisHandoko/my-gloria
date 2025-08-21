@@ -30,6 +30,10 @@ import { RowLevelSecurityService } from './security/row-level-security.service';
 import { RLSHelperService } from './security/rls-helper.service';
 import configuration from './config/configuration';
 import { validateConfig } from './config/config.validation';
+import { UserProfileModule } from './modules/user-profile/user-profile.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { ApprovalModule } from './modules/approval/approval.module';
+import { ModuleManagementModule } from './modules/module-management/module-management.module';
 
 @Module({
   imports: [
@@ -69,6 +73,16 @@ import { validateConfig } from './config/config.validation';
     // Permission & Role Management - Now consolidated into single module
     PermissionModule,
 
+    UserProfileModule,
+
+    // Audit Module for compliance and tracking
+    AuditModule,
+
+    // Approval Module for workflow management
+    ApprovalModule,
+
+    ModuleManagementModule,
+
     // Scheduled Tasks - temporarily disabled for debugging
     // ScheduledTaskModule,
   ],
@@ -104,14 +118,12 @@ export class AppModule implements NestModule {
     //     { path: 'health/(.*)', method: RequestMethod.ALL },
     //     { path: 'system/(.*)', method: RequestMethod.ALL },
     //   );
-
     // // RLS Debug middleware (development only)
     // if (process.env.NODE_ENV === 'development') {
     //   consumer
     //     .apply(RLSDebugMiddleware)
     //     .forRoutes({ path: '(.*)', method: RequestMethod.ALL });
     // }
-
     // // RLS Context middleware for authenticated routes
     // consumer
     //   .apply(RLSContextMiddleware)

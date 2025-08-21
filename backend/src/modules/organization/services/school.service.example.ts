@@ -12,7 +12,7 @@ import {
   SchoolResponseDto,
 } from '../dto/school.dto';
 import { RowLevelSecurityService } from '../../../security/row-level-security.service';
-import { AuditService } from '../../../audit/audit.service';
+import { AuditService } from '../../audit/services/audit.service';
 import { Prisma } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
 

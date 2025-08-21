@@ -3,7 +3,7 @@ import { ConflictException, ForbiddenException, NotFoundException } from '@nestj
 import { SchoolService } from '../../services/school.service';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import { RowLevelSecurityService } from '../../../../security/row-level-security.service';
-import { AuditService } from '../../../../audit/audit.service';
+import { AuditService } from '../../../modules/audit/services/audit.service';
 import {
   createTestModule,
   createMockSchool,

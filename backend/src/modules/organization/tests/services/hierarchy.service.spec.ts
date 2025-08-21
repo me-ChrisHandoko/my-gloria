@@ -3,7 +3,7 @@ import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { HierarchyService } from '../../services/hierarchy.service';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import { RowLevelSecurityService } from '../../../../security/row-level-security.service';
-import { AuditService } from '../../../../audit/audit.service';
+import { AuditService } from '../../../modules/audit/services/audit.service';
 import { HierarchyValidator } from '../../../../validators/hierarchy.validator';
 import {
   createTestModule,
