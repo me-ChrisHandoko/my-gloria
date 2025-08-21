@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Email Validation Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+        pre { background: #f5f5f5; padding: 10px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>Email Validation Test</h1>
+    
+    <div class="test">
+        <h2>Test 1: Direct API Call</h2>
+        <button onclick="testDirectAPI()">Test christian_handoko@gloriaschool.org</button>
+        <button onclick="testDirectAPIDot()">Test christian.handoko@gloriaschool.org</button>
+        <div id="result1"></div>
+    </div>
+
+    <script>
+        async function testDirectAPI() {
+            const result = document.getElementById('result1');
+            result.innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch('http://localhost:3001/api/auth/validate-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: 'christian_handoko@gloriaschool.org' }),
+                });
+                
+                const text = await response.text();
+                console.log('Raw response:', text);
+                
+                const data = JSON.parse(text);
+                console.log('Parsed data:', data);
+                
+                // Check for wrapped response
+                const validationResult = data.data || data;
+                
+                result.className = validationResult.valid ? 'success' : 'error';
+                result.innerHTML = `
+                    <strong>Result:</strong> ${validationResult.valid ? '✅ VALID' : '❌ INVALID'}<br>
+                    <strong>Message:</strong> ${validationResult.message || 'N/A'}<br>
+                    <strong>Employee:</strong> ${validationResult.employee ? JSON.stringify(validationResult.employee) : 'N/A'}<br>
+                    <details>
+                        <summary>Full Response</summary>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </details>
+                `;
+            } catch (error) {
+                result.className = 'error';
+                result.innerHTML = `Error: ${error.message}`;
+                console.error('Test failed:', error);
+            }
+        }
+        
+        async function testDirectAPIDot() {
+            const result = document.getElementById('result1');
+            result.innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch('http://localhost:3001/api/auth/validate-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: 'christian.handoko@gloriaschool.org' }),
+                });
+                
+                const text = await response.text();
+                console.log('Raw response:', text);
+                
+                const data = JSON.parse(text);
+                console.log('Parsed data:', data);
+                
+                // Check for wrapped response
+                const validationResult = data.data || data;
+                
+                result.className = validationResult.valid ? 'success' : 'error';
+                result.innerHTML = `
+                    <strong>Result:</strong> ${validationResult.valid ? '✅ VALID' : '❌ INVALID'}<br>
+                    <strong>Message:</strong> ${validationResult.message || 'N/A'}<br>
+                    <strong>Employee:</strong> ${validationResult.employee ? JSON.stringify(validationResult.employee) : 'N/A'}<br>
+                    <details>
+                        <summary>Full Response</summary>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </details>
+                `;
+            } catch (error) {
+                result.className = 'error';
+                result.innerHTML = `Error: ${error.message}`;
+                console.error('Test failed:', error);
+            }
+        }
+    </script>
+</body>
+</html>

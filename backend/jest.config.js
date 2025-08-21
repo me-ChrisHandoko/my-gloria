@@ -1,0 +1,41 @@
+module.exports = {
+  moduleFileExtensions: ['js', 'json', 'ts'],
+  rootDir: 'src',
+  testRegex: '.*\\.spec\\.ts$',
+  transform: {
+    '^.+\\.(t|j)s$': 'ts-jest',
+  },
+  collectCoverageFrom: [
+    '**/*.(t|j)s',
+    '!**/*.spec.ts',
+    '!**/*.interface.ts',
+    '!**/*.module.ts',
+    '!**/*.dto.ts',
+    '!**/index.ts',
+    '!**/main.ts',
+    '!**/tests/**',
+  ],
+  coverageDirectory: '../coverage',
+  testEnvironment: 'node',
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+  },
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
+    '^@modules/(.*)$': '<rootDir>/modules/$1',
+    '^@auth/(.*)$': '<rootDir>/auth/$1',
+    '^@security/(.*)$': '<rootDir>/security/$1',
+    '^@audit/(.*)$': '<rootDir>/audit/$1',
+    '^@validators/(.*)$': '<rootDir>/validators/$1',
+    '^@middleware/(.*)$': '<rootDir>/middleware/$1',
+  },
+  setupFilesAfterEnv: [],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  verbose: true,
+  testTimeout: 10000,
+};

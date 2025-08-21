@@ -1,0 +1,903 @@
+// This is your Prisma schema file integrated with Clerk Auth and existing data_karyawan table
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["gloria_master", "gloria_ops"] // Multi-schema support
+}
+
+// ==================== EXISTING TABLE INTEGRATION ====================
+
+// Map to existing gloria_master.data_karyawan table (READ-ONLY from Prisma)
+model DataKaryawan {
+  nip                   String              @id @map("nip") @db.VarChar(15)
+  nama                  String?             @map("nama") @db.VarChar(109)
+  jenisKelamin          String?             @map("jenis_kelamin") @db.VarChar(1)
+  tglMulaiBekerja       DateTime?           @map("tgl_mulai_bekerja") @db.Timestamp(6)
+  tglTetap              DateTime?           @map("tgl_tetap") @db.Timestamp(6)
+  status                String?             @map("status") @db.VarChar(10)
+  waktuKerjaKependidikan String?            @map("waktu_kerja_kependidikan") @db.VarChar(10)
+  bagianKerja           String?             @map("bagian_kerja") @db.VarChar(50)
+  lokasi                String?             @map("lokasi") @db.VarChar(20)
+  bidangKerja           String?             @map("bidang_kerja") @db.VarChar(70)
+  jenisKaryawan         String?             @map("jenis_karyawan") @db.VarChar(20)
+  statusAktif           String?             @map("status_aktif") @db.VarChar(8)
+  noPonsel              String?             @map("no_ponsel") @db.VarChar(25)
+  email                 String?             @map("email") @db.VarChar(100)
+  birthdate             DateTime?           @map("birthdate") @db.Timestamp(6)
+  rfid                  String?             @map("rfid") @db.VarChar(100)
+  
+  // Relations to new tables
+  userProfile           UserProfile?
+  
+  @@map("data_karyawan")
+  @@schema("gloria_master")
+}
+
+// ==================== USER PROFILE (Clerk Integration) ====================
+
+// UserProfile links Clerk user to data_karyawan and permissions
+model UserProfile {
+  id                String              @id
+  clerkUserId       String              @unique @map("clerk_user_id") // Clerk user ID
+  nip               String              @unique @map("nip") @db.VarChar(15)
+  dataKaryawan      DataKaryawan        @relation(fields: [nip], references: [nip])
+  isSuperadmin      Boolean             @default(false) @map("is_superadmin")
+  isActive          Boolean             @default(true) @map("is_active")
+  lastActive        DateTime?           @map("last_active")
+  preferences       Json?               // User preferences/settings
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID who created this
+  
+  // Relations
+  positions         UserPosition[]
+  roles             UserRole[]
+  moduleAccess      UserModuleAccess[]
+  overrides         UserOverride[]
+  userPermissions   UserPermission[]
+  resourcePermissions ResourcePermission[]
+  permissionCache   PermissionCache[]
+  createdRequests   Request[]           @relation("RequesterRelation")
+  approvalSteps     ApprovalStep[]      @relation("ApproverRelation")
+  delegationsFrom   ApprovalDelegation[] @relation("DelegatorRelation")
+  delegationsTo     ApprovalDelegation[] @relation("DelegateRelation")
+  notifications     Notification[]
+  auditLogs         AuditLog[]          @relation("ActorRelation")
+  targetAuditLogs   AuditLog[]          @relation("TargetRelation")
+  
+  @@index([clerkUserId])
+  @@index([nip])
+  @@map("user_profiles")
+  @@schema("gloria_ops")
+}
+
+// ==================== ORGANIZATIONAL STRUCTURE ====================
+
+// Map lokasi from data_karyawan
+model School {
+  id                String              @id
+  code              String              @unique
+  name              String
+  lokasi            String?             // Maps to data_karyawan.lokasi
+  address           String?
+  phone             String?
+  email             String?
+  principal         String?             // Kepala Sekolah name
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  modifiedBy        String?             @map("modified_by") // Clerk user ID
+  
+  // Relations
+  departments       Department[]
+  positions         Position[]
+  
+  @@index([lokasi, isActive])
+  @@map("schools")
+  @@schema("gloria_ops")
+}
+
+// Map bagian_kerja and bidang_kerja from data_karyawan
+model Department {
+  id                String              @id
+  code              String              @unique
+  name              String
+  bagianKerja       String?             @map("bagian_kerja") // Maps to data_karyawan.bagian_kerja
+  schoolId          String?             @map("school_id")
+  school            School?             @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  parentId          String?             @map("parent_id")
+  parent            Department?         @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children          Department[]        @relation("DepartmentHierarchy")
+  description       String?
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  modifiedBy        String?             @map("modified_by") // Clerk user ID
+  
+  // Relations
+  positions         Position[]
+  
+  @@index([bagianKerja])
+  @@index([schoolId, isActive])
+  @@index([parentId])
+  @@map("departments")
+  @@schema("gloria_ops")
+}
+
+// Position/Jabatan master data
+model Position {
+  id                String              @id
+  code              String              @unique
+  name              String
+  departmentId      String?             @map("department_id")
+  department        Department?         @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  schoolId          String?             @map("school_id")
+  school            School?             @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  hierarchyLevel    Int                 @map("hierarchy_level")
+  maxHolders        Int                 @default(1) @map("max_holders")
+  isUnique          Boolean             @default(true) @map("is_unique")
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  modifiedBy        String?             @map("modified_by") // Clerk user ID
+  
+  // Relations
+  userPositions     UserPosition[]
+  hierarchies       PositionHierarchy[] @relation("PositionRelation")
+  reportsTo         PositionHierarchy[] @relation("ReportsToRelation")
+  coordinates       PositionHierarchy[] @relation("CoordinatorRelation")
+  roleTemplates     RoleModuleAccess[]
+  
+  @@index([departmentId, hierarchyLevel])
+  @@index([schoolId, isActive])
+  @@map("positions")
+  @@schema("gloria_ops")
+}
+
+// User position assignments (history supported)
+model UserPosition {
+  id                String              @id
+  userProfileId     String              @map("user_profile_id")
+  userProfile       UserProfile         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  positionId        String              @map("position_id")
+  position          Position            @relation(fields: [positionId], references: [id], onDelete: Restrict)
+  startDate         DateTime            @map("start_date")
+  endDate           DateTime?           @map("end_date")
+  isActive          Boolean             @default(true) @map("is_active")
+  isPlt             Boolean             @default(false) @map("is_plt")
+  appointedBy       String?             @map("appointed_by") // Clerk user ID
+  skNumber          String?             @map("sk_number")
+  notes             String?
+  permissionScope   String?             @map("permission_scope") // OWN|DEPARTMENT|SCHOOL|ALL - computed field for RLS
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@unique([userProfileId, positionId, startDate])
+  @@index([userProfileId, isActive])
+  @@index([positionId, isActive])
+  @@index([startDate, endDate])
+  @@map("user_positions")
+  @@schema("gloria_ops")
+}
+
+// Position hierarchy and reporting structure
+model PositionHierarchy {
+  id                String              @id
+  positionId        String              @map("position_id")
+  position          Position            @relation("PositionRelation", fields: [positionId], references: [id], onDelete: Cascade)
+  reportsToId       String?             @map("reports_to_id")
+  reportsTo         Position?           @relation("ReportsToRelation", fields: [reportsToId], references: [id], onDelete: SetNull)
+  coordinatorId     String?             @map("coordinator_id")
+  coordinator       Position?           @relation("CoordinatorRelation", fields: [coordinatorId], references: [id], onDelete: SetNull)
+  
+  @@unique([positionId])
+  @@index([reportsToId])
+  @@index([coordinatorId])
+  @@map("position_hierarchy")
+  @@schema("gloria_ops")
+}
+
+// ==================== ROLES & PERMISSIONS ====================
+
+// Permission Groups for organizing permissions
+model PermissionGroup {
+  id                String              @id
+  code              String              @unique
+  name              String
+  description       String?
+  category          ModuleCategory?     // Maps to existing ModuleCategory enum
+  icon              String?
+  sortOrder         Int                 @default(0) @map("sort_order")
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  
+  // Relations
+  permissions       Permission[]
+  
+  @@index([category, isActive])
+  @@map("permission_groups")
+  @@schema("gloria_ops")
+}
+
+model Role {
+  id                String              @id
+  code              String              @unique
+  name              String
+  description       String?
+  hierarchyLevel    Int                 @map("hierarchy_level")
+  isSystemRole      Boolean             @default(false) @map("is_system_role")
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  
+  // Relations
+  userRoles         UserRole[]
+  moduleAccess      RoleModuleAccess[]
+  rolePermissions   RolePermission[]
+  childRoles        RoleHierarchy[]    @relation("ParentRoleRelation")
+  parentRoles       RoleHierarchy[]    @relation("RoleRelation")
+  
+  @@map("roles")
+  @@schema("gloria_ops")
+}
+
+model UserRole {
+  id                String              @id
+  userProfileId     String              @map("user_profile_id")
+  userProfile       UserProfile         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  roleId            String              @map("role_id")
+  role              Role                @relation(fields: [roleId], references: [id])
+  assignedAt        DateTime            @default(now()) @map("assigned_at")
+  assignedBy        String?             @map("assigned_by") // Clerk user ID
+  validFrom         DateTime            @default(now()) @map("valid_from")
+  validUntil        DateTime?           @map("valid_until")
+  isActive          Boolean             @default(true) @map("is_active")
+  
+  @@unique([userProfileId, roleId])
+  @@index([userProfileId, isActive])
+  @@map("user_roles")
+  @@schema("gloria_ops")
+}
+
+// Fine-grained Permission model
+model Permission {
+  id                String              @id
+  code              String              @unique // e.g., "workorder.create", "kpi.approve"
+  name              String
+  description       String?
+  resource          String              // Resource being protected (e.g., "workorder", "kpi", "user")
+  action            PermissionAction    // Uses existing enum: CREATE, READ, UPDATE, DELETE, APPROVE, etc.
+  scope             PermissionScope?    // Uses existing enum: OWN, DEPARTMENT, SCHOOL, ALL
+  groupId           String?             @map("group_id")
+  group             PermissionGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  conditions        Json?               // Additional conditions: {"field": "status", "operator": "=", "value": "draft"}
+  metadata          Json?               // Additional metadata for UI/frontend use
+  isSystemPermission Boolean            @default(false) @map("is_system_permission")
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  
+  // Relations
+  rolePermissions   RolePermission[]
+  userPermissions   UserPermission[]
+  dependencies      PermissionDependency[] @relation("PermissionRelation")
+  dependentOn       PermissionDependency[] @relation("DependentRelation")
+  resourcePermissions ResourcePermission[]
+  
+  @@unique([resource, action, scope])
+  @@index([resource, action])
+  @@index([groupId, isActive])
+  @@map("permissions")
+  @@schema("gloria_ops")
+}
+
+// Junction table for Role-Permission many-to-many relationship
+model RolePermission {
+  id                String              @id
+  roleId            String              @map("role_id")
+  role              Role                @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId      String              @map("permission_id")
+  permission        Permission          @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  isGranted         Boolean             @default(true) @map("is_granted") // Can be false to explicitly deny
+  conditions        Json?               // Role-specific permission conditions
+  validFrom         DateTime            @default(now()) @map("valid_from")
+  validUntil        DateTime?           @map("valid_until")
+  grantedBy         String?             @map("granted_by") // Clerk user ID
+  grantReason       String?             @map("grant_reason")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@unique([roleId, permissionId])
+  @@index([roleId, isGranted])
+  @@index([permissionId])
+  @@map("role_permissions")
+  @@schema("gloria_ops")
+}
+
+// Direct user permission assignments (bypasses role-based permissions)
+model UserPermission {
+  id                String              @id
+  userProfileId     String              @map("user_profile_id")
+  userProfile       UserProfile         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  permissionId      String              @map("permission_id")
+  permission        Permission          @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  isGranted         Boolean             @default(true) @map("is_granted") // Can be false to explicitly deny
+  conditions        Json?               // User-specific permission conditions
+  validFrom         DateTime            @default(now()) @map("valid_from")
+  validUntil        DateTime?           @map("valid_until")
+  grantedBy         String              @map("granted_by") // Clerk user ID who granted this
+  grantReason       String              @map("grant_reason") // Required reason for audit
+  priority          Int                 @default(100) @map("priority") // Higher priority overrides lower
+  isTemporary       Boolean             @default(false) @map("is_temporary")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@unique([userProfileId, permissionId])
+  @@index([userProfileId, isGranted])
+  @@index([permissionId])
+  @@index([validFrom, validUntil])
+  @@map("user_permissions")
+  @@schema("gloria_ops")
+}
+
+// Role hierarchy for permission inheritance
+model RoleHierarchy {
+  id                String              @id
+  roleId            String              @map("role_id")
+  role              Role                @relation("RoleRelation", fields: [roleId], references: [id], onDelete: Cascade)
+  parentRoleId      String              @map("parent_role_id")
+  parentRole        Role                @relation("ParentRoleRelation", fields: [parentRoleId], references: [id], onDelete: Cascade)
+  inheritPermissions Boolean            @default(true) @map("inherit_permissions")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@unique([roleId, parentRoleId])
+  @@index([parentRoleId])
+  @@map("role_hierarchy")
+  @@schema("gloria_ops")
+}
+
+// Permission cache for performance optimization
+model PermissionCache {
+  id                String              @id
+  userProfileId     String              @map("user_profile_id")
+  userProfile       UserProfile         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  cacheKey          String              @map("cache_key") // e.g., "user:123:permissions"
+  permissions       Json                // Computed permissions array
+  computedAt        DateTime            @map("computed_at")
+  expiresAt         DateTime            @map("expires_at")
+  isValid           Boolean             @default(true) @map("is_valid")
+  
+  @@unique([userProfileId, cacheKey])
+  @@index([expiresAt])
+  @@index([isValid])
+  @@map("permission_cache")
+  @@schema("gloria_ops")
+}
+
+// Permission dependencies (some permissions require others)
+model PermissionDependency {
+  id                String              @id
+  permissionId      String              @map("permission_id")
+  permission        Permission          @relation("PermissionRelation", fields: [permissionId], references: [id], onDelete: Cascade)
+  dependsOnId       String              @map("depends_on_id")
+  dependsOn         Permission          @relation("DependentRelation", fields: [dependsOnId], references: [id], onDelete: Cascade)
+  isRequired        Boolean             @default(true) @map("is_required") // If false, it's optional/recommended
+  
+  @@unique([permissionId, dependsOnId])
+  @@map("permission_dependencies")
+  @@schema("gloria_ops")
+}
+
+// Resource-based permissions (for specific records/entities)
+model ResourcePermission {
+  id                String              @id
+  userProfileId     String              @map("user_profile_id")
+  userProfile       UserProfile         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  permissionId      String              @map("permission_id")
+  permission        Permission          @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  resourceType      String              @map("resource_type") // e.g., "WorkOrder", "KPI"
+  resourceId        String              @map("resource_id") // Specific record ID
+  isGranted         Boolean             @default(true) @map("is_granted")
+  validFrom         DateTime            @default(now()) @map("valid_from")
+  validUntil        DateTime?           @map("valid_until")
+  grantedBy         String              @map("granted_by") // Clerk user ID
+  grantReason       String?             @map("grant_reason")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@unique([userProfileId, permissionId, resourceType, resourceId])
+  @@index([userProfileId, resourceType, resourceId])
+  @@index([permissionId])
+  @@map("resource_permissions")
+  @@schema("gloria_ops")
+}
+
+// Role templates for quick role creation
+model RoleTemplate {
+  id                String              @id
+  code              String              @unique
+  name              String
+  description       String?
+  category          String              // e.g., "department", "position", "custom"
+  permissions       Json                // Array of permission codes
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  
+  @@map("role_templates")
+  @@schema("gloria_ops")
+}
+
+// Permission policies for complex authorization rules
+model PermissionPolicy {
+  id                String              @id
+  code              String              @unique
+  name              String
+  description       String?
+  policyType        PolicyType          @map("policy_type")
+  rules             Json                // Complex rule definitions
+  priority          Int                 @default(100) // Lower number = higher priority
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  
+  // Relations
+  policyAssignments PolicyAssignment[]
+  
+  @@index([policyType, isActive])
+  @@map("permission_policies")
+  @@schema("gloria_ops")
+}
+
+// Policy assignments to roles or users
+model PolicyAssignment {
+  id                String              @id
+  policyId          String              @map("policy_id")
+  policy            PermissionPolicy    @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  assigneeType      AssigneeType        @map("assignee_type") // ROLE or USER
+  assigneeId        String              @map("assignee_id") // Role ID or UserProfile ID
+  conditions        Json?               // Additional conditions for this assignment
+  validFrom         DateTime            @default(now()) @map("valid_from")
+  validUntil        DateTime?           @map("valid_until")
+  assignedBy        String              @map("assigned_by") // Clerk user ID
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@unique([policyId, assigneeType, assigneeId])
+  @@index([assigneeType, assigneeId])
+  @@map("policy_assignments")
+  @@schema("gloria_ops")
+}
+
+// Permission check logs for audit and debugging
+model PermissionCheckLog {
+  id                String              @id
+  userProfileId     String              @map("user_profile_id")
+  resource          String
+  action            String
+  scope             String?
+  resourceId        String?             @map("resource_id")
+  isAllowed         Boolean             @map("is_allowed")
+  deniedReason      String?             @map("denied_reason")
+  checkDuration     Int                 @map("check_duration") // milliseconds
+  metadata          Json?               // Additional context
+  createdAt         DateTime            @default(now()) @map("created_at")
+  
+  @@index([userProfileId, createdAt])
+  @@index([resource, action, createdAt])
+  @@map("permission_check_logs")
+  @@schema("gloria_ops")
+}
+
+// ==================== MODULES & ACCESS CONTROL ====================
+
+model Module {
+  id                String              @id
+  code              String              @unique
+  name              String
+  category          ModuleCategory
+  description       String?
+  icon              String?
+  path              String?             // Route path for frontend
+  parentId          String?             @map("parent_id")
+  parent            Module?             @relation("ModuleHierarchy", fields: [parentId], references: [id])
+  children          Module[]            @relation("ModuleHierarchy")
+  sortOrder         Int                 @default(0) @map("sort_order")
+  isActive          Boolean             @default(true) @map("is_active")
+  isVisible         Boolean             @default(true) @map("is_visible")
+  requiredPlan      String?             @map("required_plan") // For feature gating
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  // Relations
+  permissions       ModulePermission[]
+  roleAccess        RoleModuleAccess[]
+  userAccess        UserModuleAccess[]
+  overrides         UserOverride[]
+  
+  @@map("modules")
+  @@schema("gloria_ops")
+}
+
+model ModulePermission {
+  id                String              @id
+  moduleId          String              @map("module_id")
+  module            Module              @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  action            PermissionAction
+  scope             PermissionScope
+  description       String?
+  
+  @@unique([moduleId, action, scope])
+  @@map("module_permissions")
+  @@schema("gloria_ops")
+}
+
+// Role-based module access (Template)
+model RoleModuleAccess {
+  id                String              @id
+  roleId            String              @map("role_id")
+  role              Role                @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  moduleId          String              @map("module_id")
+  module            Module              @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  positionId        String?             @map("position_id")
+  position          Position?           @relation(fields: [positionId], references: [id])
+  permissions       Json                // ["create", "read", "update", "delete", "approve"]
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  
+  @@unique([roleId, moduleId])
+  @@map("role_module_access")
+  @@schema("gloria_ops")
+}
+
+// User-specific module access (Direct assignment)
+model UserModuleAccess {
+  id                String              @id
+  userProfileId     String              @map("user_profile_id")
+  userProfile       UserProfile         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  moduleId          String              @map("module_id")
+  module            Module              @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  permissions       Json                // ["create", "read", "update", "delete", "approve"]
+  validFrom         DateTime            @default(now()) @map("valid_from")
+  validUntil        DateTime?           @map("valid_until")
+  grantedBy         String              @map("granted_by") // Clerk user ID
+  reason            String?
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@index([userProfileId, moduleId, isActive])
+  @@map("user_module_access")
+  @@schema("gloria_ops")
+}
+
+// User permission overrides (Exceptions)
+model UserOverride {
+  id                String              @id
+  userProfileId     String              @map("user_profile_id")
+  userProfile       UserProfile         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  moduleId          String              @map("module_id")
+  module            Module              @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  permissionType    PermissionAction    @map("permission_type")
+  isGranted         Boolean             @map("is_granted")
+  validFrom         DateTime            @default(now()) @map("valid_from")
+  validUntil        DateTime?           @map("valid_until")
+  reason            String
+  grantedBy         String              @map("granted_by") // Clerk user ID
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@index([userProfileId, moduleId, isGranted])
+  @@map("user_overrides")
+  @@schema("gloria_ops")
+}
+
+// ==================== APPROVAL SYSTEM ====================
+
+model ApprovalMatrix {
+  id                String              @id
+  module            String
+  requesterRole     String?             @map("requester_role")
+  requesterPosition String?             @map("requester_position")
+  approvalSequence  Int                 @map("approval_sequence")
+  approverType      ApproverType        @map("approver_type")
+  approverValue     String              @map("approver_value") // position_code, department_code, or user_id
+  conditions        Json?               // {"days": ">3", "amount": ">1000000"}
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  
+  @@unique([module, requesterRole, approvalSequence])
+  @@index([module, isActive])
+  @@map("approval_matrix")
+  @@schema("gloria_ops")
+}
+
+model Request {
+  id                String              @id
+  requestNumber     String              @unique @map("request_number")
+  module            String
+  requesterProfileId String             @map("requester_profile_id")
+  requester         UserProfile         @relation("RequesterRelation", fields: [requesterProfileId], references: [id])
+  requestType       String              @map("request_type")
+  details           Json
+  status            RequestStatus       @default(PENDING)
+  currentStep       Int                 @default(1) @map("current_step")
+  completedAt       DateTime?           @map("completed_at")
+  cancelledAt       DateTime?           @map("cancelled_at")
+  cancelReason      String?             @map("cancel_reason")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  // Relations
+  approvalSteps     ApprovalStep[]
+  attachments       RequestAttachment[]
+  
+  @@index([requesterProfileId, status])
+  @@index([module, status])
+  @@map("requests")
+  @@schema("gloria_ops")
+}
+
+model ApprovalStep {
+  id                String              @id
+  requestId         String              @map("request_id")
+  request           Request             @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  sequence          Int
+  approverProfileId String              @map("approver_profile_id")
+  approver          UserProfile         @relation("ApproverRelation", fields: [approverProfileId], references: [id])
+  approverType      String              @map("approver_type") // KABAG, KOORDINATOR, etc
+  status            ApprovalStatus      @default(WAITING)
+  action            ApprovalAction?
+  notes             String?
+  approvedAt        DateTime?           @map("approved_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@unique([requestId, sequence])
+  @@index([approverProfileId, status])
+  @@map("approval_steps")
+  @@schema("gloria_ops")
+}
+
+model ApprovalDelegation {
+  id                String              @id
+  delegatorProfileId String             @map("delegator_profile_id")
+  delegator         UserProfile         @relation("DelegatorRelation", fields: [delegatorProfileId], references: [id])
+  delegateProfileId String              @map("delegate_profile_id")
+  delegate          UserProfile         @relation("DelegateRelation", fields: [delegateProfileId], references: [id])
+  module            String?             // Specific module or null for all
+  startDate         DateTime            @map("start_date")
+  endDate           DateTime            @map("end_date")
+  reason            String?
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  
+  @@index([delegatorProfileId, isActive])
+  @@index([delegateProfileId, isActive])
+  @@map("approval_delegations")
+  @@schema("gloria_ops")
+}
+
+model RequestAttachment {
+  id                String              @id
+  requestId         String              @map("request_id")
+  request           Request             @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fileName          String              @map("file_name")
+  fileUrl           String              @map("file_url")
+  fileSize          Int                 @map("file_size")
+  mimeType          String              @map("mime_type")
+  uploadedBy        String              @map("uploaded_by") // Clerk user ID
+  createdAt         DateTime            @default(now()) @map("created_at")
+  
+  @@map("request_attachments")
+  @@schema("gloria_ops")
+}
+
+// ==================== SYSTEM TABLES ====================
+
+model Notification {
+  id                String              @id
+  userProfileId     String              @map("user_profile_id")
+  userProfile       UserProfile         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  type              NotificationType
+  title             String
+  message           String              @db.Text
+  data              Json?
+  priority          Priority            @default(MEDIUM)
+  isRead            Boolean             @default(false) @map("is_read")
+  readAt            DateTime?           @map("read_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  
+  @@index([userProfileId, isRead])
+  @@map("notifications")
+  @@schema("gloria_ops")
+}
+
+// Enhanced Audit Log with old/new values
+model AuditLog {
+  id                String              @id
+  actorId           String              @map("actor_id") // Clerk user ID who performed action
+  actorProfileId    String?             @map("actor_profile_id")
+  actorProfile      UserProfile?        @relation("ActorRelation", fields: [actorProfileId], references: [id])
+  action            AuditAction
+  module            String
+  entityType        String              @map("entity_type") // Table/Model name
+  entityId          String              @map("entity_id")
+  entityDisplay     String?             @map("entity_display") // Human readable identifier
+  oldValues         Json?               @map("old_values") // Previous state
+  newValues         Json?               @map("new_values") // New state
+  changedFields     Json?               @map("changed_fields") // List of changed field names
+  targetUserId      String?             @map("target_user_id") // If action affects another user
+  targetProfile     UserProfile?        @relation("TargetRelation", fields: [targetUserId], references: [id])
+  metadata          Json?               // Additional context (IP, user agent, etc)
+  ipAddress         String?             @map("ip_address")
+  userAgent         String?             @map("user_agent")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  
+  @@index([actorId, createdAt])
+  @@index([module, action, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@map("audit_logs")
+  @@schema("gloria_ops")
+}
+
+// ==================== ENUMS ====================
+
+enum ModuleCategory {
+  SERVICE     // Work Order IT, GA
+  PERFORMANCE // KPI, Peer Evaluation, Evaluasi Kegiatan
+  QUALITY     // ICS, Sasaran Mutu, Alat Ukur
+  FEEDBACK    // Angket Staf
+  TRAINING    // Training Management
+  SYSTEM      // System modules
+
+  @@schema("gloria_ops")
+}
+
+enum PermissionAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  APPROVE
+  EXPORT
+  IMPORT
+  PRINT
+  ASSIGN
+  CLOSE
+
+  @@schema("gloria_ops")
+}
+
+enum PermissionScope {
+  OWN         // Data sendiri
+  DEPARTMENT  // Data departemen
+  SCHOOL      // Data sekolah
+  ALL         // Semua data
+
+  @@schema("gloria_ops")
+}
+
+enum ApproverType {
+  POSITION       // Based on position (Kabag, Koordinator)
+  DEPARTMENT     // Based on department (HRD Staff, PPM Staff)
+  SPECIFIC_USER  // Specific user
+  ROLE          // Based on role
+
+  @@schema("gloria_ops")
+}
+
+enum RequestStatus {
+  DRAFT
+  PENDING
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+
+  @@schema("gloria_ops")
+}
+
+enum ApprovalStatus {
+  WAITING
+  PENDING
+  APPROVED
+  REJECTED
+  RETURNED
+  SKIPPED
+  DELEGATED
+
+  @@schema("gloria_ops")
+}
+
+enum ApprovalAction {
+  APPROVE
+  REJECT
+  RETURN
+  ESCALATE
+  DELEGATE
+
+  @@schema("gloria_ops")
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+  CRITICAL
+
+  @@schema("gloria_ops")
+}
+
+enum NotificationType {
+  APPROVAL_REQUEST
+  APPROVAL_RESULT
+  WORK_ORDER_UPDATE
+  KPI_REMINDER
+  TRAINING_INVITATION
+  SYSTEM_ALERT
+  GENERAL
+  DELEGATION
+
+  @@schema("gloria_ops")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  LOGIN
+  LOGOUT
+  EXPORT
+  IMPORT
+  ASSIGN
+  REVOKE
+  DELEGATE
+
+  @@schema("gloria_ops")
+}
+
+enum PolicyType {
+  TIME_BASED      // Active during specific times
+  LOCATION_BASED  // Active in specific locations
+  ATTRIBUTE_BASED // Based on user/resource attributes
+  CONTEXTUAL      // Based on context conditions
+  HIERARCHICAL    // Based on org hierarchy
+  
+  @@schema("gloria_ops")
+}
+
+enum AssigneeType {
+  ROLE
+  USER
+  DEPARTMENT
+  POSITION
+  
+  @@schema("gloria_ops")
+}

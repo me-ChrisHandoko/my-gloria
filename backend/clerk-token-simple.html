@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clerk Token Generator - Simple Version</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .status-box {
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 2px solid #e0e0e0;
+        }
+        .status-box.success {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .status-box.error {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        .status-box.warning {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+        .token-display {
+            background: #1e1e1e;
+            color: #4ec9b0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            word-break: break-all;
+            max-height: 300px;
+            overflow-y: auto;
+            position: relative;
+        }
+        .copy-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .copy-button:hover {
+            background: #005a9e;
+        }
+        .instructions {
+            background: #f0f7ff;
+            border-left: 4px solid #007acc;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #007acc;
+        }
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin: 8px 0;
+        }
+        .code-block {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 12px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            background: #5e72e4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: #4c63d2;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(94, 114, 228, 0.3);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .api-test-result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Clerk Token Generator</h1>
+        <p class="subtitle">Get a valid JWT token from Clerk for API testing</p>
+
+        <div class="status-box warning">
+            <strong>⚠️ Setup Required:</strong><br>
+            This page needs to load Clerk SDK. Make sure you have internet connection.
+        </div>
+
+        <div id="status" class="status-box">
+            Initializing Clerk SDK...
+        </div>
+
+        <div class="instructions">
+            <h3>📋 How to Use This Tool:</h3>
+            <ol>
+                <li><strong>Load this page</strong> in your browser (you're here! ✅)</li>
+                <li><strong>Wait for Clerk SDK</strong> to initialize</li>
+                <li><strong>Sign in</strong> with your Clerk account if needed</li>
+                <li><strong>Copy the token</strong> that appears below</li>
+                <li><strong>Use in API calls</strong> with Authorization header</li>
+            </ol>
+        </div>
+
+        <div id="user-section" style="display:none;">
+            <h3>👤 User Information</h3>
+            <div id="user-info" class="code-block"></div>
+        </div>
+
+        <div id="token-section" style="display:none;">
+            <h3>🎫 Your Session Token</h3>
+            <div class="token-display" id="token-display">
+                <button class="copy-button" onclick="copyToken()">📋 Copy</button>
+                <span id="token-content">Loading token...</span>
+            </div>
+            
+            <div class="button-group">
+                <button onclick="refreshToken()">🔄 Refresh Token</button>
+                <button onclick="testAPI()">🧪 Test API Call</button>
+                <button onclick="showCurlCommand()">📝 Show cURL Command</button>
+            </div>
+        </div>
+
+        <div id="api-test-section" style="display:none;">
+            <h3>🧪 API Test Result</h3>
+            <div id="api-result" class="api-test-result"></div>
+        </div>
+
+        <div id="curl-section" style="display:none;">
+            <h3>📝 cURL Command</h3>
+            <div class="code-block" id="curl-command"></div>
+        </div>
+    </div>
+
+    <!-- Load Clerk SDK from CDN with specific version -->
+    <script>
+        (function() {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js';
+            script.async = true;
+            script.onload = function() {
+                console.log('Clerk SDK loaded successfully');
+                initializeClerk();
+            };
+            script.onerror = function() {
+                console.error('Failed to load Clerk SDK');
+                document.getElementById('status').className = 'status-box error';
+                document.getElementById('status').innerHTML = `
+                    <strong>❌ Failed to load Clerk SDK</strong><br>
+                    Please check your internet connection and refresh the page.<br><br>
+                    Alternative: Use the Node.js scripts instead:<br>
+                    <code>node get-valid-clerk-token.js</code>
+                `;
+            };
+            document.head.appendChild(script);
+        })();
+
+        // Your Clerk publishable key
+        const CLERK_PUBLISHABLE_KEY = 'pk_test_cHJlcGFyZWQtcm9kZW50LTUyLmNsZXJrLmFjY291bnRzLmRldiQ';
+        
+        let currentToken = null;
+        let clerkInstance = null;
+
+        async function initializeClerk() {
+            const statusEl = document.getElementById('status');
+            
+            try {
+                // Check if Clerk is available
+                if (typeof window.Clerk === 'undefined') {
+                    throw new Error('Clerk SDK not found in window object');
+                }
+
+                // Initialize Clerk
+                clerkInstance = new window.Clerk(CLERK_PUBLISHABLE_KEY);
+                await clerkInstance.load();
+                
+                console.log('Clerk initialized successfully');
+                
+                // Check if user is signed in
+                if (clerkInstance.user) {
+                    handleSignedIn();
+                } else {
+                    handleSignedOut();
+                }
+                
+            } catch (error) {
+                console.error('Clerk initialization error:', error);
+                statusEl.className = 'status-box error';
+                statusEl.innerHTML = `
+                    <strong>❌ Initialization Error</strong><br>
+                    ${error.message}<br><br>
+                    Try refreshing the page or use the command line tools instead.
+                `;
+            }
+        }
+
+        function handleSignedIn() {
+            const statusEl = document.getElementById('status');
+            const userSection = document.getElementById('user-section');
+            const userInfo = document.getElementById('user-info');
+            
+            statusEl.className = 'status-box success';
+            statusEl.innerHTML = `<strong>✅ Signed in successfully!</strong><br>Email: ${clerkInstance.user.primaryEmailAddress}`;
+            
+            userSection.style.display = 'block';
+            userInfo.innerHTML = `User ID: ${clerkInstance.user.id}
+Email: ${clerkInstance.user.primaryEmailAddress}
+Name: ${clerkInstance.user.fullName || 'Not set'}
+Created: ${new Date(clerkInstance.user.createdAt).toLocaleString()}`;
+            
+            // Get and display token
+            getSessionToken();
+        }
+
+        function handleSignedOut() {
+            const statusEl = document.getElementById('status');
+            const signInUrl = clerkInstance.buildSignInUrl();
+            
+            statusEl.className = 'status-box warning';
+            statusEl.innerHTML = `
+                <strong>🔒 Not signed in</strong><br>
+                You need to sign in to get a session token.<br><br>
+                <a href="${signInUrl}" style="color: #007acc; font-weight: bold;">
+                    Click here to sign in with Clerk →
+                </a>
+            `;
+        }
+
+        async function getSessionToken() {
+            const tokenSection = document.getElementById('token-section');
+            const tokenContent = document.getElementById('token-content');
+            
+            try {
+                const token = await clerkInstance.session.getToken();
+                currentToken = token;
+                
+                tokenSection.style.display = 'block';
+                tokenContent.textContent = token;
+                
+                // Decode and show token info
+                const parts = token.split('.');
+                if (parts.length === 3) {
+                    const payload = JSON.parse(atob(parts[1]));
+                    console.log('Token payload:', payload);
+                    
+                    const expiry = new Date(payload.exp * 1000);
+                    const now = new Date();
+                    const minutesUntilExpiry = Math.round((expiry - now) / 60000);
+                    
+                    tokenContent.innerHTML = `${token}<br><br>
+<strong style="color: #4ec9b0;">Token Info:</strong>
+• User ID: ${payload.sub}
+• Session ID: ${payload.sid || 'N/A'}
+• Expires: ${expiry.toLocaleString()} (in ${minutesUntilExpiry} minutes)
+• Issuer: ${payload.iss}`;
+                }
+            } catch (error) {
+                console.error('Failed to get token:', error);
+                tokenContent.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function refreshToken() {
+            await getSessionToken();
+            alert('✅ Token refreshed!');
+        }
+
+        function copyToken() {
+            if (!currentToken) {
+                alert('No token available');
+                return;
+            }
+            
+            navigator.clipboard.writeText(currentToken).then(() => {
+                alert('✅ Token copied to clipboard!');
+            }).catch(err => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = currentToken;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('✅ Token copied to clipboard!');
+            });
+        }
+
+        async function testAPI() {
+            if (!currentToken) {
+                alert('No token available. Please sign in first.');
+                return;
+            }
+            
+            const apiSection = document.getElementById('api-test-section');
+            const apiResult = document.getElementById('api-result');
+            
+            apiSection.style.display = 'block';
+            apiResult.textContent = 'Testing API call to http://localhost:3001/api/auth/me...';
+            
+            try {
+                const response = await fetch('http://localhost:3001/api/auth/me', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    apiResult.innerHTML = `<strong style="color: #28a745;">✅ API call successful!</strong>\n\nResponse (${response.status}):\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    apiResult.innerHTML = `<strong style="color: #dc3545;">❌ API call failed</strong>\n\nStatus: ${response.status}\nResponse:\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                apiResult.innerHTML = `<strong style="color: #dc3545;">❌ Network error</strong>\n\n${error.message}\n\nMake sure your backend is running on http://localhost:3001`;
+            }
+        }
+
+        function showCurlCommand() {
+            if (!currentToken) {
+                alert('No token available. Please sign in first.');
+                return;
+            }
+            
+            const curlSection = document.getElementById('curl-section');
+            const curlCommand = document.getElementById('curl-command');
+            
+            curlSection.style.display = 'block';
+            
+            const truncatedToken = currentToken.substring(0, 50) + '...';
+            
+            curlCommand.innerHTML = `# Test /auth/me endpoint
+curl -X GET http://localhost:3001/api/auth/me \\
+  -H "Authorization: Bearer ${truncatedToken}" \\
+  -H "Content-Type: application/json"
+
+# Full command (copy the token first):
+curl -X GET http://localhost:3001/api/auth/me \\
+  -H "Authorization: Bearer [PASTE_YOUR_TOKEN_HERE]" \\
+  -H "Content-Type: application/json"`;
+        }
+    </script>
+</body>
+</html>

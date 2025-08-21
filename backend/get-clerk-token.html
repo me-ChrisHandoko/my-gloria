@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Get Clerk Token for Testing</title>
+    <!-- Load Clerk from CDN -->
+    <script 
+      crossorigin="anonymous"
+      data-clerk-publishable-key="pk_test_cHJlcGFyZWQtcm9kZW50LTUyLmNsZXJrLmFjY291bnRzLmRldiQ"
+      onload="window.clerkLoaded = true"
+      onerror="window.clerkError = true"
+      src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
+      type="text/javascript">
+    </script>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        max-width: 800px;
+        margin: 50px auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        background: white;
+        border-radius: 8px;
+        padding: 30px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+      }
+      .token-display {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 15px;
+        margin: 20px 0;
+        word-break: break-all;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      button {
+        background: #5e72e4;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      button:hover {
+        background: #4c63d2;
+      }
+      .success {
+        color: #28a745;
+      }
+      .error {
+        color: #dc3545;
+      }
+      .info {
+        background: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        padding: 15px;
+        border-radius: 4px;
+        margin: 20px 0;
+      }
+      #user-info {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 4px;
+        margin: 20px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔐 Clerk Token Tester</h1>
+
+      <div class="info">
+        <strong>⚠️ Perhatian:</strong> Ganti CLERK_PUBLISHABLE_KEY di bawah
+        dengan key dari .env Anda
+      </div>
+
+      <div id="status">Loading Clerk...</div>
+      <div id="user-info"></div>
+      <div id="token-section" style="display: none">
+        <h3>Your Session Token:</h3>
+        <div class="token-display" id="token"></div>
+        <button onclick="copyToken()">📋 Copy Token</button>
+        <button onclick="testAPI()">🧪 Test API Call</button>
+      </div>
+
+      <div id="api-test" style="display: none">
+        <h3>API Test Result:</h3>
+        <pre id="api-result"></pre>
+      </div>
+    </div>
+
+    <script>
+      // ⚠️ GANTI DENGAN CLERK_PUBLISHABLE_KEY DARI .ENV ANDA
+      const CLERK_PUBLISHABLE_KEY =
+        'pk_test_cHJlcGFyZWQtcm9kZW50LTUyLmNsZXJrLmFjY291bnRzLmRldiQ';
+
+      let currentToken = null;
+      let clerk = null;
+
+      async function initClerk() {
+        const statusEl = document.getElementById('status');
+
+        // Wait for Clerk to be available
+        if (typeof window.Clerk === 'undefined') {
+          statusEl.innerHTML = '<span class="error">❌ Clerk SDK not loaded. Retrying...</span>';
+          
+          // Try alternative initialization
+          if (window.clerkError) {
+            statusEl.innerHTML = '<span class="error">❌ Failed to load Clerk SDK from CDN</span>';
+            statusEl.innerHTML += '<br><br>Try refreshing the page or check your internet connection.';
+            return;
+          }
+          
+          // Wait and retry
+          setTimeout(initClerk, 1000);
+          return;
+        }
+
+        try {
+          // Initialize Clerk with the publishable key
+          clerk = window.Clerk;
+          await clerk.load();
+
+          if (clerk.user) {
+            statusEl.innerHTML =
+              '<span class="success">✅ Logged in as: ' +
+              clerk.user.primaryEmailAddress +
+              '</span>';
+            displayUserInfo();
+            await getToken();
+          } else {
+            statusEl.innerHTML = '<span class="error">❌ Not logged in</span>';
+            // Redirect to sign in
+            const signInUrl = clerk.buildSignInUrl();
+            statusEl.innerHTML +=
+              '<br><br><a href="' +
+              signInUrl +
+              '">Click here to sign in with Clerk</a>';
+          }
+        } catch (error) {
+          statusEl.innerHTML =
+            '<span class="error">❌ Failed to initialize Clerk: ' +
+            error.message +
+            '</span>';
+          console.error('Clerk init error:', error);
+        }
+      }
+
+      function displayUserInfo() {
+        if (!clerk.user) return;
+
+        const userInfoEl = document.getElementById('user-info');
+        userInfoEl.innerHTML = `
+                <h3>👤 User Information:</h3>
+                <p><strong>User ID:</strong> ${clerk.user.id}</p>
+                <p><strong>Email:</strong> ${clerk.user.primaryEmailAddress}</p>
+                <p><strong>Name:</strong> ${clerk.user.fullName || 'Not set'}</p>
+                <p><strong>Created:</strong> ${new Date(clerk.user.createdAt).toLocaleString()}</p>
+            `;
+      }
+
+      async function getToken() {
+        try {
+          const token = await clerk.session.getToken();
+          currentToken = token;
+
+          document.getElementById('token-section').style.display = 'block';
+          document.getElementById('token').textContent = token;
+
+          // Decode and display token info
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1]));
+            console.log('Token payload:', payload);
+
+            const tokenInfo = document.createElement('div');
+            tokenInfo.innerHTML = `
+                        <h4>Token Info:</h4>
+                        <p><strong>User ID:</strong> ${payload.sub}</p>
+                        <p><strong>Session ID:</strong> ${payload.sid || 'N/A'}</p>
+                        <p><strong>Expires:</strong> ${new Date(payload.exp * 1000).toLocaleString()}</p>
+                    `;
+            document.getElementById('token-section').appendChild(tokenInfo);
+          }
+        } catch (error) {
+          console.error('Failed to get token:', error);
+          document.getElementById('token').textContent =
+            'Failed to get token: ' + error.message;
+        }
+      }
+
+      function copyToken() {
+        if (!currentToken) {
+          alert('No token available');
+          return;
+        }
+
+        navigator.clipboard
+          .writeText(currentToken)
+          .then(() => {
+            alert(
+              '✅ Token copied to clipboard!\n\nUse it in your API calls as:\nAuthorization: Bearer ' +
+                currentToken.substring(0, 20) +
+                '...',
+            );
+          })
+          .catch((err) => {
+            alert('Failed to copy: ' + err);
+          });
+      }
+
+      async function testAPI() {
+        if (!currentToken) {
+          alert('No token available');
+          return;
+        }
+
+        document.getElementById('api-test').style.display = 'block';
+        const resultEl = document.getElementById('api-result');
+        resultEl.textContent = 'Testing API call...';
+
+        try {
+          const response = await fetch('http://localhost:3001/api/auth/me', {
+            method: 'GET',
+            headers: {
+              Authorization: 'Bearer ' + currentToken,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            resultEl.innerHTML =
+              '<span class="success">✅ API call successful!</span>\n\n' +
+              JSON.stringify(data, null, 2);
+          } else {
+            resultEl.innerHTML =
+              '<span class="error">❌ API call failed:</span>\n\n' +
+              JSON.stringify(data, null, 2);
+          }
+        } catch (error) {
+          resultEl.innerHTML =
+            '<span class="error">❌ Network error:</span>\n' +
+            error.message +
+            '\n\nMake sure your backend is running on http://localhost:3001';
+        }
+      }
+
+      // Initialize on page load
+      window.addEventListener('load', initClerk);
+    </script>
+  </body>
+</html>
