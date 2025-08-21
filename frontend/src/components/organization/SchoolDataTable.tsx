@@ -73,9 +73,11 @@ export function SchoolDataTable({ onEdit, onView, onAdd }: SchoolDataTableProps)
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [schoolToDelete, setSchoolToDelete] = React.useState<School | null>(null);
+  const [openDropdownId, setOpenDropdownId] = React.useState<string | null>(null);
 
   const { data: schools = [], isLoading, error } = useGetSchoolsQuery({});
   const [deleteSchool] = useDeleteSchoolMutation();
+  
 
   const handleDelete = async () => {
     if (!schoolToDelete) return;
@@ -113,7 +115,11 @@ export function SchoolDataTable({ onEdit, onView, onAdd }: SchoolDataTableProps)
 
   const openDeleteDialog = (school: School) => {
     setSchoolToDelete(school);
-    setDeleteDialogOpen(true);
+    // Close dropdown menu first, then open dialog after a brief delay for smooth transition
+    setOpenDropdownId(null);
+    setTimeout(() => {
+      setDeleteDialogOpen(true);
+    }, 150); // Small delay for dropdown close animation
   };
 
   const columns: ColumnDef<School>[] = React.useMemo(
@@ -222,7 +228,10 @@ export function SchoolDataTable({ onEdit, onView, onAdd }: SchoolDataTableProps)
           const school = row.original;
 
           return (
-            <DropdownMenu>
+            <DropdownMenu 
+              open={openDropdownId === school.id}
+              onOpenChange={(open) => setOpenDropdownId(open ? school.id : null)}
+            >
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-8 w-8 p-0">
                   <span className="sr-only">Open menu</span>
@@ -261,7 +270,7 @@ export function SchoolDataTable({ onEdit, onView, onAdd }: SchoolDataTableProps)
         },
       },
     ],
-    [onEdit, onView]
+    [onEdit, onView, openDropdownId]
   );
 
   const table = useReactTable({

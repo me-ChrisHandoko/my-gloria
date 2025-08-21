@@ -93,6 +93,7 @@ export function PositionDataTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [positionToDelete, setPositionToDelete] =
     React.useState<Position | null>(null);
+  const [openDropdownId, setOpenDropdownId] = React.useState<string | null>(null);
 
   const filters = React.useMemo(() => {
     const filter: PositionFilterDto = {};
@@ -152,7 +153,11 @@ export function PositionDataTable({
 
   const openDeleteDialog = (position: Position) => {
     setPositionToDelete(position);
-    setDeleteDialogOpen(true);
+    // Close dropdown menu first, then open dialog after a brief delay for smooth transition
+    setOpenDropdownId(null);
+    setTimeout(() => {
+      setDeleteDialogOpen(true);
+    }, 150); // Small delay for dropdown close animation
   };
 
   const columns: ColumnDef<Position>[] = React.useMemo(
@@ -314,7 +319,10 @@ export function PositionDataTable({
 
           return (
             <div className="text-right">
-              <DropdownMenu>
+              <DropdownMenu
+                open={openDropdownId === position.id}
+                onOpenChange={(open) => setOpenDropdownId(open ? position.id : null)}
+              >
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="h-8 w-8 p-0">
                     <span className="sr-only">Open menu</span>
@@ -349,7 +357,7 @@ export function PositionDataTable({
         },
       },
     ],
-    [onEdit, onView]
+    [onEdit, onView, openDropdownId]
   );
 
   const table = useReactTable({

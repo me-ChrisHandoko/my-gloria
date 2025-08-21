@@ -78,6 +78,7 @@ export function DepartmentDataTable({ schoolId, onEdit, onView, onAdd }: Departm
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [departmentToDelete, setDepartmentToDelete] = React.useState<Department | null>(null);
+  const [openDropdownId, setOpenDropdownId] = React.useState<string | null>(null);
 
   const filters: DepartmentFilterDto = React.useMemo(() => {
     const filter: DepartmentFilterDto = {};
@@ -129,7 +130,11 @@ export function DepartmentDataTable({ schoolId, onEdit, onView, onAdd }: Departm
 
   const openDeleteDialog = (department: Department) => {
     setDepartmentToDelete(department);
-    setDeleteDialogOpen(true);
+    // Close dropdown menu first, then open dialog after a brief delay for smooth transition
+    setOpenDropdownId(null);
+    setTimeout(() => {
+      setDeleteDialogOpen(true);
+    }, 150); // Small delay for dropdown close animation
   };
 
   const columns: ColumnDef<Department>[] = React.useMemo(
@@ -188,7 +193,6 @@ export function DepartmentDataTable({ schoolId, onEdit, onView, onAdd }: Departm
           );
         },
         cell: ({ row }) => {
-          const department = row.original;
           return (
             <div className="flex items-center space-x-2">
               <Building2 className="h-4 w-4 text-gray-500" />
@@ -272,7 +276,10 @@ export function DepartmentDataTable({ schoolId, onEdit, onView, onAdd }: Departm
 
           return (
             <div className="text-right">
-              <DropdownMenu>
+              <DropdownMenu
+                open={openDropdownId === department.id}
+                onOpenChange={(open) => setOpenDropdownId(open ? department.id : null)}
+              >
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-8 w-8 p-0">
                   <span className="sr-only">Open menu</span>
@@ -312,7 +319,7 @@ export function DepartmentDataTable({ schoolId, onEdit, onView, onAdd }: Departm
         },
       },
     ],
-    [onEdit, onView]
+    [onEdit, onView, openDropdownId]
   );
 
   const table = useReactTable({
