@@ -208,15 +208,12 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
           console.log('Validation Response:', data);
           console.log('==============================');
 
-          // Only auto logout in production
-          if (process.env.NODE_ENV === 'production') {
-            setTimeout(async () => {
-              await signOut();
-              router.push('/sign-in');
-            }, 5000);
-          } else {
-            console.warn('⚠️ Skipping auto-logout in development mode');
-          }
+          // Auto logout after showing the message
+          setTimeout(async () => {
+            console.log('🚪 Signing out user with unregistered email...');
+            await signOut();
+            router.push('/sign-in');
+          }, 5000);
 
           setIsValidUser(false);
           setHasValidationAttempted(true);
@@ -250,28 +247,12 @@ export function AuthWrapper({ children }: AuthWrapperProps) {
           severity: 'error',
         }));
 
-        // Only sign out on validation error in production
-        if (process.env.NODE_ENV === 'production') {
-          setTimeout(async () => {
-            await signOut();
-            router.push('/sign-in');
-          }, 3000);
-        } else {
-          console.warn('⚠️ Validation error occurred, but skipping auto-logout in development mode');
-          // In development, treat as valid user to allow testing
-          setIsValidUser(true);
-          setIsValidating(false);
-          setHasValidationAttempted(true);
-          
-          // Set mock employee data
-          localStorage.setItem('employeeInfo', JSON.stringify({
-            nip: 'DEV_ERROR',
-            nama: user?.fullName || 'Development User (Error)',
-            email: user?.emailAddresses[0]?.emailAddress || 'dev@example.com'
-          }));
-          
-          setAuthLoading(false);
-        }
+        // Auto sign out on validation error
+        setTimeout(async () => {
+          console.log('🚪 Signing out user due to validation error...');
+          await signOut();
+          router.push('/sign-in');
+        }, 3000);
         
         setIsValidUser(false);
         setHasValidationAttempted(true);
