@@ -26,10 +26,15 @@ import {
   CheckPermissionDto,
   PermissionCheckResultDto,
 } from '../dto/permission/check-permission.dto';
+import {
+  BatchCheckPermissionDto,
+  BatchPermissionCheckResultDto,
+} from '../dto/permission/batch-check-permission.dto';
 import { ClerkAuthGuard } from '../../../auth/guards/clerk-auth.guard';
 import { AuditInterceptor } from '../../../middleware/security.middleware';
 import { Audit } from '../../../middleware/security.middleware';
 import { PermissionAction, PermissionScope } from '@prisma/client';
+import { RateLimit } from '../../../middleware/rate-limit.fastify.middleware';
 
 @ApiTags('Permissions')
 @ApiBearerAuth()
@@ -122,9 +127,48 @@ export class PermissionController {
     description: 'Permission check result',
     type: PermissionCheckResultDto,
   })
+  @ApiResponse({
+    status: 429,
+    description: 'Too many permission check requests',
+  })
+  @RateLimit({
+    max: 100,
+    timeWindow: '1 minute',
+    message: 'Too many permission check requests. Please try again later.',
+    keyGenerator: (request: any) => {
+      const userId = request.user?.clerkUserId || 'anonymous';
+      return `permission-check:${request.ip}:${userId}`;
+    },
+  })
   async checkPermission(
     @Body() checkPermissionDto: CheckPermissionDto,
   ): Promise<PermissionCheckResultDto> {
     return this.permissionService.checkPermission(checkPermissionDto);
+  }
+
+  @Post('batch-check')
+  @ApiOperation({ summary: 'Check multiple permissions for a user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Batch permission check results',
+    type: BatchPermissionCheckResultDto,
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Too many batch permission check requests',
+  })
+  @RateLimit({
+    max: 50,
+    timeWindow: '1 minute',
+    message: 'Too many batch permission check requests. Please try again later.',
+    keyGenerator: (request: any) => {
+      const userId = request.user?.clerkUserId || 'anonymous';
+      return `permission-batch-check:${request.ip}:${userId}`;
+    },
+  })
+  async batchCheckPermissions(
+    @Body() batchCheckDto: BatchCheckPermissionDto,
+  ): Promise<BatchPermissionCheckResultDto> {
+    return this.permissionService.batchCheckPermissions(batchCheckDto);
   }
 }

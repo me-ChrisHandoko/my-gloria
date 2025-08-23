@@ -3,6 +3,7 @@ import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as redisStore from 'cache-manager-ioredis';
 import { PermissionCacheService } from './services/permission-cache.service';
+import { RedisPermissionCacheService } from './services/redis-permission-cache.service';
 import { CacheService } from './cache.service';
 
 @Global()
@@ -23,7 +24,7 @@ import { CacheService } from './cache.service';
       }),
     }),
   ],
-  providers: [PermissionCacheService, CacheService],
-  exports: [NestCacheModule, PermissionCacheService, CacheService],
+  providers: [PermissionCacheService, RedisPermissionCacheService, CacheService],
+  exports: [NestCacheModule, PermissionCacheService, RedisPermissionCacheService, CacheService],
 })
 export class CacheModule {}

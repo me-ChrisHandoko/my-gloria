@@ -1,0 +1,263 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "notification-monitoring",
+    "title": "Notification System Monitoring",
+    "tags": ["notification", "monitoring", "backend"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 },
+        "type": "graph",
+        "title": "Notification Send Rate",
+        "targets": [
+          {
+            "expr": "rate(notification_sent_total[5m])",
+            "legendFormat": "{{type}} - {{channel}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Notifications/sec"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 },
+        "type": "graph",
+        "title": "Notification Failure Rate",
+        "targets": [
+          {
+            "expr": "rate(notification_failed_total[5m])",
+            "legendFormat": "{{type}} - {{channel}} - {{reason}}",
+            "refId": "A"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [0.1],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "60s",
+          "handler": 1,
+          "name": "High Notification Failure Rate",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 3,
+        "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+        "type": "graph",
+        "title": "Queue Sizes",
+        "targets": [
+          {
+            "expr": "notification_queue_size",
+            "legendFormat": "{{queue}}",
+            "refId": "A"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [5000],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "max"
+              },
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "60s",
+          "handler": 1,
+          "name": "Queue Size Critical",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 4,
+        "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+        "type": "graph",
+        "title": "Processing Duration",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(notification_processing_duration_ms_bucket[5m]))",
+            "legendFormat": "p95 - {{type}}",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(notification_processing_duration_ms_bucket[5m]))",
+            "legendFormat": "p99 - {{type}}",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Duration"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+        "type": "graph",
+        "title": "Channel Performance",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(notification_channel_performance_ms_bucket[5m]))",
+            "legendFormat": "{{channel}} - {{success}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Duration"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "gridPos": { "x": 0, "y": 16, "w": 8, "h": 8 },
+        "type": "stat",
+        "title": "Dead Letter Queue Size",
+        "targets": [
+          {
+            "expr": "notification_dead_letter_queue_size",
+            "refId": "A"
+          }
+        ],
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 100 },
+            { "color": "red", "value": 500 }
+          ]
+        }
+      },
+      {
+        "id": 7,
+        "gridPos": { "x": 8, "y": 16, "w": 8, "h": 8 },
+        "type": "stat",
+        "title": "Rate Limit Hits",
+        "targets": [
+          {
+            "expr": "rate(notification_rate_limit_hits_total[5m])",
+            "refId": "A"
+          }
+        ],
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 0.5 },
+            { "color": "red", "value": 1 }
+          ]
+        }
+      },
+      {
+        "id": 8,
+        "gridPos": { "x": 16, "y": 16, "w": 8, "h": 8 },
+        "type": "stat",
+        "title": "Circuit Breaker Status",
+        "targets": [
+          {
+            "expr": "notification_circuit_breaker_status",
+            "legendFormat": "{{service}}",
+            "refId": "A"
+          }
+        ],
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            { "color": "red", "value": 0 },
+            { "color": "yellow", "value": 0.5 },
+            { "color": "green", "value": 1 }
+          ]
+        }
+      },
+      {
+        "id": 9,
+        "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+        "type": "graph",
+        "title": "Database Query Performance",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(notification_database_query_duration_ms_bucket[5m]))",
+            "legendFormat": "p95 - {{operation}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Duration"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+        "type": "graph",
+        "title": "Retry Attempts",
+        "targets": [
+          {
+            "expr": "rate(notification_retry_count_total[5m])",
+            "legendFormat": "{{type}} - {{channel}} - attempt {{attempt}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
+        "type": "table",
+        "title": "Error Summary",
+        "targets": [
+          {
+            "expr": "topk(10, rate(notification_failed_total[1h]))",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Matches,
+  ValidateIf,
+  ValidationOptions,
+} from 'class-validator';
 
 export enum StatisticsGroupBy {
   MODULE = 'module',
@@ -10,6 +20,18 @@ export enum StatisticsGroupBy {
   HOUR = 'hour',
 }
 
+// Custom decorator for safe string validation
+function IsSafeString(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    IsString(validationOptions)(object, propertyName);
+    MaxLength(255, validationOptions)(object, propertyName);
+    Matches(/^[a-zA-Z0-9_\-\.\/\s]+$/, {
+      message: `${propertyName} contains invalid characters`,
+      ...validationOptions,
+    })(object, propertyName);
+  };
+}
+
 export class QueryAuditStatisticsDto {
   @ApiProperty({
     description: 'Start date for statistics',
@@ -17,6 +39,20 @@ export class QueryAuditStatisticsDto {
     format: 'date-time',
   })
   @IsDateString()
+  @ValidateIf(
+    (o) => {
+      // Validate date range is not too large (max 1 year)
+      if (o.endDate) {
+        const start = new Date(o.startDate);
+        const end = new Date(o.endDate);
+        const diffTime = Math.abs(end.getTime() - start.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays <= 365;
+      }
+      return true;
+    },
+    { message: 'Date range cannot exceed 365 days for statistics' },
+  )
   startDate: string;
 
   @ApiProperty({
@@ -25,6 +61,9 @@ export class QueryAuditStatisticsDto {
     format: 'date-time',
   })
   @IsDateString()
+  @ValidateIf((o) => new Date(o.endDate) >= new Date(o.startDate), {
+    message: 'End date must be after start date',
+  })
   endDate: string;
 
   @ApiProperty({
@@ -32,14 +71,19 @@ export class QueryAuditStatisticsDto {
     enum: StatisticsGroupBy,
   })
   @IsEnum(StatisticsGroupBy)
+  @Transform(({ value }) => value?.toLowerCase())
   groupBy: StatisticsGroupBy;
 
   @ApiPropertyOptional({ description: 'Module to filter by' })
   @IsOptional()
+  @IsSafeString()
+  @Transform(({ value }) => value?.trim())
   module?: string;
 
   @ApiPropertyOptional({ description: 'Entity type to filter by' })
   @IsOptional()
+  @IsSafeString()
+  @Transform(({ value }) => value?.trim())
   entityType?: string;
 }
 

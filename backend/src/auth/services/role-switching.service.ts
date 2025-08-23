@@ -9,6 +9,7 @@ import {
   RowLevelSecurityService,
   PermissionScope,
 } from '../../security/row-level-security.service';
+import { v7 as uuidv7 } from 'uuid';
 
 export interface ImpersonationContext {
   originalUserId: string;
@@ -571,6 +572,6 @@ export class RoleSwitchingService {
   }
 
   private generateId(): string {
-    return `imp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return uuidv7();
   }
 }

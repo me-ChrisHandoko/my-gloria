@@ -10,9 +10,19 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { ClerkAuthGuard } from '../../../auth/guards/clerk-auth.guard';
-import { CanCreate, CanRead, CanUpdate, CanDelete } from '../../permission/decorators/permission.decorator';
+import {
+  CanCreate,
+  CanRead,
+  CanUpdate,
+  CanDelete,
+} from '../../permission/decorators/permission.decorator';
 import { ApprovalMatrixService } from '../services/approval-matrix.service';
 import { ApprovalValidatorService } from '../services/approval-validator.service';
 import {
@@ -34,13 +44,18 @@ export class ApprovalMatrixController {
   @Post()
   @CanCreate('approval_matrix')
   @ApiOperation({ summary: 'Create a new approval matrix' })
-  @ApiResponse({ status: 201, description: 'Approval matrix created successfully' })
+  @ApiResponse({
+    status: 201,
+    description: 'Approval matrix created successfully',
+  })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 409, description: 'Conflict - duplicate matrix' })
   async create(@Body() dto: CreateApprovalMatrixDto, @Req() req: any) {
     // Validate conditions if provided
     if (dto.conditions) {
-      const isValid = this.validatorService.validateMatrixConditions(dto.conditions);
+      const isValid = this.validatorService.validateMatrixConditions(
+        dto.conditions,
+      );
       if (!isValid) {
         throw new Error('Invalid conditions format');
       }
@@ -60,13 +75,20 @@ export class ApprovalMatrixController {
   @Get('module/:module')
   @CanRead('approval_matrix')
   @ApiOperation({ summary: 'Get approval matrices for a specific module' })
-  @ApiResponse({ status: 200, description: 'List of approval matrices for the module' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of approval matrices for the module',
+  })
   async findByModule(
     @Param('module') module: string,
     @Query('requesterRole') requesterRole?: string,
     @Query('requesterPosition') requesterPosition?: string,
   ) {
-    return this.approvalMatrixService.findByModule(module, requesterRole, requesterPosition);
+    return this.approvalMatrixService.findByModule(
+      module,
+      requesterRole,
+      requesterPosition,
+    );
   }
 
   @Get(':id')
@@ -81,13 +103,18 @@ export class ApprovalMatrixController {
   @Patch(':id')
   @CanUpdate('approval_matrix')
   @ApiOperation({ summary: 'Update approval matrix' })
-  @ApiResponse({ status: 200, description: 'Approval matrix updated successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Approval matrix updated successfully',
+  })
   @ApiResponse({ status: 404, description: 'Approval matrix not found' })
   @ApiResponse({ status: 409, description: 'Conflict - duplicate matrix' })
   async update(@Param('id') id: string, @Body() dto: UpdateApprovalMatrixDto) {
     // Validate conditions if provided
     if (dto.conditions) {
-      const isValid = this.validatorService.validateMatrixConditions(dto.conditions);
+      const isValid = this.validatorService.validateMatrixConditions(
+        dto.conditions,
+      );
       if (!isValid) {
         throw new Error('Invalid conditions format');
       }
@@ -107,8 +134,13 @@ export class ApprovalMatrixController {
 
   @Post('duplicate')
   @CanCreate('approval_matrix')
-  @ApiOperation({ summary: 'Duplicate approval matrices from one module to another' })
-  @ApiResponse({ status: 201, description: 'Approval matrices duplicated successfully' })
+  @ApiOperation({
+    summary: 'Duplicate approval matrices from one module to another',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Approval matrices duplicated successfully',
+  })
   @ApiResponse({ status: 404, description: 'Source module matrices not found' })
   async duplicate(
     @Body() dto: { sourceModule: string; targetModule: string },
@@ -124,7 +156,10 @@ export class ApprovalMatrixController {
   @Delete(':id')
   @CanDelete('approval_matrix')
   @ApiOperation({ summary: 'Delete approval matrix' })
-  @ApiResponse({ status: 200, description: 'Approval matrix deleted successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Approval matrix deleted successfully',
+  })
   @ApiResponse({ status: 404, description: 'Approval matrix not found' })
   async remove(@Param('id') id: string) {
     await this.approvalMatrixService.remove(id);

@@ -1,4 +1,12 @@
-import { IsString, IsInt, IsBoolean, IsOptional, IsEnum, IsObject, Min } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsBoolean,
+  IsOptional,
+  IsEnum,
+  IsObject,
+  Min,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ApproverType } from '@prisma/client';
 
@@ -26,7 +34,9 @@ export class CreateApprovalMatrixDto {
   @IsEnum(ApproverType)
   approverType: ApproverType;
 
-  @ApiProperty({ description: 'Approver value (position_code, department_code, or user_id)' })
+  @ApiProperty({
+    description: 'Approver value (position_code, department_code, or user_id)',
+  })
   @IsString()
   approverValue: string;
 
@@ -68,7 +78,9 @@ export class UpdateApprovalMatrixDto {
   @IsEnum(ApproverType)
   approverType?: ApproverType;
 
-  @ApiPropertyOptional({ description: 'Approver value (position_code, department_code, or user_id)' })
+  @ApiPropertyOptional({
+    description: 'Approver value (position_code, department_code, or user_id)',
+  })
   @IsOptional()
   @IsString()
   approverValue?: string;
@@ -104,4 +116,12 @@ export class ApprovalMatrixFilterDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    enum: ApproverType,
+    description: 'Filter by approver type',
+  })
+  @IsOptional()
+  @IsEnum(ApproverType)
+  approverType?: ApproverType;
 }

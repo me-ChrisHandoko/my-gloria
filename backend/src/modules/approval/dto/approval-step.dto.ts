@@ -1,9 +1,12 @@
-import { IsString, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ApprovalAction } from '@prisma/client';
 
 export class ProcessApprovalDto {
-  @ApiProperty({ enum: ApprovalAction, description: 'Action to take on the approval' })
+  @ApiProperty({
+    enum: ApprovalAction,
+    description: 'Action to take on the approval',
+  })
   @IsEnum(ApprovalAction)
   action: ApprovalAction;
 
@@ -11,6 +14,10 @@ export class ProcessApprovalDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({ description: 'Version number for optimistic locking' })
+  @IsNumber()
+  version: number;
 }
 
 export class ApprovalStepFilterDto {

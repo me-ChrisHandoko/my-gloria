@@ -1,0 +1,98 @@
+{
+  "notification": {
+    "approval": {
+      "request": {
+        "greeting": "Dear {{name}}",
+        "intro": "You have received a new approval request that requires your attention.",
+        "details": "Request Details",
+        "title": "Title",
+        "requester": "Requester",
+        "department": "Department",
+        "priority": "Priority",
+        "submittedOn": "Submitted On",
+        "description": "Description",
+        "items": "Items",
+        "totalAmount": "Total Amount",
+        "action": "Please review and take action on this request at your earliest convenience.",
+        "regards": "Best regards",
+        "signature": "YPK Gloria Management System"
+      },
+      "result": {
+        "approved": "Your request has been approved and will proceed to the next step.",
+        "rejected": "Your request has been rejected. Please review the comments above for more details.",
+        "revision": "Your request requires revisions. Please review the comments and resubmit."
+      }
+    },
+    "workOrder": {
+      "update": {
+        "intro": "There has been an update to Work Order",
+        "details": "Update Details",
+        "number": "Work Order",
+        "newStatus": "New Status",
+        "previousStatus": "Previous Status",
+        "updatedBy": "Updated By",
+        "updateTime": "Update Time",
+        "notes": "Notes",
+        "action": "Please log in to the system to view full details."
+      }
+    },
+    "kpi": {
+      "reminder": {
+        "intro": "This is a reminder to submit your KPI report for",
+        "details": "Reminder Details",
+        "period": "Period",
+        "dueDate": "Due Date",
+        "daysRemaining": "Days Remaining",
+        "department": "Department",
+        "pendingKpis": "Pending KPIs",
+        "action": "Please ensure your KPI submission is completed before the due date."
+      }
+    },
+    "training": {
+      "invitation": {
+        "intro": "You are invited to attend the following training session",
+        "details": "Training Details",
+        "title": "Title",
+        "instructor": "Instructor",
+        "date": "Date",
+        "time": "Time",
+        "duration": "Duration",
+        "location": "Location",
+        "format": "Format",
+        "description": "Description",
+        "prerequisites": "Prerequisites",
+        "action": "Please confirm your attendance by"
+      }
+    },
+    "system": {
+      "alert": {
+        "intro": "System Alert",
+        "details": "Alert Details",
+        "type": "Type",
+        "severity": "Severity",
+        "time": "Time",
+        "actionRequired": "Action Required",
+        "estimatedResolution": "Estimated Resolution",
+        "signature": "YPK Gloria IT Team"
+      }
+    },
+    "general": {
+      "greeting": "Dear {{name}}",
+      "additionalInfo": "Additional Information",
+      "regards": "Best regards",
+      "signature": "YPK Gloria Management System"
+    },
+    "delegation": {
+      "intro": "{{delegator}} has delegated the following task to you",
+      "details": "Task Details",
+      "title": "Title",
+      "originalAssignee": "Original Assignee",
+      "delegatedBy": "Delegated By",
+      "delegationDate": "Delegation Date",
+      "dueDate": "Due Date",
+      "reason": "Reason for Delegation",
+      "instructions": "Instructions",
+      "action": "Please take action on this delegated task before the due date."
+    }
+  }
+}

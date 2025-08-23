@@ -11,7 +11,6 @@ import {
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
-  ParseBoolPipe,
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
@@ -32,13 +31,7 @@ import {
   ModuleCategory,
 } from '../dto/module.dto';
 import { CurrentUser } from '../../../auth/decorators/current-user.decorator';
-import {
-  RequirePermission,
-  CanCreate,
-  CanRead,
-  CanUpdate,
-  CanDelete,
-} from '../../permission/decorators/permission.decorator';
+import { RequirePermission } from '../../permission/decorators/permission.decorator';
 import { PermissionAction } from '@prisma/client';
 
 @ApiTags('Module Management')
@@ -99,10 +92,34 @@ export class ModuleController {
     type: Boolean,
     description: 'Include children modules',
   })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 50, max: 100)',
+  })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'List of modules',
-    type: [ModuleResponseDto],
+    description: 'Paginated list of modules',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/ModuleResponseDto' },
+        },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+        totalPages: { type: 'number' },
+      },
+    },
   })
   async findAll(
     @Query('isActive') isActive?: string,
@@ -110,6 +127,8 @@ export class ModuleController {
     @Query('parentId') parentId?: string,
     @Query('isVisible') isVisible?: string,
     @Query('includeChildren') includeChildren?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const params: any = {};
 
@@ -123,6 +142,15 @@ export class ModuleController {
     }
     if (includeChildren !== undefined) {
       params.includeChildren = includeChildren === 'true';
+    }
+
+    // Parse pagination parameters
+    if (page) {
+      params.page = parseInt(page, 10) || 1;
+    }
+    if (limit) {
+      const parsedLimit = parseInt(limit, 10) || 50;
+      params.limit = Math.min(parsedLimit, 100); // Max 100 items per page
     }
 
     return this.moduleService.findAll(params);
@@ -152,11 +180,11 @@ export class ModuleController {
     const userProfile = await this.prisma.userProfile.findUnique({
       where: { clerkUserId: user.userId },
     });
-    
+
     if (!userProfile) {
       throw new NotFoundException('User profile not found');
     }
-    
+
     return this.moduleService.getUserAccessibleModules(userProfile.id);
   }
 
@@ -214,10 +242,10 @@ export class ModuleController {
   @Delete(':id')
   @RequirePermission('modules', PermissionAction.DELETE)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete module' })
+  @ApiOperation({ summary: 'Soft delete module' })
   @ApiResponse({
     status: HttpStatus.NO_CONTENT,
-    description: 'Module deleted successfully',
+    description: 'Module soft deleted successfully',
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
@@ -227,8 +255,125 @@ export class ModuleController {
     status: HttpStatus.BAD_REQUEST,
     description: 'Cannot delete module with children or active access rules',
   })
-  async remove(@Param('id', ParseUUIDPipe) id: string) {
-    await this.moduleService.remove(id);
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+    @Body() body?: { reason?: string },
+  ) {
+    await this.moduleService.remove(id, user?.userId, body?.reason);
+  }
+
+  @Post(':id/restore')
+  @RequirePermission('modules', PermissionAction.UPDATE)
+  @ApiOperation({ summary: 'Restore soft-deleted module' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Module restored successfully',
+    type: ModuleResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Module not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Module is not deleted',
+  })
+  async restore(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+    @Body() body?: { reason?: string },
+  ) {
+    return this.moduleService.restore(id, user?.userId, body?.reason);
+  }
+
+  @Delete(':id/hard')
+  @RequirePermission('modules', PermissionAction.DELETE)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Permanently delete module' })
+  @ApiResponse({
+    status: HttpStatus.NO_CONTENT,
+    description: 'Module permanently deleted',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Module not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Module must be soft-deleted first',
+  })
+  async hardDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.moduleService.hardDelete(id, user?.userId);
+  }
+
+  @Get(':id/history')
+  @RequirePermission('modules', PermissionAction.READ)
+  @ApiOperation({ summary: 'Get module change history' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Module change history',
+    type: [Object],
+  })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.moduleService.getModuleHistory(id, limit);
+  }
+
+  @Post('bulk-update')
+  @RequirePermission('modules', PermissionAction.UPDATE)
+  @ApiOperation({ summary: 'Bulk update modules' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Bulk operation ID',
+    type: String,
+  })
+  async bulkUpdate(
+    @Body() updates: Array<{ id: string; data: UpdateModuleDto }>,
+    @CurrentUser() user: any,
+  ) {
+    return this.moduleService.bulkUpdateModules(updates, user?.userId);
+  }
+
+  @Get('bulk-operation/:operationId')
+  @RequirePermission('modules', PermissionAction.READ)
+  @ApiOperation({ summary: 'Get bulk operation progress' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Bulk operation progress',
+    type: Object,
+  })
+  async getBulkOperationProgress(@Param('operationId') operationId: string) {
+    return this.moduleService.getBulkOperationProgress(operationId);
+  }
+
+  @Post('bulk-operation/:operationId/rollback')
+  @RequirePermission('modules', PermissionAction.UPDATE)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Rollback bulk operation' })
+  @ApiResponse({
+    status: HttpStatus.NO_CONTENT,
+    description: 'Operation rolled back successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Operation not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'No rollback data available',
+  })
+  async rollbackBulkOperation(
+    @Param('operationId') operationId: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.moduleService.rollbackBulkOperation(operationId, user?.userId);
   }
 
   @Post('reorder')

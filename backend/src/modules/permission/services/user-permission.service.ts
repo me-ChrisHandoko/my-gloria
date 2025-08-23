@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/services/audit.service';
+import { JsonSchemaValidatorService } from './json-schema-validator.service';
 import {
   GrantPermissionDto,
   RevokePermissionDto,
@@ -28,8 +29,27 @@ export class UserPermissionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly validatorService: JsonSchemaValidatorService,
   ) {}
 
+  /**
+   * Grants a permission to a user.
+   * 
+   * Business rules:
+   * - Validates user and permission exist
+   * - Prevents duplicate active grants
+   * - Reactivates previously revoked permissions
+   * - Validates and sanitizes permission conditions
+   * - Supports temporal permissions with validity periods
+   * - Invalidates user's permission cache
+   * 
+   * @param userProfileId - Target user's profile ID
+   * @param grantDto - Permission grant details including conditions and validity
+   * @param grantedBy - ID of user performing the grant
+   * @returns Created or updated user permission record
+   * @throws NotFoundException if user or permission not found
+   * @throws ConflictException if permission already granted
+   */
   async grantPermission(
     userProfileId: string,
     grantDto: GrantPermissionDto,
@@ -76,6 +96,15 @@ export class UserPermissionService {
       );
     }
 
+    // Validate and sanitize conditions if provided
+    let sanitizedConditions = grantDto.conditions;
+    if (sanitizedConditions) {
+      sanitizedConditions = this.validatorService.validateAndSanitizeConditions(
+        sanitizedConditions,
+        'permission',
+      );
+    }
+
     const userPermission = await this.prisma.$transaction(async (tx) => {
       let result: UserPermission;
 
@@ -85,7 +114,7 @@ export class UserPermissionService {
           where: { id: existing.id },
           data: {
             isGranted: grantDto.isGranted ?? true,
-            conditions: grantDto.conditions,
+            conditions: sanitizedConditions,
             validFrom: grantDto.validFrom
               ? new Date(grantDto.validFrom)
               : new Date(),
@@ -106,7 +135,7 @@ export class UserPermissionService {
             userProfileId,
             permissionId: grantDto.permissionId,
             isGranted: grantDto.isGranted ?? true,
-            conditions: grantDto.conditions,
+            conditions: sanitizedConditions,
             validFrom: grantDto.validFrom
               ? new Date(grantDto.validFrom)
               : new Date(),
@@ -203,6 +232,20 @@ export class UserPermissionService {
     });
   }
 
+  /**
+   * Grants multiple permissions to a user in a single transaction.
+   * 
+   * Business rules:
+   * - All permissions are granted atomically (all or none)
+   * - Validates and sanitizes conditions for each permission
+   * - Updates existing permissions or creates new ones
+   * - Single audit log entry for bulk operation
+   * - Invalidates cache once after all grants
+   * 
+   * @param bulkDto - Contains user ID and array of permissions to grant
+   * @param grantedBy - ID of user performing the grants
+   * @returns Array of created/updated user permission records
+   */
   async bulkGrantPermissions(
     bulkDto: BulkGrantPermissionsDto,
     grantedBy: string,
@@ -211,6 +254,15 @@ export class UserPermissionService {
 
     await this.prisma.$transaction(async (tx) => {
       for (const permDto of bulkDto.permissions) {
+        // Validate and sanitize conditions if provided
+        let sanitizedConditions = permDto.conditions;
+        if (sanitizedConditions) {
+          sanitizedConditions = this.validatorService.validateAndSanitizeConditions(
+            sanitizedConditions,
+            'permission',
+          );
+        }
+
         const existing = await tx.userPermission.findUnique({
           where: {
             userProfileId_permissionId: {
@@ -227,7 +279,7 @@ export class UserPermissionService {
             where: { id: existing.id },
             data: {
               isGranted: permDto.isGranted ?? true,
-              conditions: permDto.conditions,
+              conditions: sanitizedConditions,
               validFrom: permDto.validFrom
                 ? new Date(permDto.validFrom)
                 : new Date(),
@@ -247,7 +299,7 @@ export class UserPermissionService {
               userProfileId: bulkDto.userProfileId,
               permissionId: permDto.permissionId,
               isGranted: permDto.isGranted ?? true,
-              conditions: permDto.conditions,
+              conditions: sanitizedConditions,
               validFrom: permDto.validFrom
                 ? new Date(permDto.validFrom)
                 : new Date(),
@@ -288,6 +340,26 @@ export class UserPermissionService {
     return results;
   }
 
+  /**
+   * Calculates and returns all effective permissions for a user.
+   * 
+   * Permission resolution order (highest to lowest priority):
+   * 1. Direct user permissions (explicit grants/denials)
+   * 2. Role-based permissions from assigned roles
+   * 3. Inherited permissions from parent roles (if enabled)
+   * 4. Resource-specific permissions
+   * 
+   * Business rules:
+   * - Explicit denials override any grants
+   * - Only includes active permissions within validity periods
+   * - Aggregates permissions from all sources
+   * - Provides statistics and metadata
+   * - Sets cache expiry hint (5 minutes)
+   * 
+   * @param userProfileId - User's profile ID
+   * @returns Comprehensive summary of user's effective permissions
+   * @throws NotFoundException if user not found
+   */
   async getEffectivePermissions(
     userProfileId: string,
   ): Promise<UserPermissionSummaryDto> {
@@ -532,6 +604,17 @@ export class UserPermissionService {
     });
   }
 
+  /**
+   * Retrieves temporary permissions expiring within specified days.
+   * 
+   * Use cases:
+   * - Notification systems for expiring access
+   * - Renewal workflows
+   * - Compliance reporting
+   * 
+   * @param days - Number of days to look ahead (default: 7)
+   * @returns List of expiring permissions ordered by expiry date
+   */
   async getExpiringPermissions(days: number = 7): Promise<UserPermission[]> {
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + days);
@@ -559,6 +642,23 @@ export class UserPermissionService {
     });
   }
 
+  /**
+   * Cleans up expired temporary permissions system-wide.
+   * 
+   * Business rules:
+   * - Only affects permissions with validUntil in the past
+   * - Marks permissions as inactive (isGranted: false)
+   * - Does not delete records (maintains audit trail)
+   * - Logs system audit entry for cleanup
+   * - Invalidates all permission caches
+   * 
+   * @returns Number of permissions marked as inactive
+   * 
+   * @example
+   * // Run as scheduled job
+   * const count = await userPermissionService.cleanupExpiredPermissions();
+   * logger.info(`Cleaned up ${count} expired permissions`);
+   */
   async cleanupExpiredPermissions(): Promise<number> {
     const result = await this.prisma.userPermission.updateMany({
       where: {

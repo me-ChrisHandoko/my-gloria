@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { ApprovalMatrix } from '@prisma/client';
-import { IApprovalMatrixConditions, IApprovalCondition } from '../interfaces/approval.interface';
+import { ApprovalMatrix, Prisma } from '@prisma/client';
+import {
+  IApprovalMatrixConditions,
+  IApprovalCondition,
+} from '../interfaces/approval.interface';
 
 @Injectable()
 export class ApprovalValidatorService {
@@ -38,16 +41,16 @@ export class ApprovalValidatorService {
   ): boolean {
     // Check "all" conditions - all must be true
     if (conditions.all && conditions.all.length > 0) {
-      const allMatch = conditions.all.every(condition =>
-        this.evaluateCondition(condition, details)
+      const allMatch = conditions.all.every((condition) =>
+        this.evaluateCondition(condition, details),
       );
       if (!allMatch) return false;
     }
 
     // Check "any" conditions - at least one must be true
     if (conditions.any && conditions.any.length > 0) {
-      const anyMatch = conditions.any.some(condition =>
-        this.evaluateCondition(condition, details)
+      const anyMatch = conditions.any.some((condition) =>
+        this.evaluateCondition(condition, details),
       );
       if (!anyMatch) return false;
     }
@@ -68,34 +71,34 @@ export class ApprovalValidatorService {
     switch (condition.operator) {
       case 'eq':
         return fieldValue == conditionValue;
-      
+
       case 'ne':
         return fieldValue != conditionValue;
-      
+
       case 'gt':
         return Number(fieldValue) > Number(conditionValue);
-      
+
       case 'gte':
         return Number(fieldValue) >= Number(conditionValue);
-      
+
       case 'lt':
         return Number(fieldValue) < Number(conditionValue);
-      
+
       case 'lte':
         return Number(fieldValue) <= Number(conditionValue);
-      
+
       case 'in':
         if (Array.isArray(conditionValue)) {
           return conditionValue.includes(fieldValue);
         }
         return false;
-      
+
       case 'nin':
         if (Array.isArray(conditionValue)) {
           return !conditionValue.includes(fieldValue);
         }
         return true;
-      
+
       default:
         return false;
     }
@@ -182,16 +185,15 @@ export class ApprovalValidatorService {
     if (!condition || typeof condition !== 'object') return false;
 
     const validOperators = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'in', 'nin'];
-    
-    const hasRequiredFields = 
-      'field' in condition &&
-      'operator' in condition &&
-      'value' in condition;
+
+    const hasRequiredFields =
+      'field' in condition && 'operator' in condition && 'value' in condition;
 
     if (!hasRequiredFields) return false;
 
     const isValidOperator = validOperators.includes(condition.operator);
-    const isValidField = typeof condition.field === 'string' && condition.field.length > 0;
+    const isValidField =
+      typeof condition.field === 'string' && condition.field.length > 0;
 
     return isValidOperator && isValidField;
   }
@@ -208,7 +210,7 @@ export class ApprovalValidatorService {
     // Adjust priority based on specific conditions
     if (matrix.conditions) {
       const conditions = matrix.conditions as IApprovalMatrixConditions;
-      
+
       // Higher priority for more specific conditions
       if (conditions.all) {
         priority -= conditions.all.length * 10;
@@ -226,5 +228,31 @@ export class ApprovalValidatorService {
     }
 
     return priority;
+  }
+
+  /**
+   * Filter approval matrices based on their conditions (with transaction support)
+   */
+  async filterMatricesByConditionsWithTx(
+    tx: Prisma.TransactionClient,
+    matrices: ApprovalMatrix[],
+    requestDetails: Record<string, any>,
+  ): Promise<ApprovalMatrix[]> {
+    const filtered: ApprovalMatrix[] = [];
+
+    for (const matrix of matrices) {
+      if (!matrix.conditions) {
+        // No conditions means always applicable
+        filtered.push(matrix);
+        continue;
+      }
+
+      const conditions = matrix.conditions as IApprovalMatrixConditions;
+      if (this.evaluateConditions(conditions, requestDetails)) {
+        filtered.push(matrix);
+      }
+    }
+
+    return filtered;
   }
 }

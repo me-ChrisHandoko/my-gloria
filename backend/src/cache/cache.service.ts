@@ -72,7 +72,7 @@ export class CacheService {
    */
   async mget(keys: string[]): Promise<Map<string, string>> {
     const results = new Map<string, string>();
-    
+
     await Promise.all(
       keys.map(async (key) => {
         const value = await this.get(key);
@@ -88,7 +88,9 @@ export class CacheService {
   /**
    * Set multiple values in cache
    */
-  async mset(entries: Array<{ key: string; value: string; ttl?: number }>): Promise<void> {
+  async mset(
+    entries: Array<{ key: string; value: string; ttl?: number }>,
+  ): Promise<void> {
     await Promise.all(
       entries.map(({ key, value, ttl }) => this.set(key, value, ttl)),
     );

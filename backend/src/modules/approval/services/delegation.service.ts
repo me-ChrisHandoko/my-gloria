@@ -1,13 +1,31 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { ApprovalDelegation, Prisma } from '@prisma/client';
-import { CreateDelegationDto, UpdateDelegationDto, DelegationFilterDto } from '../dto/delegation.dto';
+import {
+  CreateDelegationDto,
+  UpdateDelegationDto,
+  DelegationFilterDto,
+} from '../dto/delegation.dto';
+import { v7 as uuidv7 } from 'uuid';
+import { DelegationRepository } from '../repositories/delegation.repository';
+import { PrismaService } from '../../../prisma/prisma.service';
 
 @Injectable()
 export class DelegationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly delegationRepository: DelegationRepository,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  async create(dto: CreateDelegationDto, delegatorProfileId: string, createdBy: string): Promise<ApprovalDelegation> {
+  async create(
+    dto: CreateDelegationDto,
+    delegatorProfileId: string,
+    createdBy: string,
+  ): Promise<ApprovalDelegation> {
     // Validate dates
     const startDate = new Date(dto.startDate);
     const endDate = new Date(dto.endDate);
@@ -17,15 +35,18 @@ export class DelegationService {
     }
 
     // Check for overlapping delegations
-    const overlapping = await this.findOverlappingDelegations(
-      delegatorProfileId,
-      dto.module || null,
-      startDate,
-      endDate,
-    );
+    const hasConflict =
+      await this.delegationRepository.hasConflictingDelegation(
+        delegatorProfileId,
+        startDate,
+        endDate,
+        dto.module || undefined,
+      );
 
-    if (overlapping.length > 0) {
-      throw new ConflictException('Overlapping delegation already exists for this period');
+    if (hasConflict) {
+      throw new ConflictException(
+        'Overlapping delegation already exists for this period',
+      );
     }
 
     // Prevent self-delegation
@@ -33,64 +54,30 @@ export class DelegationService {
       throw new BadRequestException('Cannot delegate to yourself');
     }
 
-    return this.prisma.approvalDelegation.create({
-      data: {
-        id: this.generateId(),
-        delegatorProfileId,
-        delegateProfileId: dto.delegateProfileId,
-        module: dto.module || null,
-        startDate,
-        endDate,
-        reason: dto.reason,
-        isActive: true,
-        createdBy,
+    return this.delegationRepository.create({
+      id: this.generateId(),
+      module: dto.module || null,
+      startDate,
+      endDate,
+      reason: dto.reason,
+      isActive: true,
+      createdBy,
+      delegator: {
+        connect: { id: delegatorProfileId },
       },
-      include: {
-        delegator: true,
-        delegate: true,
+      delegate: {
+        connect: { id: dto.delegateProfileId },
       },
     });
   }
 
   async findAll(filter?: DelegationFilterDto): Promise<ApprovalDelegation[]> {
-    const where: Prisma.ApprovalDelegationWhereInput = {};
-
-    if (filter) {
-      if (filter.delegatorProfileId) where.delegatorProfileId = filter.delegatorProfileId;
-      if (filter.delegateProfileId) where.delegateProfileId = filter.delegateProfileId;
-      if (filter.module !== undefined) where.module = filter.module;
-      if (filter.isActive !== undefined) where.isActive = filter.isActive;
-      
-      if (filter.activeOn) {
-        const checkDate = new Date(filter.activeOn);
-        where.AND = [
-          { startDate: { lte: checkDate } },
-          { endDate: { gte: checkDate } },
-          { isActive: true },
-        ];
-      }
-    }
-
-    return this.prisma.approvalDelegation.findMany({
-      where,
-      include: {
-        delegator: true,
-        delegate: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    const result = await this.delegationRepository.findAll(filter);
+    return result.data;
   }
 
   async findOne(id: string): Promise<ApprovalDelegation> {
-    const delegation = await this.prisma.approvalDelegation.findUnique({
-      where: { id },
-      include: {
-        delegator: true,
-        delegate: true,
-      },
-    });
+    const delegation = await this.delegationRepository.findById(id);
 
     if (!delegation) {
       throw new NotFoundException(`Delegation with ID ${id} not found`);
@@ -105,35 +92,14 @@ export class DelegationService {
   }> {
     const now = new Date();
 
-    const asDelegator = await this.prisma.approvalDelegation.findMany({
-      where: {
-        delegatorProfileId: profileId,
-        isActive: true,
-      },
-      include: {
-        delegator: true,
-        delegate: true,
-      },
-      orderBy: {
-        startDate: 'desc',
-      },
-    });
+    const asDelegatorResult =
+      await this.delegationRepository.getDelegatesHistory(profileId);
+    const asDelegator = asDelegatorResult.data.filter((d) => d.isActive);
 
-    const asDelegate = await this.prisma.approvalDelegation.findMany({
-      where: {
-        delegateProfileId: profileId,
-        isActive: true,
-        startDate: { lte: now },
-        endDate: { gte: now },
-      },
-      include: {
-        delegator: true,
-        delegate: true,
-      },
-      orderBy: {
-        startDate: 'desc',
-      },
-    });
+    const asDelegate = await this.delegationRepository.findActiveByDelegate(
+      profileId,
+      now,
+    );
 
     return { asDelegator, asDelegate };
   }
@@ -143,30 +109,27 @@ export class DelegationService {
     delegateProfileId: string,
     module?: string,
   ): Promise<ApprovalDelegation | null> {
-    const now = new Date();
+    const isActive = await this.delegationRepository.isDelegationActive(
+      delegatorProfileId,
+      delegateProfileId,
+      module,
+    );
 
-    const delegation = await this.prisma.approvalDelegation.findFirst({
-      where: {
-        delegatorProfileId,
-        delegateProfileId,
-        isActive: true,
-        startDate: { lte: now },
-        endDate: { gte: now },
-        OR: [
-          { module: null }, // Delegation for all modules
-          { module }, // Specific module delegation
-        ],
-      },
-      include: {
-        delegator: true,
-        delegate: true,
-      },
-    });
+    if (!isActive) {
+      return null;
+    }
 
-    return delegation;
+    return this.delegationRepository.findActiveDelegation(
+      delegatorProfileId,
+      module,
+    );
   }
 
-  async update(id: string, dto: UpdateDelegationDto, updaterProfileId: string): Promise<ApprovalDelegation> {
+  async update(
+    id: string,
+    dto: UpdateDelegationDto,
+    updaterProfileId: string,
+  ): Promise<ApprovalDelegation> {
     const delegation = await this.findOne(id);
 
     // Only delegator can update their delegation
@@ -176,7 +139,9 @@ export class DelegationService {
 
     // Validate dates if changed
     if (dto.startDate || dto.endDate) {
-      const startDate = dto.startDate ? new Date(dto.startDate) : delegation.startDate;
+      const startDate = dto.startDate
+        ? new Date(dto.startDate)
+        : delegation.startDate;
       const endDate = dto.endDate ? new Date(dto.endDate) : delegation.endDate;
 
       if (startDate >= endDate) {
@@ -184,39 +149,43 @@ export class DelegationService {
       }
 
       // Check for overlapping delegations (excluding current)
-      const overlapping = await this.findOverlappingDelegations(
-        delegation.delegatorProfileId,
-        dto.module !== undefined ? dto.module : delegation.module,
-        startDate,
-        endDate,
-        id,
-      );
+      const hasConflict =
+        await this.delegationRepository.hasConflictingDelegation(
+          delegation.delegatorProfileId,
+          startDate,
+          endDate,
+          dto.module !== undefined
+            ? dto.module
+            : delegation.module || undefined,
+          id,
+        );
 
-      if (overlapping.length > 0) {
-        throw new ConflictException('Overlapping delegation already exists for this period');
+      if (hasConflict) {
+        throw new ConflictException(
+          'Overlapping delegation already exists for this period',
+        );
       }
     }
 
     // Prevent self-delegation
-    if (dto.delegateProfileId && dto.delegateProfileId === delegation.delegatorProfileId) {
+    if (
+      dto.delegateProfileId &&
+      dto.delegateProfileId === delegation.delegatorProfileId
+    ) {
       throw new BadRequestException('Cannot delegate to yourself');
     }
 
-    return this.prisma.approvalDelegation.update({
-      where: { id },
-      data: {
-        ...dto,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-      },
-      include: {
-        delegator: true,
-        delegate: true,
-      },
+    return this.delegationRepository.update(id, {
+      ...dto,
+      startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+      endDate: dto.endDate ? new Date(dto.endDate) : undefined,
     });
   }
 
-  async revoke(id: string, revokerProfileId: string): Promise<ApprovalDelegation> {
+  async revoke(
+    id: string,
+    revokerProfileId: string,
+  ): Promise<ApprovalDelegation> {
     const delegation = await this.findOne(id);
 
     // Only delegator can revoke their delegation
@@ -224,16 +193,9 @@ export class DelegationService {
       throw new BadRequestException('You can only revoke your own delegations');
     }
 
-    return this.prisma.approvalDelegation.update({
-      where: { id },
-      data: {
-        isActive: false,
-        endDate: new Date(), // End immediately
-      },
-      include: {
-        delegator: true,
-        delegate: true,
-      },
+    return this.delegationRepository.update(id, {
+      isActive: false,
+      endDate: new Date(), // End immediately
     });
   }
 
@@ -253,6 +215,8 @@ export class DelegationService {
     return result.count;
   }
 
+  // This method is now replaced by repository method hasConflictingDelegation
+  // Keeping for compatibility with transaction-based methods
   private async findOverlappingDelegations(
     delegatorProfileId: string,
     module: string | null,
@@ -260,50 +224,51 @@ export class DelegationService {
     endDate: Date,
     excludeId?: string,
   ): Promise<ApprovalDelegation[]> {
-    const where: Prisma.ApprovalDelegationWhereInput = {
-      delegatorProfileId,
-      isActive: true,
-      OR: [
-        {
-          AND: [
-            { startDate: { lte: startDate } },
-            { endDate: { gte: startDate } },
-          ],
-        },
-        {
-          AND: [
-            { startDate: { lte: endDate } },
-            { endDate: { gte: endDate } },
-          ],
-        },
-        {
-          AND: [
-            { startDate: { gte: startDate } },
-            { endDate: { lte: endDate } },
-          ],
-        },
-      ],
-    };
+    const hasConflict =
+      await this.delegationRepository.hasConflictingDelegation(
+        delegatorProfileId,
+        startDate,
+        endDate,
+        module || undefined,
+        excludeId,
+      );
+    return hasConflict ? ([{}] as ApprovalDelegation[]) : [];
+  }
 
-    if (module !== undefined) {
-      where.AND = [
-        {
-          OR: [
-            { module: null }, // General delegation overlaps with specific
-            { module }, // Same module
-          ],
-        },
-      ];
-    }
+  async getActiveDelegationWithTx(
+    tx: Prisma.TransactionClient,
+    delegatorProfileId: string,
+    delegateProfileId: string,
+    module?: string,
+  ): Promise<ApprovalDelegation | null> {
+    const now = new Date();
 
-    if (excludeId) {
-      where.id = { not: excludeId };
-    }
+    const delegation = await tx.approvalDelegation.findFirst({
+      where: {
+        delegatorProfileId,
+        delegateProfileId,
+        startDate: { lte: now },
+        endDate: { gte: now },
+        isActive: true,
+        AND: [
+          {
+            OR: [
+              { module: null }, // General delegation
+              { module }, // Specific module delegation
+            ],
+          },
+        ],
+      },
+      include: {
+        delegator: true,
+        delegate: true,
+      },
+    });
 
-    return this.prisma.approvalDelegation.findMany({ where });
+    return delegation;
   }
 
   private generateId(): string {
-    return `del_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return uuidv7();
   }
 }

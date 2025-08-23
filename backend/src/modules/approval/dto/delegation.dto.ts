@@ -6,7 +6,9 @@ export class CreateDelegationDto {
   @IsString()
   delegateProfileId: string;
 
-  @ApiPropertyOptional({ description: 'Specific module for delegation (null for all)' })
+  @ApiPropertyOptional({
+    description: 'Specific module for delegation (null for all)',
+  })
   @IsOptional()
   @IsString()
   module?: string;
@@ -26,12 +28,16 @@ export class CreateDelegationDto {
 }
 
 export class UpdateDelegationDto {
-  @ApiPropertyOptional({ description: 'Profile ID of the person to delegate to' })
+  @ApiPropertyOptional({
+    description: 'Profile ID of the person to delegate to',
+  })
   @IsOptional()
   @IsString()
   delegateProfileId?: string;
 
-  @ApiPropertyOptional({ description: 'Specific module for delegation (null for all)' })
+  @ApiPropertyOptional({
+    description: 'Specific module for delegation (null for all)',
+  })
   @IsOptional()
   @IsString()
   module?: string;
@@ -78,7 +84,9 @@ export class DelegationFilterDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ description: 'Filter by date (checks if delegation is active on this date)' })
+  @ApiPropertyOptional({
+    description: 'Filter by date (checks if delegation is active on this date)',
+  })
   @IsOptional()
   @IsDateString()
   activeOn?: string;

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bull';
 import { APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -29,18 +30,21 @@ import {
 import { RowLevelSecurityService } from './security/row-level-security.service';
 import { RLSHelperService } from './security/rls-helper.service';
 import configuration from './config/configuration';
+import notificationConfig from './config/notification.config';
 import { validateConfig } from './config/config.validation';
 import { UserProfileModule } from './modules/user-profile/user-profile.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ApprovalModule } from './modules/approval/approval.module';
 import { ModuleManagementModule } from './modules/module-management/module-management.module';
+import { NotificationModule } from './modules/notification/notification.module';
+import { SystemConfigModule } from './modules/system-config/system-config.module';
 
 @Module({
   imports: [
     // Configuration with validation
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [configuration],
+      load: [configuration, notificationConfig],
       envFilePath: ['.env', '.env.local'],
       cache: true,
       validate: validateConfig,
@@ -59,6 +63,19 @@ import { ModuleManagementModule } from './modules/module-management/module-manag
 
     // Cache (Redis)
     CacheModule,
+
+    // Queue Management (Bull)
+    BullModule.forRoot({
+      redis: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379', 10),
+        password: process.env.REDIS_PASSWORD,
+      },
+      defaultJobOptions: {
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    }),
 
     // Health checks
     HealthModule,
@@ -82,6 +99,10 @@ import { ModuleManagementModule } from './modules/module-management/module-manag
     ApprovalModule,
 
     ModuleManagementModule,
+
+    NotificationModule,
+
+    SystemConfigModule,
 
     // Scheduled Tasks - temporarily disabled for debugging
     // ScheduledTaskModule,

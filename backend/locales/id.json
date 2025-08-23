@@ -1,0 +1,98 @@
+{
+  "notification": {
+    "approval": {
+      "request": {
+        "greeting": "Yth. {{name}}",
+        "intro": "Anda menerima permintaan persetujuan baru yang memerlukan perhatian Anda.",
+        "details": "Detail Permintaan",
+        "title": "Judul",
+        "requester": "Peminta",
+        "department": "Departemen",
+        "priority": "Prioritas",
+        "submittedOn": "Tanggal Pengajuan",
+        "description": "Deskripsi",
+        "items": "Jumlah Item",
+        "totalAmount": "Total Nilai",
+        "action": "Mohon segera tinjau dan ambil tindakan atas permintaan ini.",
+        "regards": "Hormat kami",
+        "signature": "Sistem Manajemen YPK Gloria"
+      },
+      "result": {
+        "approved": "Permintaan Anda telah disetujui dan akan dilanjutkan ke tahap berikutnya.",
+        "rejected": "Permintaan Anda telah ditolak. Silakan tinjau komentar di atas untuk detail lebih lanjut.",
+        "revision": "Permintaan Anda memerlukan revisi. Silakan tinjau komentar dan ajukan kembali."
+      }
+    },
+    "workOrder": {
+      "update": {
+        "intro": "Terdapat pembaruan pada Work Order",
+        "details": "Detail Pembaruan",
+        "number": "Nomor Work Order",
+        "newStatus": "Status Baru",
+        "previousStatus": "Status Sebelumnya",
+        "updatedBy": "Diperbarui Oleh",
+        "updateTime": "Waktu Pembaruan",
+        "notes": "Catatan",
+        "action": "Silakan masuk ke sistem untuk melihat detail lengkap."
+      }
+    },
+    "kpi": {
+      "reminder": {
+        "intro": "Ini adalah pengingat untuk mengirimkan laporan KPI Anda untuk",
+        "details": "Detail Pengingat",
+        "period": "Periode",
+        "dueDate": "Tanggal Jatuh Tempo",
+        "daysRemaining": "Hari Tersisa",
+        "department": "Departemen",
+        "pendingKpis": "KPI yang Tertunda",
+        "action": "Pastikan pengiriman KPI Anda selesai sebelum tanggal jatuh tempo."
+      }
+    },
+    "training": {
+      "invitation": {
+        "intro": "Anda diundang untuk menghadiri sesi pelatihan berikut",
+        "details": "Detail Pelatihan",
+        "title": "Judul",
+        "instructor": "Instruktur",
+        "date": "Tanggal",
+        "time": "Waktu",
+        "duration": "Durasi",
+        "location": "Lokasi",
+        "format": "Format",
+        "description": "Deskripsi",
+        "prerequisites": "Prasyarat",
+        "action": "Mohon konfirmasi kehadiran Anda sebelum"
+      }
+    },
+    "system": {
+      "alert": {
+        "intro": "Peringatan Sistem",
+        "details": "Detail Peringatan",
+        "type": "Jenis",
+        "severity": "Tingkat Keparahan",
+        "time": "Waktu",
+        "actionRequired": "Tindakan Diperlukan",
+        "estimatedResolution": "Perkiraan Penyelesaian",
+        "signature": "Tim IT YPK Gloria"
+      }
+    },
+    "general": {
+      "greeting": "Yth. {{name}}",
+      "additionalInfo": "Informasi Tambahan",
+      "regards": "Hormat kami",
+      "signature": "Sistem Manajemen YPK Gloria"
+    },
+    "delegation": {
+      "intro": "{{delegator}} telah mendelegasikan tugas berikut kepada Anda",
+      "details": "Detail Tugas",
+      "title": "Judul",
+      "originalAssignee": "Penerima Tugas Asli",
+      "delegatedBy": "Didelegasikan Oleh",
+      "delegationDate": "Tanggal Delegasi",
+      "dueDate": "Tanggal Jatuh Tempo",
+      "reason": "Alasan Delegasi",
+      "instructions": "Instruksi",
+      "action": "Mohon ambil tindakan atas tugas yang didelegasikan ini sebelum tanggal jatuh tempo."
+    }
+  }
+}

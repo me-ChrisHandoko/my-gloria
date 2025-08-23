@@ -67,7 +67,10 @@ model UserProfile {
   approvalSteps     ApprovalStep[]      @relation("ApproverRelation")
   delegationsFrom   ApprovalDelegation[] @relation("DelegatorRelation")
   delegationsTo     ApprovalDelegation[] @relation("DelegateRelation")
+  permissionDelegationsFrom PermissionDelegation[] @relation("Delegator")
+  permissionDelegationsTo   PermissionDelegation[] @relation("Delegate")
   notifications     Notification[]
+  notificationPreference NotificationPreference?
   auditLogs         AuditLog[]          @relation("ActorRelation")
   targetAuditLogs   AuditLog[]          @relation("TargetRelation")
   
@@ -443,6 +446,121 @@ model RoleTemplate {
   @@schema("gloria_ops")
 }
 
+// Permission templates for predefined permission sets
+model PermissionTemplate {
+  id                String              @id
+  code              String              @unique
+  name              String
+  description       String?
+  category          String              // e.g., "default", "department_head", "viewer", "editor", "admin"
+  permissions       Json                // Array of { permission: string, scope?: string, conditions?: object }
+  moduleAccess      Json?               // Array of { module: string, actions: string[] }
+  isSystem          Boolean             @default(false) @map("is_system") // System templates cannot be modified
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  version           Int                 @default(0)  // Optimistic locking
+  
+  // Relations
+  templateApplications PermissionTemplateApplication[]
+  
+  @@index([category, isActive])
+  @@index([id, version])
+  @@map("permission_templates")
+  @@schema("gloria_ops")
+}
+
+// Permission template applications (track which templates are applied to roles/users)
+model PermissionTemplateApplication {
+  id                String              @id
+  templateId        String              @map("template_id")
+  template          PermissionTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  targetType        String              @map("target_type") // "role" or "user"
+  targetId          String              @map("target_id") // Role ID or UserProfile ID
+  appliedBy         String              @map("applied_by") // Clerk user ID
+  appliedAt         DateTime            @default(now()) @map("applied_at")
+  revokedBy         String?             @map("revoked_by") // Clerk user ID
+  revokedAt         DateTime?           @map("revoked_at")
+  isActive          Boolean             @default(true) @map("is_active")
+  notes             String?
+  
+  @@unique([templateId, targetType, targetId])
+  @@index([targetType, targetId, isActive])
+  @@map("permission_template_applications")
+  @@schema("gloria_ops")
+}
+
+// Permission delegation for temporary access
+model PermissionDelegation {
+  id                String              @id
+  delegatorId       String              @map("delegator_id")
+  delegator         UserProfile         @relation("Delegator", fields: [delegatorId], references: [id], onDelete: Cascade)
+  delegateId        String              @map("delegate_id")
+  delegate          UserProfile         @relation("Delegate", fields: [delegateId], references: [id], onDelete: Cascade)
+  permissions       Json                // Array of permission codes or { permission: string, scope?: string }
+  reason            String
+  validFrom         DateTime            @default(now()) @map("valid_from")
+  validUntil        DateTime            @map("valid_until")
+  isRevoked         Boolean             @default(false) @map("is_revoked")
+  revokedBy         String?             @map("revoked_by") // Clerk user ID
+  revokedAt         DateTime?           @map("revoked_at")
+  revokedReason     String?             @map("revoked_reason")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@index([delegatorId, isRevoked])
+  @@index([delegateId, isRevoked])
+  @@index([validFrom, validUntil])
+  @@map("permission_delegations")
+  @@schema("gloria_ops")
+}
+
+// Permission change history for audit trail with rollback capability
+model PermissionChangeHistory {
+  id                String              @id
+  entityType        String              @map("entity_type") // "user_permission", "role_permission", "template_application", etc.
+  entityId          String              @map("entity_id")
+  operation         String              // "grant", "revoke", "update", "apply_template", "delegate"
+  previousState     Json?               @map("previous_state")
+  newState          Json                @map("new_state")
+  metadata          Json?               // Additional context like reason, conditions, etc.
+  performedBy       String              @map("performed_by") // Clerk user ID
+  performedAt       DateTime            @default(now()) @map("performed_at")
+  rollbackOf        String?             @map("rollback_of") // ID of the change being rolled back
+  rolledBackBy      String?             @map("rolled_back_by") // Clerk user ID
+  rolledBackAt      DateTime?           @map("rolled_back_at")
+  isRollbackable    Boolean             @default(true) @map("is_rollbackable")
+  
+  @@index([entityType, entityId])
+  @@index([performedBy, performedAt])
+  @@index([rollbackOf])
+  @@map("permission_change_history")
+  @@schema("gloria_ops")
+}
+
+// Permission analytics for usage patterns and anomaly detection
+model PermissionAnalytics {
+  id                String              @id
+  userProfileId     String              @map("user_profile_id")
+  permissionCode    String              @map("permission_code")
+  action            String              // "check", "grant", "revoke", "use"
+  resource          String?
+  resourceId        String?             @map("resource_id")
+  result            String?             // "allowed", "denied", "error"
+  responseTime      Int?                @map("response_time") // milliseconds
+  context           Json?               // Additional context like location, device, etc.
+  anomalyScore      Float?              @map("anomaly_score") // 0-1, higher means more anomalous
+  anomalyReasons    Json?               @map("anomaly_reasons") // Why this was flagged as anomalous
+  timestamp         DateTime            @default(now())
+  
+  @@index([userProfileId, timestamp])
+  @@index([permissionCode, timestamp])
+  @@index([anomalyScore])
+  @@map("permission_analytics")
+  @@schema("gloria_ops")
+}
+
 // Permission policies for complex authorization rules
 model PermissionPolicy {
   id                String              @id
@@ -522,16 +640,74 @@ model Module {
   isActive          Boolean             @default(true) @map("is_active")
   isVisible         Boolean             @default(true) @map("is_visible")
   requiredPlan      String?             @map("required_plan") // For feature gating
+  version           Int                 @default(0)  // Optimistic locking
+  
+  // Soft delete fields
+  deletedAt         DateTime?           @map("deleted_at")
+  deletedBy         String?             @map("deleted_by") // Clerk user ID who deleted
+  deleteReason      String?             @map("delete_reason")
+  
+  // Audit fields
   createdAt         DateTime            @default(now()) @map("created_at")
   updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  updatedBy         String?             @map("updated_by") // Clerk user ID
   
   // Relations
   permissions       ModulePermission[]
   roleAccess        RoleModuleAccess[]
   userAccess        UserModuleAccess[]
   overrides         UserOverride[]
+  changeHistory     ModuleChangeHistory[]
   
+  @@index([id, version])
+  @@index([parentId, isActive, sortOrder])
+  @@index([isVisible, isActive])
+  @@index([category, isActive])
+  @@index([deletedAt])
   @@map("modules")
+  @@schema("gloria_ops")
+}
+
+// Module Change History for version management
+model ModuleChangeHistory {
+  id                String              @id
+  moduleId          String              @map("module_id")
+  module            Module              @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  changeType        String              @map("change_type") // "created", "updated", "deleted", "restored"
+  changeVersion     Int                 @map("change_version")
+  previousData      Json?               @map("previous_data") // JSON snapshot of previous state
+  newData           Json                @map("new_data") // JSON snapshot of new state
+  changedFields     String[]            @map("changed_fields") // Array of field names that changed
+  changedBy         String              @map("changed_by") // Clerk user ID
+  changeReason      String?             @map("change_reason")
+  changedAt         DateTime            @default(now()) @map("changed_at")
+  
+  @@index([moduleId, changeVersion])
+  @@index([changedBy, changedAt])
+  @@map("module_change_history")
+  @@schema("gloria_ops")
+}
+
+// Bulk Operation Progress tracking
+model BulkOperationProgress {
+  id                String              @id
+  operationType     String              @map("operation_type") // "module_update", "module_delete", "access_grant", etc.
+  status            String              // "pending", "in_progress", "completed", "failed", "rolled_back"
+  totalItems        Int                 @map("total_items")
+  processedItems    Int                 @default(0) @map("processed_items")
+  successfulItems   Int                 @default(0) @map("successful_items")
+  failedItems       Int                 @default(0) @map("failed_items")
+  errorDetails      Json?               @map("error_details") // Array of error objects
+  rollbackData      Json?               @map("rollback_data") // Data needed for rollback
+  startedAt         DateTime            @default(now()) @map("started_at")
+  completedAt       DateTime?           @map("completed_at")
+  initiatedBy       String              @map("initiated_by") // Clerk user ID
+  metadata          Json?               // Additional operation-specific data
+  
+  @@index([status, startedAt])
+  @@index([initiatedBy, startedAt])
+  @@map("bulk_operation_progress")
   @@schema("gloria_ops")
 }
 
@@ -562,8 +738,10 @@ model RoleModuleAccess {
   createdAt         DateTime            @default(now()) @map("created_at")
   updatedAt         DateTime            @updatedAt @map("updated_at")
   createdBy         String?             @map("created_by") // Clerk user ID
+  version           Int                 @default(0)  // Optimistic locking
   
   @@unique([roleId, moduleId])
+  @@index([id, version])
   @@map("role_module_access")
   @@schema("gloria_ops")
 }
@@ -583,8 +761,10 @@ model UserModuleAccess {
   isActive          Boolean             @default(true) @map("is_active")
   createdAt         DateTime            @default(now()) @map("created_at")
   updatedAt         DateTime            @updatedAt @map("updated_at")
+  version           Int                 @default(0)  // Optimistic locking
   
   @@index([userProfileId, moduleId, isActive])
+  @@index([id, version])
   @@map("user_module_access")
   @@schema("gloria_ops")
 }
@@ -604,8 +784,10 @@ model UserOverride {
   grantedBy         String              @map("granted_by") // Clerk user ID
   createdAt         DateTime            @default(now()) @map("created_at")
   updatedAt         DateTime            @updatedAt @map("updated_at")
+  version           Int                 @default(0)  // Optimistic locking
   
   @@index([userProfileId, moduleId, isGranted])
+  @@index([id, version])
   @@map("user_overrides")
   @@schema("gloria_ops")
 }
@@ -642,6 +824,7 @@ model Request {
   details           Json
   status            RequestStatus       @default(PENDING)
   currentStep       Int                 @default(1) @map("current_step")
+  version           Int                 @default(0)  // Optimistic locking field
   completedAt       DateTime?           @map("completed_at")
   cancelledAt       DateTime?           @map("cancelled_at")
   cancelReason      String?             @map("cancel_reason")
@@ -654,6 +837,9 @@ model Request {
   
   @@index([requesterProfileId, status])
   @@index([module, status])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([requestType, status])
+  @@index([createdAt(sort: Desc)])
   @@map("requests")
   @@schema("gloria_ops")
 }
@@ -669,6 +855,7 @@ model ApprovalStep {
   status            ApprovalStatus      @default(WAITING)
   action            ApprovalAction?
   notes             String?
+  version           Int                 @default(0)  // Optimistic locking field
   approvedAt        DateTime?           @map("approved_at")
   createdAt         DateTime            @default(now()) @map("created_at")
   updatedAt         DateTime            @updatedAt @map("updated_at")
@@ -718,7 +905,7 @@ model RequestAttachment {
 // ==================== SYSTEM TABLES ====================
 
 model Notification {
-  id                String              @id
+  id                String              @id @default(cuid())
   userProfileId     String              @map("user_profile_id")
   userProfile       UserProfile         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
   type              NotificationType
@@ -730,7 +917,10 @@ model Notification {
   readAt            DateTime?           @map("read_at")
   createdAt         DateTime            @default(now()) @map("created_at")
   
-  @@index([userProfileId, isRead])
+  // Optimized indexes for common query patterns
+  @@index([userProfileId, isRead]) // Query notifications by user and read status
+  @@index([createdAt(sort: Desc), type]) // Query recent notifications by type
+  @@index([priority, isRead]) // Query by priority and read status
   @@map("notifications")
   @@schema("gloria_ops")
 }
@@ -756,9 +946,12 @@ model AuditLog {
   userAgent         String?             @map("user_agent")
   createdAt         DateTime            @default(now()) @map("created_at")
   
-  @@index([actorId, createdAt])
-  @@index([module, action, createdAt])
-  @@index([entityType, entityId, createdAt])
+  // Optimized composite indexes for common query patterns
+  @@index([entityType, entityId, createdAt(sort: Desc)])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([actorProfileId, createdAt(sort: Desc)])
+  @@index([module, action, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
   @@map("audit_logs")
   @@schema("gloria_ops")
 }
@@ -862,6 +1055,12 @@ enum NotificationType {
   SYSTEM_ALERT
   GENERAL
   DELEGATION
+  ANNOUNCEMENT
+  SYSTEM_UPDATE
+  REMINDER
+  ALERT
+  USER_ACTION
+  DATA_CHANGE
 
   @@schema("gloria_ops")
 }
@@ -899,5 +1098,113 @@ enum AssigneeType {
   DEPARTMENT
   POSITION
   
+  @@schema("gloria_ops")
+}
+
+// ==================== NOTIFICATION PREFERENCES ====================
+
+// Notification channels available for delivery
+enum NotificationChannel {
+  IN_APP    // In-application notifications
+  EMAIL     // Email notifications  
+  PUSH      // Push notifications to mobile/browser
+  SMS       // SMS text messages
+  
+  @@schema("gloria_ops")
+}
+
+// User notification preferences model
+model NotificationPreference {
+  id                String              @id @default(cuid())
+  userProfileId     String              @unique @map("user_profile_id")
+  userProfile       UserProfile         @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+  
+  // Global settings
+  enabled           Boolean             @default(true) // Master switch for all notifications
+  
+  // Quiet hours configuration (stored in user's timezone)
+  quietHoursEnabled Boolean             @default(false) @map("quiet_hours_enabled")
+  quietHoursStart   String?             @map("quiet_hours_start") // Format: "HH:mm" e.g., "22:00"
+  quietHoursEnd     String?             @map("quiet_hours_end")   // Format: "HH:mm" e.g., "08:00"
+  timezone          String              @default("Asia/Jakarta")
+  
+  // Frequency capping
+  maxDailyNotifications Int?            @map("max_daily_notifications") // Max notifications per day (null = unlimited)
+  maxHourlyNotifications Int?           @map("max_hourly_notifications") // Max notifications per hour
+  
+  // Default channel preferences (can be overridden per type)
+  defaultChannels   NotificationChannel[] @default([IN_APP])
+  
+  // Timestamps
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  // Relations
+  channelPreferences NotificationChannelPreference[]
+  unsubscriptions   NotificationUnsubscribe[]
+  frequencyTracking NotificationFrequencyTracking[]
+  
+  @@index([userProfileId])
+  @@map("notification_preferences")
+  @@schema("gloria_ops")
+}
+
+// Channel preferences per notification type
+model NotificationChannelPreference {
+  id                String              @id @default(cuid())
+  preferenceId      String              @map("preference_id")
+  preference        NotificationPreference @relation(fields: [preferenceId], references: [id], onDelete: Cascade)
+  
+  notificationType  NotificationType    @map("notification_type")
+  channels          NotificationChannel[] // Enabled channels for this type
+  enabled           Boolean             @default(true) // Can disable specific notification types
+  
+  // Override settings for this type
+  priority          Priority?           // Minimum priority to send (null = send all)
+  maxDaily          Int?                @map("max_daily") // Max per day for this type
+  
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  
+  @@unique([preferenceId, notificationType])
+  @@index([preferenceId, notificationType])
+  @@map("notification_channel_preferences")
+  @@schema("gloria_ops")
+}
+
+// Track unsubscribe actions for compliance and re-subscribe capability
+model NotificationUnsubscribe {
+  id                String              @id @default(cuid())
+  preferenceId      String              @map("preference_id")
+  preference        NotificationPreference @relation(fields: [preferenceId], references: [id], onDelete: Cascade)
+  
+  notificationType  NotificationType?   @map("notification_type") // Null = unsubscribe from all
+  channel           NotificationChannel? // Null = unsubscribe from all channels
+  reason            String?             @db.Text // User-provided reason
+  token             String              @unique // Unsubscribe token for email links
+  
+  unsubscribedAt    DateTime            @default(now()) @map("unsubscribed_at")
+  resubscribedAt    DateTime?           @map("resubscribed_at")
+  
+  @@index([preferenceId])
+  @@index([token])
+  @@map("notification_unsubscribes")
+  @@schema("gloria_ops")
+}
+
+// Track notification frequency for rate limiting
+model NotificationFrequencyTracking {
+  id                String              @id @default(cuid())
+  preferenceId      String              @map("preference_id")
+  preference        NotificationPreference @relation(fields: [preferenceId], references: [id], onDelete: Cascade)
+  
+  notificationType  NotificationType    @map("notification_type")
+  windowStart       DateTime            @map("window_start")
+  windowType        String              // "hourly" or "daily"
+  count             Int                 @default(0)
+  
+  @@unique([preferenceId, notificationType, windowType, windowStart])
+  @@index([preferenceId, windowStart])
+  @@map("notification_frequency_tracking")
   @@schema("gloria_ops")
 }

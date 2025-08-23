@@ -4,34 +4,69 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
+import {
+  ModuleManagementError,
+  ModuleNotFoundError,
+  ModuleAccessNotFoundError,
+  ModuleAccessAlreadyExistsError,
+  DatabaseOperationError,
+  CacheOperationError,
+  BulkOperationPartialFailureError,
+} from '../errors/module-errors';
+import {
+  RetryHandler,
+  CircuitBreaker,
+  ErrorContextBuilder,
+  ErrorRecoveryStrategy,
+} from '../utils/error-recovery.util';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { v7 as uuidv7 } from 'uuid';
 import {
   CreateRoleModuleAccessDto,
   CreateUserModuleAccessDto,
   UpdateModuleAccessDto,
   BulkModuleAccessDto,
-  ModuleAccessResponseDto,
+  RoleModuleAccessResponseDto,
+  UserModuleAccessResponseDto,
   UserModulePermissionDto,
 } from '../dto/module-access.dto';
 import { CacheService } from '../../../cache/cache.service';
 import { PermissionAction } from '@prisma/client';
+import {
+  UserProfile,
+  RoleModuleAccess,
+  UserModuleAccess,
+  BulkModuleAccessResult,
+} from '../interfaces/module-management.interface';
+import { Transactional } from '../../../common/decorators/transaction.decorator';
+import { TransactionManager } from '../../../common/utils/transaction-manager.util';
 
 @Injectable()
 export class ModuleAccessService {
   private readonly logger = new Logger(ModuleAccessService.name);
+  private readonly transactionManager: TransactionManager;
+  private readonly retryHandler: RetryHandler;
+  private readonly circuitBreaker: CircuitBreaker;
+  private readonly errorRecovery: ErrorRecoveryStrategy;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
-  ) {}
+  ) {
+    this.transactionManager = new TransactionManager(prisma);
+    this.retryHandler = new RetryHandler();
+    this.circuitBreaker = new CircuitBreaker('ModuleAccessService');
+    this.errorRecovery = new ErrorRecoveryStrategy();
+  }
 
   /**
-   * Create role module access
+   * Create role module access with transaction support
    */
+  @Transactional({ isolationLevel: 'ReadCommitted' })
   async createRoleAccess(
     data: CreateRoleModuleAccessDto,
     createdBy: string,
-  ): Promise<ModuleAccessResponseDto> {
+  ): Promise<RoleModuleAccessResponseDto> {
     // Validate role and module exist
     const [role, module] = await Promise.all([
       this.prisma.role.findUnique({ where: { id: data.roleId } }),
@@ -81,9 +116,11 @@ export class ModuleAccessService {
       // Invalidate cache for all users with this role
       await this.invalidateRoleUsersCache(data.roleId);
 
-      this.logger.log(`Role module access created for role ${role.name} and module ${module.name}`);
-      
-      return this.mapToResponseDto(access);
+      this.logger.log(
+        `Role module access created for role ${role.name} and module ${module.name}`,
+      );
+
+      return this.mapRoleAccessToResponseDto(access as any);
     } catch (error) {
       this.logger.error(`Error creating role module access: ${error.message}`);
       throw error;
@@ -91,12 +128,13 @@ export class ModuleAccessService {
   }
 
   /**
-   * Create user module access
+   * Create user module access with transaction support
    */
+  @Transactional({ isolationLevel: 'ReadCommitted' })
   async createUserAccess(
     data: CreateUserModuleAccessDto,
     grantedBy: string,
-  ): Promise<ModuleAccessResponseDto> {
+  ): Promise<UserModuleAccessResponseDto> {
     // Validate user and module exist
     const [userProfile, module] = await Promise.all([
       this.prisma.userProfile.findUnique({ where: { id: data.userProfileId } }),
@@ -104,7 +142,9 @@ export class ModuleAccessService {
     ]);
 
     if (!userProfile) {
-      throw new NotFoundException(`User profile with ID ${data.userProfileId} not found`);
+      throw new NotFoundException(
+        `User profile with ID ${data.userProfileId} not found`,
+      );
     }
 
     if (!module) {
@@ -133,9 +173,11 @@ export class ModuleAccessService {
       // Invalidate cache for this user
       await this.cacheService.del(`module_access:${data.userProfileId}`);
 
-      this.logger.log(`User module access created for user ${data.userProfileId} and module ${module.name}`);
-      
-      return this.mapToResponseDto(access);
+      this.logger.log(
+        `User module access created for user ${data.userProfileId} and module ${module.name}`,
+      );
+
+      return this.mapUserAccessToResponseDto(access);
     } catch (error) {
       this.logger.error(`Error creating user module access: ${error.message}`);
       throw error;
@@ -143,13 +185,14 @@ export class ModuleAccessService {
   }
 
   /**
-   * Update role module access
+   * Update role module access with transaction support
    */
+  @Transactional({ isolationLevel: 'RepeatableRead' })
   async updateRoleAccess(
     roleId: string,
     moduleId: string,
     data: UpdateModuleAccessDto,
-  ): Promise<ModuleAccessResponseDto> {
+  ): Promise<RoleModuleAccessResponseDto | UserModuleAccessResponseDto> {
     const access = await this.prisma.roleModuleAccess.findUnique({
       where: {
         roleId_moduleId: { roleId, moduleId },
@@ -179,9 +222,11 @@ export class ModuleAccessService {
       // Invalidate cache for all users with this role
       await this.invalidateRoleUsersCache(roleId);
 
-      this.logger.log(`Role module access updated for role ${roleId} and module ${moduleId}`);
-      
-      return this.mapToResponseDto(updated);
+      this.logger.log(
+        `Role module access updated for role ${roleId} and module ${moduleId}`,
+      );
+
+      return this.mapRoleAccessToResponseDto(updated as any);
     } catch (error) {
       this.logger.error(`Error updating role module access: ${error.message}`);
       throw error;
@@ -189,13 +234,14 @@ export class ModuleAccessService {
   }
 
   /**
-   * Update user module access
+   * Update user module access with transaction support
    */
+  @Transactional({ isolationLevel: 'RepeatableRead' })
   async updateUserAccess(
     userProfileId: string,
     moduleId: string,
     data: UpdateModuleAccessDto,
-  ): Promise<ModuleAccessResponseDto> {
+  ): Promise<RoleModuleAccessResponseDto | UserModuleAccessResponseDto> {
     const access = await this.prisma.userModuleAccess.findFirst({
       where: {
         userProfileId,
@@ -226,9 +272,11 @@ export class ModuleAccessService {
       // Invalidate cache for this user
       await this.cacheService.del(`module_access:${userProfileId}`);
 
-      this.logger.log(`User module access updated for user ${userProfileId} and module ${moduleId}`);
-      
-      return this.mapToResponseDto(updated);
+      this.logger.log(
+        `User module access updated for user ${userProfileId} and module ${moduleId}`,
+      );
+
+      return this.mapUserAccessToResponseDto(updated);
     } catch (error) {
       this.logger.error(`Error updating user module access: ${error.message}`);
       throw error;
@@ -236,8 +284,9 @@ export class ModuleAccessService {
   }
 
   /**
-   * Delete role module access
+   * Delete role module access with transaction support
    */
+  @Transactional({ isolationLevel: 'ReadCommitted' })
   async deleteRoleAccess(roleId: string, moduleId: string): Promise<void> {
     const access = await this.prisma.roleModuleAccess.findUnique({
       where: {
@@ -259,7 +308,9 @@ export class ModuleAccessService {
       // Invalidate cache for all users with this role
       await this.invalidateRoleUsersCache(roleId);
 
-      this.logger.log(`Role module access deleted for role ${roleId} and module ${moduleId}`);
+      this.logger.log(
+        `Role module access deleted for role ${roleId} and module ${moduleId}`,
+      );
     } catch (error) {
       this.logger.error(`Error deleting role module access: ${error.message}`);
       throw error;
@@ -267,9 +318,13 @@ export class ModuleAccessService {
   }
 
   /**
-   * Delete user module access
+   * Delete user module access with transaction support
    */
-  async deleteUserAccess(userProfileId: string, moduleId: string): Promise<void> {
+  @Transactional({ isolationLevel: 'ReadCommitted' })
+  async deleteUserAccess(
+    userProfileId: string,
+    moduleId: string,
+  ): Promise<void> {
     const access = await this.prisma.userModuleAccess.findFirst({
       where: {
         userProfileId,
@@ -291,7 +346,9 @@ export class ModuleAccessService {
       // Invalidate cache for this user
       await this.cacheService.del(`module_access:${userProfileId}`);
 
-      this.logger.log(`User module access deleted for user ${userProfileId} and module ${moduleId}`);
+      this.logger.log(
+        `User module access deleted for user ${userProfileId} and module ${moduleId}`,
+      );
     } catch (error) {
       this.logger.error(`Error deleting user module access: ${error.message}`);
       throw error;
@@ -299,101 +356,177 @@ export class ModuleAccessService {
   }
 
   /**
-   * Bulk assign module access
+   * Bulk assign module access with enhanced transaction management
    */
+  @Transactional({ isolationLevel: 'ReadCommitted' })
   async bulkAssignAccess(
     data: BulkModuleAccessDto,
     grantedBy: string,
   ): Promise<void> {
-    try {
-      if (data.targetType === 'ROLE') {
-        // Validate role exists
-        const role = await this.prisma.role.findUnique({
-          where: { id: data.targetId },
-        });
-
-        if (!role) {
-          throw new NotFoundException(`Role with ID ${data.targetId} not found`);
-        }
-
-        // Create or update role module access for each module
-        await this.prisma.$transaction(
-          data.moduleIds.map(moduleId =>
-            this.prisma.roleModuleAccess.upsert({
-              where: {
-                roleId_moduleId: {
-                  roleId: data.targetId,
-                  moduleId,
-                },
-              },
-              update: {
-                permissions: data.permissions,
-                positionId: data.positionId,
-                isActive: true,
-              },
-              create: {
-                id: this.generateId(),
-                roleId: data.targetId,
-                moduleId,
-                positionId: data.positionId,
-                permissions: data.permissions,
-                isActive: true,
-                createdBy: grantedBy,
-              },
-            }),
-          ),
-        );
-
-        // Invalidate cache for all users with this role
-        await this.invalidateRoleUsersCache(data.targetId);
-      } else {
-        // Validate user profile exists
-        const userProfile = await this.prisma.userProfile.findUnique({
-          where: { id: data.targetId },
-        });
-
-        if (!userProfile) {
-          throw new NotFoundException(`User profile with ID ${data.targetId} not found`);
-        }
-
-        // Create user module access for each module
-        await this.prisma.$transaction(
-          data.moduleIds.map(moduleId =>
-            this.prisma.userModuleAccess.create({
-              data: {
-                id: this.generateId(),
-                userProfileId: data.targetId,
-                moduleId,
-                permissions: data.permissions,
-                validFrom: new Date(),
-                isActive: true,
-                grantedBy,
-              },
-            }),
-          ),
-        );
-
-        // Invalidate cache for this user
-        await this.cacheService.del(`module_access:${data.targetId}`);
-      }
-
-      this.logger.log(`Bulk module access assigned to ${data.targetType} ${data.targetId}`);
-    } catch (error) {
-      this.logger.error(`Error bulk assigning module access: ${error.message}`);
-      throw error;
+    if (data.targetType === 'ROLE') {
+      // Handle role-based bulk assignment with transaction
+      await this.transactionManager.executeInTransaction(
+        [
+          {
+            name: 'validate-role',
+            operation: async (tx) => {
+              const role = await tx.role.findUnique({
+                where: { id: data.targetId },
+              });
+              if (!role) {
+                throw new NotFoundException(
+                  `Role with ID ${data.targetId} not found`,
+                );
+              }
+              return role;
+            },
+          },
+          {
+            name: 'validate-modules',
+            operation: async (tx) => {
+              const modules = await tx.module.findMany({
+                where: { id: { in: data.moduleIds } },
+              });
+              if (modules.length !== data.moduleIds.length) {
+                const foundIds = modules.map((m) => m.id);
+                const missingIds = data.moduleIds.filter(
+                  (id) => !foundIds.includes(id),
+                );
+                throw new NotFoundException(
+                  `Modules not found: ${missingIds.join(', ')}`,
+                );
+              }
+              return modules;
+            },
+          },
+          {
+            name: 'assign-role-access',
+            operation: async (tx) => {
+              const operations = data.moduleIds.map((moduleId) =>
+                tx.roleModuleAccess.upsert({
+                  where: {
+                    roleId_moduleId: {
+                      roleId: data.targetId,
+                      moduleId,
+                    },
+                  },
+                  update: {
+                    permissions: data.permissions,
+                    positionId: data.positionId,
+                    isActive: true,
+                  },
+                  create: {
+                    id: this.generateId(),
+                    roleId: data.targetId,
+                    moduleId,
+                    positionId: data.positionId,
+                    permissions: data.permissions,
+                    isActive: true,
+                    createdBy: grantedBy,
+                  },
+                }),
+              );
+              return await Promise.all(operations);
+            },
+          },
+          {
+            name: 'invalidate-cache',
+            operation: async () => {
+              await this.invalidateRoleUsersCache(data.targetId);
+            },
+          },
+        ],
+        {
+          isolationLevel: 'ReadCommitted',
+          timeout: 15000, // Increased timeout for bulk operations
+        },
+      );
+    } else {
+      // Handle user-based bulk assignment with transaction
+      await this.transactionManager.executeInTransaction(
+        [
+          {
+            name: 'validate-user',
+            operation: async (tx) => {
+              const userProfile = await tx.userProfile.findUnique({
+                where: { id: data.targetId },
+              });
+              if (!userProfile) {
+                throw new NotFoundException(
+                  `User profile with ID ${data.targetId} not found`,
+                );
+              }
+              return userProfile;
+            },
+          },
+          {
+            name: 'validate-modules',
+            operation: async (tx) => {
+              const modules = await tx.module.findMany({
+                where: { id: { in: data.moduleIds } },
+              });
+              if (modules.length !== data.moduleIds.length) {
+                const foundIds = modules.map((m) => m.id);
+                const missingIds = data.moduleIds.filter(
+                  (id) => !foundIds.includes(id),
+                );
+                throw new NotFoundException(
+                  `Modules not found: ${missingIds.join(', ')}`,
+                );
+              }
+              return modules;
+            },
+          },
+          {
+            name: 'assign-user-access',
+            operation: async (tx) => {
+              const operations = data.moduleIds.map((moduleId) =>
+                tx.userModuleAccess.create({
+                  data: {
+                    id: this.generateId(),
+                    userProfileId: data.targetId,
+                    moduleId,
+                    permissions: data.permissions,
+                    validFrom: new Date(),
+                    isActive: true,
+                    grantedBy,
+                  },
+                }),
+              );
+              return await Promise.all(operations);
+            },
+          },
+          {
+            name: 'invalidate-cache',
+            operation: async () => {
+              await this.cacheService.del(`module_access:${data.targetId}`);
+            },
+          },
+        ],
+        {
+          isolationLevel: 'ReadCommitted',
+          timeout: 15000, // Increased timeout for bulk operations
+        },
+      );
     }
+
+    this.logger.log(
+      `Bulk module access assigned to ${data.targetType} ${data.targetId}`,
+    );
   }
 
   /**
    * Get user profile by Clerk ID
    */
-  async getUserProfileByClerkId(clerkUserId: string): Promise<any> {
+  async getUserProfileByClerkId(clerkUserId: string): Promise<UserProfile> {
     const userProfile = await this.prisma.userProfile.findUnique({
       where: { clerkUserId },
     });
 
     if (!userProfile) {
-      throw new NotFoundException(`User profile not found for Clerk ID ${clerkUserId}`);
+      throw new NotFoundException(
+        `User profile not found for Clerk ID ${clerkUserId}`,
+      );
     }
 
     return userProfile;
@@ -402,7 +535,9 @@ export class ModuleAccessService {
   /**
    * Get user's module permissions
    */
-  async getUserModulePermissions(userProfileId: string): Promise<UserModulePermissionDto[]> {
+  async getUserModulePermissions(
+    userProfileId: string,
+  ): Promise<UserModulePermissionDto[]> {
     // Check cache first
     const cacheKey = `module_access:${userProfileId}`;
     const cached = await this.cacheService.get(cacheKey);
@@ -416,7 +551,7 @@ export class ModuleAccessService {
       select: { roleId: true },
     });
 
-    const roleIds = userRoles.map(ur => ur.roleId);
+    const roleIds = userRoles.map((ur) => ur.roleId);
 
     // Get all modules with their access settings
     const modules = await this.prisma.module.findMany({
@@ -434,19 +569,13 @@ export class ModuleAccessService {
           where: {
             userProfileId,
             isActive: true,
-            OR: [
-              { validUntil: null },
-              { validUntil: { gte: new Date() } },
-            ],
+            OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
           },
         },
         overrides: {
           where: {
             userProfileId,
-            OR: [
-              { validUntil: null },
-              { validUntil: { gte: new Date() } },
-            ],
+            OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
           },
         },
       },
@@ -462,14 +591,14 @@ export class ModuleAccessService {
       // Aggregate permissions from roles
       for (const roleAccess of module.roleAccess) {
         const perms = roleAccess.permissions as PermissionAction[];
-        perms.forEach(p => modulePermissions.add(p));
+        perms.forEach((p) => modulePermissions.add(p));
       }
 
       // Add user-specific permissions
       if (module.userAccess.length > 0) {
         const userAccess = module.userAccess[0];
         const perms = userAccess.permissions as PermissionAction[];
-        perms.forEach(p => modulePermissions.add(p));
+        perms.forEach((p) => modulePermissions.add(p));
         source = 'USER';
         validUntil = userAccess.validUntil;
       }
@@ -485,7 +614,10 @@ export class ModuleAccessService {
       }
 
       // Only include modules with at least READ permission
-      if (modulePermissions.has(PermissionAction.READ) || modulePermissions.size > 0) {
+      if (
+        modulePermissions.has(PermissionAction.READ) ||
+        modulePermissions.size > 0
+      ) {
         permissions.push({
           moduleId: module.id,
           moduleCode: module.code,
@@ -506,7 +638,9 @@ export class ModuleAccessService {
   /**
    * Get role's module access
    */
-  async getRoleModuleAccess(roleId: string): Promise<ModuleAccessResponseDto[]> {
+  async getRoleModuleAccess(
+    roleId: string,
+  ): Promise<RoleModuleAccessResponseDto[]> {
     const accesses = await this.prisma.roleModuleAccess.findMany({
       where: { roleId },
       include: {
@@ -515,32 +649,36 @@ export class ModuleAccessService {
       },
     });
 
-    return accesses.map(this.mapToResponseDto);
+    return accesses.map((access) =>
+      this.mapRoleAccessToResponseDto(access as any),
+    );
   }
 
   /**
    * Get user's direct module access
    */
-  async getUserDirectModuleAccess(userProfileId: string): Promise<ModuleAccessResponseDto[]> {
+  async getUserDirectModuleAccess(
+    userProfileId: string,
+  ): Promise<UserModuleAccessResponseDto[]> {
     const accesses = await this.prisma.userModuleAccess.findMany({
       where: {
         userProfileId,
         isActive: true,
-        OR: [
-          { validUntil: null },
-          { validUntil: { gte: new Date() } },
-        ],
+        OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
       },
       include: {
         module: true,
       },
     });
 
-    return accesses.map(this.mapToResponseDto);
+    return accesses.map((access) =>
+      this.mapUserAccessToResponseDto(access as any),
+    );
   }
 
   /**
    * Invalidate cache for all users with a specific role
+   * Uses batch operations for better performance
    */
   private async invalidateRoleUsersCache(roleId: string): Promise<void> {
     const userRoles = await this.prisma.userRole.findMany({
@@ -548,39 +686,158 @@ export class ModuleAccessService {
       select: { userProfileId: true },
     });
 
-    await Promise.all(
-      userRoles.map(ur => this.cacheService.del(`module_access:${ur.userProfileId}`)),
+    if (userRoles.length === 0) return;
+
+    // Batch delete operations for better performance
+    const cacheKeys = userRoles.map(
+      (ur) => `module_access:${ur.userProfileId}`,
     );
+
+    // Delete in batches of 100 to avoid overwhelming Redis
+    const batchSize = 100;
+    for (let i = 0; i < cacheKeys.length; i += batchSize) {
+      const batch = cacheKeys.slice(i, i + batchSize);
+      await Promise.all(batch.map((key) => this.cacheService.del(key)));
+    }
   }
 
   /**
-   * Generate unique ID
+   * Generate unique ID using UUID v7
+   * UUID v7 provides time-ordered, cryptographically secure identifiers
    */
   private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return uuidv7();
   }
 
   /**
-   * Map database entity to response DTO
+   * Map role module access entity to response DTO
    */
-  private mapToResponseDto(entity: any): ModuleAccessResponseDto {
+  private mapRoleAccessToResponseDto(entity: any): RoleModuleAccessResponseDto {
     return {
       id: entity.id,
+      roleId: entity.roleId,
       moduleId: entity.moduleId,
-      roleId: entity.roleId || undefined,
-      userProfileId: entity.userProfileId || undefined,
-      positionId: entity.positionId || undefined,
+      positionId: entity.positionId,
       permissions: entity.permissions as PermissionAction[],
       isActive: entity.isActive,
-      validFrom: entity.validFrom || undefined,
-      validUntil: entity.validUntil || undefined,
-      reason: entity.reason || undefined,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
-      module: entity.module || undefined,
-      role: entity.role || undefined,
-      userProfile: entity.userProfile || undefined,
-      position: entity.position || undefined,
+      module: entity.module,
+      role: entity.role,
+      position: entity.position,
     };
+  }
+
+  /**
+   * Map user module access entity to response DTO
+   */
+  private mapUserAccessToResponseDto(entity: any): UserModuleAccessResponseDto {
+    return {
+      id: entity.id,
+      userProfileId: entity.userProfileId,
+      moduleId: entity.moduleId,
+      permissions: entity.permissions as PermissionAction[],
+      isActive: entity.isActive,
+      validFrom: entity.validFrom,
+      validUntil: entity.validUntil,
+      reason: entity.reason,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+      module: entity.module,
+      userProfile: entity.userProfile,
+    };
+  }
+
+  /**
+   * Warm cache for frequently accessed modules
+   * Preloads module access data for active users and common modules
+   */
+  async warmModuleAccessCache(): Promise<void> {
+    const errorContext = new ErrorContextBuilder()
+      .add('operation', 'warmModuleAccessCache')
+      .addTimestamp();
+
+    try {
+      // Get frequently accessed modules (top-level and visible modules)
+      const frequentModules = await this.prisma.module.findMany({
+        where: {
+          isActive: true,
+          isVisible: true,
+          OR: [
+            { parentId: null }, // Top-level modules
+            { category: { in: ['SERVICE', 'PERFORMANCE'] } }, // Common categories
+          ],
+        },
+        select: { id: true },
+      });
+
+      // Get recently active users with active roles
+      const userRoles = await this.prisma.userRole.findMany({
+        where: {
+          isActive: true,
+          userProfile: {
+            isActive: true,
+          },
+        },
+        select: {
+          userProfileId: true,
+        },
+        distinct: ['userProfileId'],
+        take: 100, // Limit to prevent overloading
+      });
+
+      const recentActiveUsers = userRoles.map((ur) => ({
+        id: ur.userProfileId,
+      }));
+
+      // Warm cache for each user
+      const cacheWarmingPromises = recentActiveUsers.map(async (user) => {
+        try {
+          // This will populate the cache
+          await this.getUserModulePermissions(user.id);
+        } catch (error) {
+          // Log but don't fail the whole warming process
+          this.logger.warn(
+            `Failed to warm cache for user ${user.id}: ${error.message}`,
+          );
+        }
+      });
+
+      // Execute in batches to avoid overwhelming the system
+      const batchSize = 10;
+      for (let i = 0; i < cacheWarmingPromises.length; i += batchSize) {
+        const batch = cacheWarmingPromises.slice(i, i + batchSize);
+        await Promise.all(batch);
+      }
+
+      this.logger.log(
+        `Cache warming completed for ${recentActiveUsers.length} users and ${frequentModules.length} modules`,
+      );
+    } catch (error) {
+      const enhancedError = new CacheOperationError(
+        'warm',
+        'module_access:*',
+        error,
+      );
+      this.logger.error(enhancedError.message, enhancedError.context);
+      // Don't throw - cache warming is non-critical
+    }
+  }
+
+  /**
+   * Schedule periodic cache warming
+   * Should be called on application startup or via cron job
+   */
+  async scheduleCacheWarming(): Promise<void> {
+    // Warm cache immediately
+    await this.warmModuleAccessCache();
+
+    // Set up periodic warming (every 30 minutes)
+    setInterval(
+      async () => {
+        await this.warmModuleAccessCache();
+      },
+      30 * 60 * 1000,
+    );
   }
 }

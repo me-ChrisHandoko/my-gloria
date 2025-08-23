@@ -1,0 +1,203 @@
+groups:
+  - name: notification_alerts
+    interval: 30s
+    rules:
+      # Queue Size Alerts
+      - alert: NotificationQueueSizeWarning
+        expr: notification_queue_size > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: notification
+        annotations:
+          summary: "Notification queue size warning for {{ $labels.queue }}"
+          description: "Queue {{ $labels.queue }} has {{ $value }} pending notifications (threshold: 1000)"
+          
+      - alert: NotificationQueueSizeCritical
+        expr: notification_queue_size > 5000
+        for: 2m
+        labels:
+          severity: critical
+          service: notification
+        annotations:
+          summary: "Notification queue size critical for {{ $labels.queue }}"
+          description: "Queue {{ $labels.queue }} has {{ $value }} pending notifications (threshold: 5000)"
+          action: "Scale up processing or investigate bottlenecks immediately"
+      
+      # Dead Letter Queue Alerts
+      - alert: DeadLetterQueueWarning
+        expr: notification_dead_letter_queue_size > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: notification
+        annotations:
+          summary: "Dead letter queue has {{ $value }} failed notifications"
+          description: "{{ $value }} notifications have failed processing and are in dead letter queue"
+          
+      - alert: DeadLetterQueueCritical
+        expr: notification_dead_letter_queue_size > 500
+        for: 2m
+        labels:
+          severity: critical
+          service: notification
+        annotations:
+          summary: "Dead letter queue critical: {{ $value }} failed notifications"
+          description: "{{ $value }} notifications have failed - immediate investigation required"
+          action: "Review failed notifications and fix underlying issues"
+      
+      # Error Rate Alerts
+      - alert: NotificationErrorRateWarning
+        expr: |
+          (
+            rate(notification_failed_total[5m]) /
+            (rate(notification_sent_total[5m]) + rate(notification_failed_total[5m]))
+          ) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: notification
+        annotations:
+          summary: "High notification error rate: {{ $value | humanize }}%"
+          description: "Error rate for {{ $labels.channel }} channel is {{ $value | humanize }}%"
+          
+      - alert: NotificationErrorRateCritical
+        expr: |
+          (
+            rate(notification_failed_total[5m]) /
+            (rate(notification_sent_total[5m]) + rate(notification_failed_total[5m]))
+          ) * 100 > 10
+        for: 2m
+        labels:
+          severity: critical
+          service: notification
+        annotations:
+          summary: "Critical notification error rate: {{ $value | humanize }}%"
+          description: "Error rate for {{ $labels.channel }} channel is {{ $value | humanize }}%"
+          action: "Check service health and external dependencies"
+      
+      # Processing Time Alerts
+      - alert: NotificationProcessingSlowWarning
+        expr: |
+          histogram_quantile(0.95, rate(notification_processing_duration_ms_bucket[5m])) > 5000
+        for: 5m
+        labels:
+          severity: warning
+          service: notification
+        annotations:
+          summary: "Slow notification processing: p95 > 5s"
+          description: "95th percentile processing time for {{ $labels.type }} is {{ $value }}ms"
+          
+      - alert: NotificationProcessingSlowCritical
+        expr: |
+          histogram_quantile(0.95, rate(notification_processing_duration_ms_bucket[5m])) > 10000
+        for: 2m
+        labels:
+          severity: critical
+          service: notification
+        annotations:
+          summary: "Critical: Notification processing p95 > 10s"
+          description: "95th percentile processing time for {{ $labels.type }} is {{ $value }}ms"
+          action: "Investigate processing bottlenecks and scale if needed"
+      
+      # Database Performance Alerts
+      - alert: NotificationDatabaseSlowQueries
+        expr: |
+          histogram_quantile(0.95, rate(notification_database_query_duration_ms_bucket[5m])) > 500
+        for: 5m
+        labels:
+          severity: warning
+          service: notification
+        annotations:
+          summary: "Slow database queries in notification service"
+          description: "Database operation {{ $labels.operation }} p95 latency is {{ $value }}ms"
+          
+      # Circuit Breaker Alerts
+      - alert: NotificationCircuitBreakerOpen
+        expr: notification_circuit_breaker_status == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: notification
+        annotations:
+          summary: "Circuit breaker OPEN for {{ $labels.service }}"
+          description: "{{ $labels.service }} service circuit breaker is open - service is failing"
+          action: "Check {{ $labels.service }} service health and dependencies"
+          
+      - alert: NotificationCircuitBreakerHalfOpen
+        expr: notification_circuit_breaker_status == 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: notification
+        annotations:
+          summary: "Circuit breaker HALF-OPEN for {{ $labels.service }}"
+          description: "{{ $labels.service }} service is recovering from failures"
+      
+      # Rate Limiting Alerts
+      - alert: HighRateLimitHits
+        expr: rate(notification_rate_limit_hits_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: notification
+        annotations:
+          summary: "High rate limit hits: {{ $value | humanize }} per second"
+          description: "Users are hitting rate limits for {{ $labels.type }} notifications"
+          
+      - alert: ExcessiveRateLimitHits
+        expr: rate(notification_rate_limit_hits_total[5m]) > 2
+        for: 2m
+        labels:
+          severity: critical
+          service: notification
+        annotations:
+          summary: "Excessive rate limit hits: {{ $value | humanize }} per second"
+          description: "Many users hitting rate limits - possible abuse or misconfiguration"
+          action: "Review rate limit configuration and user activity"
+      
+      # Delivery Rate Alerts
+      - alert: LowNotificationDeliveryRate
+        expr: notification_delivery_rate < 10
+        for: 10m
+        labels:
+          severity: warning
+          service: notification
+        annotations:
+          summary: "Low notification delivery rate for {{ $labels.channel }}"
+          description: "Delivery rate for {{ $labels.channel }} is {{ $value }} notifications/min"
+          
+      - alert: HighNotificationDeliveryRate
+        expr: notification_delivery_rate > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: notification
+        annotations:
+          summary: "High notification delivery rate for {{ $labels.channel }}"
+          description: "Delivery rate for {{ $labels.channel }} is {{ $value }} notifications/min"
+          action: "Monitor for potential spam or system issues"
+      
+      # Connection Pool Alerts
+      - alert: HighConnectionUsage
+        expr: |
+          (notification_active_connections / 100) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: notification
+        annotations:
+          summary: "High connection pool usage for {{ $labels.service }}"
+          description: "{{ $labels.service }} using {{ $value }}% of connection pool"
+          
+      - alert: CriticalConnectionUsage
+        expr: |
+          (notification_active_connections / 100) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          service: notification
+        annotations:
+          summary: "Critical connection pool usage for {{ $labels.service }}"
+          description: "{{ $labels.service }} using {{ $value }}% of connection pool"
+          action: "Increase connection pool size or reduce load"

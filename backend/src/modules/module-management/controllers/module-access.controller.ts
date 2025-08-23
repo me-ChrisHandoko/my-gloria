@@ -26,9 +26,7 @@ import {
   CreateUserOverrideDto,
   UpdateModuleAccessDto,
   BulkModuleAccessDto,
-  ModuleAccessResponseDto,
   UserModulePermissionDto,
-  UserOverrideResponseDto,
 } from '../dto/module-access.dto';
 import { CurrentUser } from '../../../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../../permission/decorators/permission.decorator';
@@ -52,7 +50,7 @@ export class ModuleAccessController {
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: 'Role module access created successfully',
-    type: ModuleAccessResponseDto,
+    // ModuleAccessResponseDto is a type alias, not a class
   })
   @ApiResponse({
     status: HttpStatus.CONFLICT,
@@ -71,7 +69,7 @@ export class ModuleAccessController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'List of role module access',
-    type: [ModuleAccessResponseDto],
+    // ModuleAccessResponseDto is a type alias, not a class
   })
   async getRoleModuleAccess(@Param('roleId', ParseUUIDPipe) roleId: string) {
     return this.moduleAccessService.getRoleModuleAccess(roleId);
@@ -83,7 +81,7 @@ export class ModuleAccessController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Role module access updated successfully',
-    type: ModuleAccessResponseDto,
+    // ModuleAccessResponseDto is a type alias, not a class
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
@@ -94,7 +92,11 @@ export class ModuleAccessController {
     @Param('moduleId', ParseUUIDPipe) moduleId: string,
     @Body() updateDto: UpdateModuleAccessDto,
   ) {
-    return this.moduleAccessService.updateRoleAccess(roleId, moduleId, updateDto);
+    return this.moduleAccessService.updateRoleAccess(
+      roleId,
+      moduleId,
+      updateDto,
+    );
   }
 
   @Delete('role/:roleId/module/:moduleId')
@@ -124,7 +126,7 @@ export class ModuleAccessController {
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: 'User module access created successfully',
-    type: ModuleAccessResponseDto,
+    // ModuleAccessResponseDto is a type alias, not a class
   })
   @ApiResponse({
     status: HttpStatus.CONFLICT,
@@ -143,9 +145,11 @@ export class ModuleAccessController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'List of user module access',
-    type: [ModuleAccessResponseDto],
+    // ModuleAccessResponseDto is a type alias, not a class
   })
-  async getUserDirectModuleAccess(@Param('userId', ParseUUIDPipe) userId: string) {
+  async getUserDirectModuleAccess(
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
     return this.moduleAccessService.getUserDirectModuleAccess(userId);
   }
 
@@ -157,7 +161,9 @@ export class ModuleAccessController {
     description: 'List of user module permissions',
     type: [UserModulePermissionDto],
   })
-  async getUserModulePermissions(@Param('userId', ParseUUIDPipe) userId: string) {
+  async getUserModulePermissions(
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
     return this.moduleAccessService.getUserModulePermissions(userId);
   }
 
@@ -178,7 +184,7 @@ export class ModuleAccessController {
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'User module access updated successfully',
-    type: ModuleAccessResponseDto,
+    // ModuleAccessResponseDto is a type alias, not a class
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
@@ -189,7 +195,11 @@ export class ModuleAccessController {
     @Param('moduleId', ParseUUIDPipe) moduleId: string,
     @Body() updateDto: UpdateModuleAccessDto,
   ) {
-    return this.moduleAccessService.updateUserAccess(userId, moduleId, updateDto);
+    return this.moduleAccessService.updateUserAccess(
+      userId,
+      moduleId,
+      updateDto,
+    );
   }
 
   @Delete('user/:userId/module/:moduleId')
@@ -263,7 +273,9 @@ export class ModuleAccessController {
     status: HttpStatus.NO_CONTENT,
     description: 'User override deactivated successfully',
   })
-  async deactivateOverride(@Param('overrideId', ParseUUIDPipe) overrideId: string) {
+  async deactivateOverride(
+    @Param('overrideId', ParseUUIDPipe) overrideId: string,
+  ) {
     await this.overrideService.deactivateOverride(overrideId);
   }
 }

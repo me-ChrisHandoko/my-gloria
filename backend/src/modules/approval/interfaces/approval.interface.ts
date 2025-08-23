@@ -1,4 +1,9 @@
-import { ApprovalAction, ApprovalStatus, RequestStatus, ApproverType } from '@prisma/client';
+import {
+  ApprovalAction,
+  ApprovalStatus,
+  RequestStatus,
+  ApproverType,
+} from '@prisma/client';
 
 export interface IApprovalMatrix {
   id: string;

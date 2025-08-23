@@ -10,15 +10,33 @@ export const PERMISSION_MODE_KEY = 'permission_mode';
 
 /**
  * Decorator to require specific permissions for accessing a route
- * @param resource - The resource being protected
- * @param action - The action being performed
+ * Can be used in two ways:
+ * 1. With permission code: @RequirePermission('permission.template.create')
+ * 2. With resource/action/scope: @RequirePermission('template', PermissionAction.CREATE, PermissionScope.SYSTEM)
+ * 
+ * @param resourceOrCode - Either a permission code or the resource being protected
+ * @param action - The action being performed (optional if using permission code)
  * @param scope - Optional scope for the permission
  */
-export const RequirePermission = (
+export function RequirePermission(permissionCode: string): any;
+export function RequirePermission(
   resource: string,
   action: PermissionAction,
   scope?: PrismaPermissionScope,
-) => SetMetadata(PERMISSIONS_KEY, [{ resource, action, scope }]);
+): any;
+export function RequirePermission(
+  resourceOrCode: string,
+  action?: PermissionAction,
+  scope?: PrismaPermissionScope,
+): any {
+  // If only one parameter is provided, treat it as a permission code
+  if (action === undefined) {
+    return SetMetadata(PERMISSIONS_KEY, [{ permissionCode: resourceOrCode }]);
+  }
+  
+  // Otherwise, use the traditional resource/action/scope format
+  return SetMetadata(PERMISSIONS_KEY, [{ resource: resourceOrCode, action, scope }]);
+}
 
 /**
  * Decorator to require multiple permissions (ALL must be satisfied)

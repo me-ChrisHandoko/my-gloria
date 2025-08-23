@@ -9,6 +9,7 @@ import {
   Res,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -27,9 +28,9 @@ import {
   AuditStatisticsSummaryDto,
   ExportAuditLogDto,
 } from '../dto';
-import { 
+import {
   RequirePermission,
-  CanRead
+  CanRead,
 } from '../../permission/decorators/permission.decorator';
 import { PermissionAction } from '@prisma/client';
 
@@ -42,6 +43,7 @@ export class AuditController {
 
   @Get('logs')
   @RequirePermission('audit', PermissionAction.READ)
+  @Throttle({ default: { limit: 30, ttl: 60000 } }) // 30 requests per minute
   @ApiOperation({ summary: 'Query audit logs with filters' })
   @ApiResponse({
     status: 200,
@@ -124,6 +126,7 @@ export class AuditController {
 
   @Get('statistics')
   @RequirePermission('audit', PermissionAction.READ)
+  @Throttle({ default: { limit: 20, ttl: 60000 } }) // 20 requests per minute for statistics
   @ApiOperation({ summary: 'Get audit log statistics' })
   @ApiResponse({
     status: 200,
@@ -146,6 +149,7 @@ export class AuditController {
 
   @Post('export')
   @RequirePermission('audit', PermissionAction.READ)
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 exports per minute to prevent resource exhaustion
   @ApiOperation({ summary: 'Export audit logs' })
   @ApiResponse({
     status: 200,
@@ -165,6 +169,7 @@ export class AuditController {
 
   @Post('cleanup')
   @RequirePermission('audit', PermissionAction.DELETE)
+  @Throttle({ default: { limit: 1, ttl: 300000 } }) // 1 cleanup per 5 minutes
   @ApiOperation({ summary: 'Clean up old audit logs' })
   @ApiResponse({
     status: 200,
@@ -193,6 +198,7 @@ export class AuditController {
 
   @Get('compliance-report')
   @RequirePermission('audit', PermissionAction.READ)
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 reports per minute
   @ApiOperation({ summary: 'Generate compliance audit report' })
   @ApiResponse({
     status: 200,
@@ -206,5 +212,76 @@ export class AuditController {
       new Date(startDate),
       new Date(endDate),
     );
+  }
+
+  @Get('integrity/:id')
+  @RequirePermission('audit', PermissionAction.READ)
+  @ApiOperation({ summary: 'Verify integrity of specific audit log' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns integrity verification result',
+  })
+  async verifyIntegrity(@Param('id') id: string): Promise<any> {
+    return this.auditService.verifyIntegrity(id);
+  }
+
+  @Post('integrity/verify')
+  @RequirePermission('audit', PermissionAction.READ)
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 verifications per minute
+  @ApiOperation({ summary: 'Verify audit chain integrity' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns chain integrity verification result',
+  })
+  async verifyChainIntegrity(
+    @Body() body: { startDate?: string; endDate?: string },
+  ): Promise<any> {
+    const startDate = body.startDate ? new Date(body.startDate) : undefined;
+    const endDate = body.endDate ? new Date(body.endDate) : undefined;
+    return this.auditService.verifyChainIntegrity(startDate, endDate);
+  }
+
+  @Get('integrity/report')
+  @RequirePermission('audit', PermissionAction.READ)
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 reports per minute
+  @ApiOperation({ summary: 'Get integrity report' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns integrity report',
+  })
+  async getIntegrityReport(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ): Promise<any> {
+    const start = startDate ? new Date(startDate) : undefined;
+    const end = endDate ? new Date(endDate) : undefined;
+    return this.auditService.getIntegrityReport(start, end);
+  }
+
+  @Post('integrity/repair')
+  @RequirePermission('audit', PermissionAction.UPDATE)
+  @Throttle({ default: { limit: 1, ttl: 300000 } }) // 1 repair per 5 minutes
+  @ApiOperation({ summary: 'Repair audit chain integrity' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns repair result',
+  })
+  async repairChainIntegrity(
+    @Body() body: { startDate?: string; endDate?: string },
+  ): Promise<any> {
+    const startDate = body.startDate ? new Date(body.startDate) : undefined;
+    const endDate = body.endDate ? new Date(body.endDate) : undefined;
+    return this.auditService.repairChainIntegrity(startDate, endDate);
+  }
+
+  @Get('events/statistics')
+  @RequirePermission('audit', PermissionAction.READ)
+  @ApiOperation({ summary: 'Get event processing statistics' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns event processing statistics',
+  })
+  async getEventStatistics(): Promise<any> {
+    return this.auditService.getEventStatistics();
   }
 }

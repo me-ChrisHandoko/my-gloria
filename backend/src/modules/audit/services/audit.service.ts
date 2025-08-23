@@ -1,7 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { AuditQueueService } from './audit-queue.service';
+import { AuditEventService } from './audit-event.service';
+import { AuditIntegrityService } from './audit-integrity.service';
 import { AuditAction, Prisma } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import {
   QueryAuditLogDto,
   QueryAuditStatisticsDto,
@@ -27,11 +32,42 @@ interface AuditableChange {
   oldValues?: any;
   newValues?: any;
   metadata?: any;
+  targetUserId?: string;
 }
 
 @Injectable()
 export class AuditService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AuditService.name);
+  private readonly CACHE_TTL = 300; // 5 minutes cache
+  private readonly CACHE_KEY_PREFIX = 'audit:';
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditQueueService: AuditQueueService,
+    private readonly auditEventService: AuditEventService,
+    private readonly auditIntegrityService: AuditIntegrityService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) {}
+
+  /**
+   * Simple log action method for event handlers
+   */
+  async logAction(params: {
+    entityType: string;
+    entityId: string;
+    action: string;
+    actorId: string;
+    details?: any;
+  }): Promise<void> {
+    await this.log({
+      actorId: params.actorId,
+      module: 'Approval',
+      entityType: params.entityType,
+      entityId: params.entityId,
+      action: params.action as AuditAction,
+      metadata: params.details,
+    });
+  }
 
   /**
    * Logs an audit entry - supports both two-parameter and single-parameter formats
@@ -80,14 +116,30 @@ export class AuditService {
     change: AuditableChange,
   ): Promise<void> {
     try {
-      // Get actor profile if not provided
+      // Get actor profile with caching
       let actorProfileId = context.actorProfileId;
       if (!actorProfileId && context.actorId) {
-        const profile = await this.prisma.userProfile.findUnique({
-          where: { clerkUserId: context.actorId },
-          select: { id: true },
-        });
-        actorProfileId = profile?.id;
+        const cacheKey = `${this.CACHE_KEY_PREFIX}actor:${context.actorId}`;
+
+        // Try to get from cache first
+        actorProfileId = await this.cacheManager.get<string>(cacheKey);
+
+        if (!actorProfileId) {
+          const profile = await this.prisma.userProfile.findUnique({
+            where: { clerkUserId: context.actorId },
+            select: { id: true },
+          });
+          actorProfileId = profile?.id;
+
+          // Cache the result
+          if (actorProfileId) {
+            await this.cacheManager.set(
+              cacheKey,
+              actorProfileId,
+              this.CACHE_TTL * 1000,
+            );
+          }
+        }
       }
 
       // Calculate changed fields
@@ -96,29 +148,46 @@ export class AuditService {
         change.newValues,
       );
 
-      // Create audit log entry
-      await this.prisma.auditLog.create({
-        data: {
-          id: uuidv7(),
-          actorId: context.actorId,
-          actorProfileId,
-          action: change.action,
-          module: context.module,
-          entityType: change.entityType,
-          entityId: change.entityId,
-          entityDisplay: change.entityDisplay,
-          oldValues: change.oldValues ? change.oldValues : Prisma.JsonNull,
-          newValues: change.newValues ? change.newValues : Prisma.JsonNull,
-          changedFields:
-            changedFields.length > 0 ? changedFields : Prisma.JsonNull,
-          metadata: change.metadata ? change.metadata : Prisma.JsonNull,
-          ipAddress: context.ipAddress,
-          userAgent: context.userAgent,
-        },
+      // Create audit log entry with enhanced event-driven architecture
+      const auditEntry = {
+        id: uuidv7(),
+        actorId: context.actorId,
+        actorProfileId,
+        action: change.action,
+        module: context.module,
+        entityType: change.entityType,
+        entityId: change.entityId,
+        entityDisplay: change.entityDisplay,
+        oldValues: change.oldValues ? change.oldValues : null,
+        newValues: change.newValues ? change.newValues : null,
+        changedFields: changedFields.length > 0 ? changedFields : null,
+        targetUserId: change.targetUserId,
+        metadata: change.metadata ? change.metadata : null,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        createdAt: new Date(),
+      };
+
+      // Determine priority based on operation criticality
+      const priority = this.determinePriority(context.module, change.action);
+
+      // Use event-driven architecture for better decoupling and reliability
+      await this.auditEventService.emitAuditLog({
+        entry: auditEntry,
+        priority,
+        async: priority !== 'critical', // Critical operations are synchronous
       });
+
+      this.logger.debug(
+        `Queued audit log for ${change.entityType}:${change.entityId}`,
+      );
     } catch (error) {
       // Log audit failures but don't break the main operation
-      console.error('Failed to create audit log:', error);
+      this.logger.error(
+        'Failed to queue audit log:',
+        error.message,
+        error.stack,
+      );
     }
   }
 
@@ -899,5 +968,332 @@ export class AuditService {
     const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays || 1;
+  }
+
+  // ===== Approval-specific methods (consolidated from ApprovalAuditService) =====
+
+  /**
+   * Audit a state transition
+   */
+  async auditStateTransition(
+    requestId: string,
+    fromStatus: string,
+    toStatus: string,
+    actor: string,
+    reason?: string,
+    metadata?: any,
+  ): Promise<void> {
+    await this.log({
+      actorId: actor,
+      module: 'APPROVAL',
+      entityType: 'APPROVAL_REQUEST',
+      entityId: requestId,
+      action: AuditAction.UPDATE,
+      oldValues: { status: fromStatus },
+      newValues: { status: toStatus },
+      metadata: {
+        ...metadata,
+        reason,
+        transition: `${fromStatus}_TO_${toStatus}`,
+      },
+    });
+  }
+
+  /**
+   * Audit an approval action
+   */
+  async auditApprovalAction(
+    requestId: string,
+    stepId: string,
+    action: 'APPROVED' | 'REJECTED' | 'DELEGATED' | 'ESCALATED',
+    actor: string,
+    comments?: string,
+    metadata?: any,
+  ): Promise<void> {
+    const auditAction =
+      action === 'APPROVED'
+        ? AuditAction.APPROVE
+        : action === 'REJECTED'
+          ? AuditAction.REJECT
+          : AuditAction.UPDATE;
+
+    await this.log({
+      actorId: actor,
+      module: 'APPROVAL',
+      entityType: 'APPROVAL_REQUEST',
+      entityId: requestId,
+      action: auditAction,
+      metadata: {
+        ...metadata,
+        stepId,
+        action,
+        comments,
+      },
+    });
+  }
+
+  /**
+   * Audit a delegation action
+   */
+  async auditDelegation(
+    requestId: string,
+    fromUser: string,
+    toUser: string,
+    reason: string,
+    validFrom: Date,
+    validTo: Date,
+    metadata?: any,
+  ): Promise<void> {
+    await this.log({
+      actorId: fromUser,
+      module: 'APPROVAL',
+      entityType: 'DELEGATION',
+      entityId: requestId,
+      action: AuditAction.CREATE,
+      targetUserId: toUser,
+      metadata: {
+        ...metadata,
+        fromUser,
+        toUser,
+        reason,
+        validFrom,
+        validTo,
+      },
+    });
+  }
+
+  /**
+   * Audit an error or exception
+   */
+  async auditError(
+    requestId: string,
+    error: Error,
+    operation: string,
+    actor: string,
+    metadata?: any,
+  ): Promise<void> {
+    await this.log({
+      actorId: actor,
+      module: 'APPROVAL',
+      entityType: 'ERROR',
+      entityId: requestId,
+      action: AuditAction.UPDATE,
+      metadata: {
+        ...metadata,
+        operation,
+        errorMessage: error.message,
+        errorName: error.name,
+        errorStack: error.stack,
+      },
+    });
+  }
+
+  /**
+   * Get audit trail for a specific approval request
+   */
+  async getApprovalAuditTrail(requestId: string): Promise<any[]> {
+    const cacheKey = `${this.CACHE_KEY_PREFIX}trail:${requestId}`;
+
+    // Try to get from cache first
+    const cached = await this.cacheManager.get<any[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const entries = await this.prisma.auditLog.findMany({
+      where: {
+        entityType: 'APPROVAL_REQUEST',
+        entityId: requestId,
+      },
+      include: {
+        actorProfile: {
+          include: {
+            dataKaryawan: {
+              select: {
+                nama: true,
+                nip: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    // Cache the result for a shorter time (1 minute) as this data changes frequently
+    await this.cacheManager.set(cacheKey, entries, 60000);
+
+    return entries;
+  }
+
+  // ===== Batch operations for improved performance =====
+
+  /**
+   * Log multiple audit entries in batch
+   */
+  async logBatch(
+    entries: Array<AuditContext & AuditableChange>,
+  ): Promise<void> {
+    if (entries.length === 0) return;
+
+    try {
+      // Process entries to prepare for batch insert
+      const auditEntries = await Promise.all(
+        entries.map(async (entry) => {
+          // Get actor profile with caching
+          let actorProfileId = entry.actorProfileId;
+          if (!actorProfileId && entry.actorId) {
+            const cacheKey = `${this.CACHE_KEY_PREFIX}actor:${entry.actorId}`;
+            actorProfileId = await this.cacheManager.get<string>(cacheKey);
+
+            if (!actorProfileId) {
+              const profile = await this.prisma.userProfile.findUnique({
+                where: { clerkUserId: entry.actorId },
+                select: { id: true },
+              });
+              actorProfileId = profile?.id;
+
+              if (actorProfileId) {
+                await this.cacheManager.set(
+                  cacheKey,
+                  actorProfileId,
+                  this.CACHE_TTL * 1000,
+                );
+              }
+            }
+          }
+
+          const changedFields = this.calculateChangedFields(
+            entry.oldValues,
+            entry.newValues,
+          );
+
+          return {
+            id: uuidv7(),
+            actorId: entry.actorId,
+            actorProfileId,
+            action: entry.action,
+            module: entry.module,
+            entityType: entry.entityType,
+            entityId: entry.entityId,
+            entityDisplay: entry.entityDisplay,
+            oldValues: entry.oldValues ? entry.oldValues : null,
+            newValues: entry.newValues ? entry.newValues : null,
+            changedFields: changedFields.length > 0 ? changedFields : null,
+            targetUserId: entry.targetUserId,
+            metadata: entry.metadata ? entry.metadata : null,
+            ipAddress: entry.ipAddress,
+            userAgent: entry.userAgent,
+            createdAt: new Date(),
+          };
+        }),
+      );
+
+      // Add all entries to queue for batch processing
+      await this.auditQueueService.addBatchToQueue(auditEntries);
+
+      this.logger.debug(
+        `Queued ${entries.length} audit logs for batch processing`,
+      );
+    } catch (error) {
+      this.logger.error(
+        'Failed to queue batch audit logs:',
+        error.message,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Clear cache for specific keys or patterns
+   */
+  async clearCache(pattern?: string): Promise<void> {
+    if (pattern) {
+      // Note: cache-manager doesn't support pattern-based deletion out of the box
+      // This would need custom implementation based on cache store type
+      this.logger.warn(
+        `Pattern-based cache clearing not fully implemented for pattern: ${pattern}`,
+      );
+    } else {
+      // Clear all audit cache - cache-manager v5+ uses 'clear'
+      await this.cacheManager.clear();
+    }
+  }
+
+  /**
+   * Determine priority based on module and action
+   */
+  private determinePriority(
+    module: string,
+    action: AuditAction,
+  ): 'low' | 'normal' | 'high' | 'critical' {
+    // Critical priority for sensitive modules and actions
+    const criticalModules = ['auth', 'user', 'permission', 'role', 'approval'];
+    const criticalActions: AuditAction[] = [
+      AuditAction.DELETE,
+      AuditAction.LOGIN,
+      AuditAction.LOGOUT,
+    ];
+
+    if (
+      criticalModules.includes(module.toLowerCase()) ||
+      criticalActions.includes(action)
+    ) {
+      return 'critical';
+    }
+
+    // High priority for important operations
+    const highPriorityActions: AuditAction[] = [
+      AuditAction.UPDATE,
+      AuditAction.APPROVE,
+      AuditAction.REJECT,
+    ];
+    if (highPriorityActions.includes(action)) {
+      return 'high';
+    }
+
+    // Low priority for export operations (closest to read/view operations)
+    if (action === AuditAction.EXPORT) {
+      return 'low';
+    }
+
+    return 'normal';
+  }
+
+  /**
+   * Verify audit log integrity
+   */
+  async verifyIntegrity(auditLogId: string): Promise<any> {
+    return this.auditIntegrityService.verifyIntegrity(auditLogId);
+  }
+
+  /**
+   * Verify entire audit chain integrity
+   */
+  async verifyChainIntegrity(startDate?: Date, endDate?: Date): Promise<any> {
+    return this.auditIntegrityService.verifyChainIntegrity(startDate, endDate);
+  }
+
+  /**
+   * Get integrity report
+   */
+  async getIntegrityReport(startDate?: Date, endDate?: Date): Promise<any> {
+    return this.auditIntegrityService.exportIntegrityReport(startDate, endDate);
+  }
+
+  /**
+   * Repair audit chain integrity
+   */
+  async repairChainIntegrity(startDate?: Date, endDate?: Date): Promise<any> {
+    return this.auditIntegrityService.repairChainIntegrity(startDate, endDate);
+  }
+
+  /**
+   * Get event statistics
+   */
+  async getEventStatistics(): Promise<any> {
+    return this.auditEventService.getEventStatistics();
   }
 }

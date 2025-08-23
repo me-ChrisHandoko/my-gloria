@@ -3,12 +3,25 @@ import {
   IsOptional,
   IsBoolean,
   IsEnum,
-  IsNumber,
   IsUUID,
   MinLength,
   MaxLength,
+  IsNotEmpty,
+  Matches,
+  Min,
+  Max,
+  IsInt,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type, Transform } from 'class-transformer';
+import {
+  Module,
+  ModuleWithRelations,
+  ModulePermission,
+  RoleModuleAccess,
+  UserModuleAccess,
+  UserOverride,
+} from '../interfaces/module-management.interface';
 
 export enum ModuleCategory {
   SERVICE = 'SERVICE',
@@ -25,8 +38,13 @@ export class CreateModuleDto {
     example: 'USER_MANAGEMENT',
   })
   @IsString()
+  @IsNotEmpty()
   @MinLength(3)
   @MaxLength(50)
+  @Matches(/^[A-Z][A-Z0-9_]*$/, {
+    message: 'Code must be uppercase with underscores only',
+  })
+  @Transform(({ value }) => value?.trim().toUpperCase())
   code: string;
 
   @ApiProperty({
@@ -34,8 +52,14 @@ export class CreateModuleDto {
     example: 'User Management',
   })
   @IsString()
+  @IsNotEmpty()
   @MinLength(3)
   @MaxLength(100)
+  @Transform(({ value }) => value?.trim())
+  @Matches(/^[a-zA-Z0-9\s\-_]+$/, {
+    message:
+      'Name can only contain alphanumeric characters, spaces, hyphens, and underscores',
+  })
   name: string;
 
   @ApiPropertyOptional({
@@ -45,6 +69,14 @@ export class CreateModuleDto {
   @IsOptional()
   @IsString()
   @MaxLength(500)
+  @Transform(({ value }) => {
+    // Sanitize HTML and trim whitespace
+    if (!value) return value;
+    return value
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/[<>\"']/g, '') // Remove potentially dangerous characters
+      .trim();
+  })
   description?: string;
 
   @ApiProperty({
@@ -62,6 +94,11 @@ export class CreateModuleDto {
   @IsOptional()
   @IsString()
   @MaxLength(50)
+  @Matches(/^[a-zA-Z0-9\-_]+$/, {
+    message:
+      'Icon name can only contain alphanumeric characters, hyphens, and underscores',
+  })
+  @Transform(({ value }) => value?.trim())
   icon?: string;
 
   @ApiPropertyOptional({
@@ -71,6 +108,10 @@ export class CreateModuleDto {
   @IsOptional()
   @IsString()
   @MaxLength(200)
+  @Matches(/^\/[a-zA-Z0-9\-_\/]*$/, {
+    message: 'Path must start with / and contain only valid URL characters',
+  })
+  @Transform(({ value }) => value?.trim())
   path?: string;
 
   @ApiPropertyOptional({
@@ -86,7 +127,9 @@ export class CreateModuleDto {
     example: 1,
   })
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(0)
+  @Max(9999)
   sortOrder?: number;
 
   @ApiPropertyOptional({
@@ -108,12 +151,17 @@ export class CreateModuleDto {
   isVisible?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Whether the module requires authentication',
-    example: true,
-    default: true,
+    description: 'Required subscription plan for access',
+    example: 'premium',
   })
   @IsOptional()
-  @IsBoolean()
+  @IsString()
+  @MaxLength(50)
+  @Matches(/^[a-zA-Z0-9\-_]+$/, {
+    message:
+      'Plan name can only contain alphanumeric characters, hyphens, and underscores',
+  })
+  @Transform(({ value }) => value?.trim())
   requiredPlan?: string;
 }
 
@@ -126,6 +174,11 @@ export class UpdateModuleDto {
   @IsString()
   @MinLength(3)
   @MaxLength(100)
+  @Transform(({ value }) => value?.trim())
+  @Matches(/^[a-zA-Z0-9\s\-_]+$/, {
+    message:
+      'Name can only contain alphanumeric characters, spaces, hyphens, and underscores',
+  })
   name?: string;
 
   @ApiPropertyOptional({
@@ -135,6 +188,14 @@ export class UpdateModuleDto {
   @IsOptional()
   @IsString()
   @MaxLength(500)
+  @Transform(({ value }) => {
+    // Sanitize HTML and trim whitespace
+    if (!value) return value;
+    return value
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/[<>\"']/g, '') // Remove potentially dangerous characters
+      .trim();
+  })
   description?: string;
 
   @ApiPropertyOptional({
@@ -153,6 +214,11 @@ export class UpdateModuleDto {
   @IsOptional()
   @IsString()
   @MaxLength(50)
+  @Matches(/^[a-zA-Z0-9\-_]+$/, {
+    message:
+      'Icon name can only contain alphanumeric characters, hyphens, and underscores',
+  })
+  @Transform(({ value }) => value?.trim())
   icon?: string;
 
   @ApiPropertyOptional({
@@ -162,6 +228,10 @@ export class UpdateModuleDto {
   @IsOptional()
   @IsString()
   @MaxLength(200)
+  @Matches(/^\/[a-zA-Z0-9\-_\/]*$/, {
+    message: 'Path must start with / and contain only valid URL characters',
+  })
+  @Transform(({ value }) => value?.trim())
   path?: string;
 
   @ApiPropertyOptional({
@@ -177,7 +247,9 @@ export class UpdateModuleDto {
     example: 1,
   })
   @IsOptional()
-  @IsNumber()
+  @IsInt()
+  @Min(0)
+  @Max(9999)
   sortOrder?: number;
 
   @ApiPropertyOptional({
@@ -197,72 +269,151 @@ export class UpdateModuleDto {
   isVisible?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Whether the module requires authentication',
-    example: true,
+    description: 'Required subscription plan for access',
+    example: 'premium',
   })
   @IsOptional()
-  @IsBoolean()
+  @IsString()
+  @MaxLength(50)
+  @Matches(/^[a-zA-Z0-9\-_]+$/, {
+    message:
+      'Plan name can only contain alphanumeric characters, hyphens, and underscores',
+  })
+  @Transform(({ value }) => value?.trim())
   requiredPlan?: string;
 }
 
-export class ModuleResponseDto {
-  @ApiProperty()
+export class ModuleResponseDto implements Module {
+  @ApiProperty({
+    description: 'Module ID',
+    example: 'uuid-string',
+  })
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Module code',
+    example: 'USER_MANAGEMENT',
+  })
   code: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Module name',
+    example: 'User Management',
+  })
   name: string;
 
-  @ApiPropertyOptional()
-  description?: string | null;
+  @ApiPropertyOptional({
+    description: 'Module description',
+    example: 'Module for managing users',
+  })
+  description: string | null;
 
-  @ApiProperty()
-  category: string;  // Prisma returns enum as string
+  @ApiProperty({
+    description: 'Module category',
+    enum: ModuleCategory,
+  })
+  category: ModuleCategory;
 
-  @ApiPropertyOptional()
-  icon?: string | null;
+  @ApiPropertyOptional({
+    description: 'Module icon',
+    example: 'users',
+  })
+  icon: string | null;
 
-  @ApiPropertyOptional()
-  path?: string | null;
+  @ApiPropertyOptional({
+    description: 'Module route path',
+    example: '/users',
+  })
+  path: string | null;
 
-  @ApiPropertyOptional()
-  parentId?: string | null;
+  @ApiPropertyOptional({
+    description: 'Parent module ID',
+    example: 'uuid-string',
+  })
+  parentId: string | null;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Display order',
+    example: 1,
+  })
   sortOrder: number;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Is module active',
+    example: true,
+  })
   isActive: boolean;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Is module visible in navigation',
+    example: true,
+  })
   isVisible: boolean;
 
-  @ApiPropertyOptional()
-  requiredPlan?: string | null;
+  @ApiPropertyOptional({
+    description: 'Required subscription plan',
+    example: 'premium',
+  })
+  requiredPlan: string | null;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Version number for optimistic locking',
+    example: 0,
+  })
+  version: number;
+
+  @ApiProperty({
+    description: 'Creation timestamp',
+  })
+  @Type(() => Date)
   createdAt: Date;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Last update timestamp',
+  })
+  @Type(() => Date)
   updatedAt: Date;
+}
 
-  @ApiPropertyOptional()
-  parent?: any;
+export class ModuleWithRelationsDto
+  extends ModuleResponseDto
+  implements ModuleWithRelations
+{
+  @ApiPropertyOptional({
+    description: 'Parent module',
+    type: () => ModuleResponseDto,
+  })
+  @Type(() => ModuleResponseDto)
+  parent?: Module | null;
 
-  @ApiPropertyOptional()
-  children?: any[];
+  @ApiPropertyOptional({
+    description: 'Child modules',
+    type: () => [ModuleResponseDto],
+  })
+  @Type(() => ModuleResponseDto)
+  children?: Module[];
 
-  @ApiPropertyOptional()
-  permissions?: any[];
+  @ApiPropertyOptional({
+    description: 'Module permissions',
+    type: () => [Object],
+  })
+  permissions?: ModulePermission[];
 
-  @ApiPropertyOptional()
-  roleAccess?: any[];
+  @ApiPropertyOptional({
+    description: 'Role access configurations',
+    type: () => [Object],
+  })
+  roleAccess?: RoleModuleAccess[];
 
-  @ApiPropertyOptional()
-  userAccess?: any[];
+  @ApiPropertyOptional({
+    description: 'User access configurations',
+    type: () => [Object],
+  })
+  userAccess?: UserModuleAccess[];
 
-  @ApiPropertyOptional()
-  overrides?: any[];
+  @ApiPropertyOptional({
+    description: 'User permission overrides',
+    type: () => [Object],
+  })
+  overrides?: UserOverride[];
 }

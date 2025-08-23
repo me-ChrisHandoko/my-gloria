@@ -1,7 +1,16 @@
-import { IsString, IsObject, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsObject,
+  IsOptional,
+  IsArray,
+  IsNumber,
+  ValidateNested,
+  IsEnum,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { RequestStatus } from '@prisma/client';
+import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
 export class CreateRequestDto {
   @ApiProperty({ description: 'Module name for the request' })
@@ -32,12 +41,20 @@ export class UpdateRequestDto {
   @IsOptional()
   @IsArray()
   attachmentIds?: string[];
+
+  @ApiProperty({ description: 'Version number for optimistic locking' })
+  @IsNumber()
+  version: number;
 }
 
 export class CancelRequestDto {
   @ApiProperty({ description: 'Reason for cancelling the request' })
   @IsString()
   cancelReason: string;
+
+  @ApiProperty({ description: 'Version number for optimistic locking' })
+  @IsNumber()
+  version: number;
 }
 
 export class RequestFilterDto {
@@ -86,4 +103,36 @@ export class CreateAttachmentDto {
   @ApiProperty({ description: 'MIME type' })
   @IsString()
   mimeType: string;
+}
+
+export class RequestQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ description: 'Filter by module' })
+  @IsOptional()
+  @IsString()
+  module?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by request type' })
+  @IsOptional()
+  @IsString()
+  requestType?: string;
+
+  @ApiPropertyOptional({ enum: RequestStatus, description: 'Filter by status' })
+  @IsOptional()
+  @IsEnum(RequestStatus)
+  status?: RequestStatus;
+
+  @ApiPropertyOptional({ description: 'Filter by requester profile ID' })
+  @IsOptional()
+  @IsString()
+  requesterProfileId?: string;
+
+  @ApiPropertyOptional({ description: 'Start date for filtering (ISO 8601)' })
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ description: 'End date for filtering (ISO 8601)' })
+  @IsOptional()
+  @IsString()
+  endDate?: string;
 }

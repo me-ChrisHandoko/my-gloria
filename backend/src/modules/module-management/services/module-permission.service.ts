@@ -8,6 +8,10 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { CacheService } from '../../../cache/cache.service';
 import { ModuleAccessService } from './module-access.service';
 import { PermissionAction } from '@prisma/client';
+import {
+  ModuleWithRelations,
+  UserModulePermissionSummary,
+} from '../interfaces/module-management.interface';
 
 export interface ModulePermissionResult {
   hasAccess: boolean;
@@ -50,12 +54,14 @@ export class ModulePermissionService {
     const cached = await this.cacheService.get(cacheKey);
     if (cached) {
       const result = JSON.parse(cached);
-      
+
       // Check specific action if provided
       if (action && !result.permissions.includes(action)) {
-        throw new ForbiddenException(`You don't have ${action} permission for module ${module.name}`);
+        throw new ForbiddenException(
+          `You don't have ${action} permission for module ${module.name}`,
+        );
       }
-      
+
       return result;
     }
 
@@ -69,8 +75,11 @@ export class ModulePermissionService {
     };
 
     // Get all user permissions for this module
-    const userPermissions = await this.moduleAccessService.getUserModulePermissions(userProfileId);
-    const modulePermission = userPermissions.find(p => p.moduleId === module.id);
+    const userPermissions =
+      await this.moduleAccessService.getUserModulePermissions(userProfileId);
+    const modulePermission = userPermissions.find(
+      (p) => p.moduleId === module.id,
+    );
 
     if (modulePermission) {
       result.hasAccess = modulePermission.permissions.length > 0;
@@ -83,7 +92,9 @@ export class ModulePermissionService {
 
     // Check specific action if provided
     if (action && !result.permissions.includes(action)) {
-      throw new ForbiddenException(`You don't have ${action} permission for module ${module.name}`);
+      throw new ForbiddenException(
+        `You don't have ${action} permission for module ${module.name}`,
+      );
     }
 
     return result;
@@ -98,7 +109,11 @@ export class ModulePermissionService {
     action: PermissionAction,
   ): Promise<boolean> {
     try {
-      const result = await this.checkModuleAccess(userProfileId, moduleCode, action);
+      const result = await this.checkModuleAccess(
+        userProfileId,
+        moduleCode,
+        action,
+      );
       return result.permissions.includes(action);
     } catch (error) {
       this.logger.error(`Error checking module permission: ${error.message}`);
@@ -107,13 +122,19 @@ export class ModulePermissionService {
   }
 
   /**
-   * Get all modules user has access to
+   * Get all modules user has access to with permissions
    */
-  async getUserAccessibleModules(userProfileId: string): Promise<any[]> {
-    const permissions = await this.moduleAccessService.getUserModulePermissions(userProfileId);
-    
-    const moduleIds = permissions.map(p => p.moduleId);
-    
+  async getUserAccessibleModules(userProfileId: string): Promise<
+    (ModuleWithRelations & {
+      permissions: PermissionAction[];
+      source: string;
+    })[]
+  > {
+    const permissions =
+      await this.moduleAccessService.getUserModulePermissions(userProfileId);
+
+    const moduleIds = permissions.map((p) => p.moduleId);
+
     const modules = await this.prisma.module.findMany({
       where: {
         id: { in: moduleIds },
@@ -128,20 +149,19 @@ export class ModulePermissionService {
           },
         },
       },
-      orderBy: [
-        { parentId: 'asc' },
-        { sortOrder: 'asc' },
-        { name: 'asc' },
-      ],
+      orderBy: [{ parentId: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
     });
 
     // Attach permissions to each module
-    return modules.map(module => {
-      const permission = permissions.find(p => p.moduleId === module.id);
+    return modules.map((module) => {
+      const permission = permissions.find((p) => p.moduleId === module.id);
       return {
         ...module,
         permissions: permission?.permissions || [],
         source: permission?.source || 'NONE',
+      } as unknown as ModuleWithRelations & {
+        permissions: PermissionAction[];
+        source: string;
       };
     });
   }
@@ -154,7 +174,8 @@ export class ModulePermissionService {
     moduleCode: string,
     action?: PermissionAction,
   ): Promise<ModulePermissionResult> {
-    const userProfile = await this.moduleAccessService.getUserProfileByClerkId(clerkUserId);
+    const userProfile =
+      await this.moduleAccessService.getUserProfileByClerkId(clerkUserId);
     return this.checkModuleAccess(userProfile.id, moduleCode, action);
   }
 
@@ -169,7 +190,7 @@ export class ModulePermissionService {
 
     // Delete all cached permissions for this user
     await Promise.all(
-      modules.map(module =>
+      modules.map((module) =>
         this.cacheService.del(`module_perm:${userProfileId}:${module.id}`),
       ),
     );
@@ -177,7 +198,9 @@ export class ModulePermissionService {
     // Also delete the module access cache
     await this.cacheService.del(`module_access:${userProfileId}`);
 
-    this.logger.log(`Module permission cache invalidated for user ${userProfileId}`);
+    this.logger.log(
+      `Module permission cache invalidated for user ${userProfileId}`,
+    );
   }
 
   /**
@@ -192,7 +215,7 @@ export class ModulePermissionService {
 
     // Invalidate cache for each user
     await Promise.all(
-      userRoles.map(ur => this.invalidateUserCache(ur.userProfileId)),
+      userRoles.map((ur) => this.invalidateUserCache(ur.userProfileId)),
     );
 
     this.logger.log(`Module permission cache invalidated for role ${roleId}`);
@@ -224,7 +247,11 @@ export class ModulePermissionService {
     await Promise.all(
       moduleCodes.map(async (code) => {
         try {
-          const result = await this.checkModuleAccess(userProfileId, code, action);
+          const result = await this.checkModuleAccess(
+            userProfileId,
+            code,
+            action,
+          );
           if (action) {
             results.set(code, result.permissions.includes(action));
           } else {

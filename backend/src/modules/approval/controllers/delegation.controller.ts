@@ -9,9 +9,19 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { ClerkAuthGuard } from '../../../auth/guards/clerk-auth.guard';
-import { CanCreate, CanRead, CanUpdate, RequirePermission } from '../../permission/decorators/permission.decorator';
+import {
+  CanCreate,
+  CanRead,
+  CanUpdate,
+  RequirePermission,
+} from '../../permission/decorators/permission.decorator';
 import { PermissionAction } from '@prisma/client';
 import { DelegationService } from '../services/delegation.service';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -36,7 +46,10 @@ export class DelegationController {
   @ApiOperation({ summary: 'Create a new approval delegation' })
   @ApiResponse({ status: 201, description: 'Delegation created successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 409, description: 'Conflict - overlapping delegation' })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflict - overlapping delegation',
+  })
   async create(@Body() dto: CreateDelegationDto, @Req() req: any) {
     const userProfile = await this.getUserProfile(req.user.clerkId);
     return this.delegationService.create(dto, userProfile.id, req.user.clerkId);
@@ -85,7 +98,10 @@ export class DelegationController {
   @ApiResponse({ status: 200, description: 'Delegation updated successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 404, description: 'Delegation not found' })
-  @ApiResponse({ status: 409, description: 'Conflict - overlapping delegation' })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflict - overlapping delegation',
+  })
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateDelegationDto,
@@ -117,7 +133,9 @@ export class DelegationController {
 
   @Get('check/:delegatorId/:delegateId')
   @CanRead('approval_delegation')
-  @ApiOperation({ summary: 'Check if a delegation is active between two users' })
+  @ApiOperation({
+    summary: 'Check if a delegation is active between two users',
+  })
   @ApiResponse({ status: 200, description: 'Delegation status' })
   async checkDelegation(
     @Param('delegatorId') delegatorId: string,

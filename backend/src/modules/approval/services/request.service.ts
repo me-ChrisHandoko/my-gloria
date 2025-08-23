@@ -1,87 +1,89 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  ConflictException,
+} from '@nestjs/common';
 import { Request, RequestStatus, ApprovalStatus, Prisma } from '@prisma/client';
-import { CreateRequestDto, UpdateRequestDto, CancelRequestDto, RequestFilterDto } from '../dto/request.dto';
+import {
+  CreateRequestDto,
+  UpdateRequestDto,
+  CancelRequestDto,
+  RequestFilterDto,
+  RequestQueryDto,
+} from '../dto/request.dto';
+import { v7 as uuidv7 } from 'uuid';
+import { RequestRepository } from '../repositories/request.repository';
+import { PrismaService } from '../../../prisma/prisma.service';
+import {
+  PaginatedResult,
+  PaginationOptions,
+} from '../repositories/base.repository';
+import { PaginationResponseDto } from '../../../common/dto/pagination.dto';
 
 @Injectable()
 export class RequestService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly requestRepository: RequestRepository,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  async create(dto: CreateRequestDto, requesterProfileId: string): Promise<Request> {
+  async create(
+    dto: CreateRequestDto,
+    requesterProfileId: string,
+  ): Promise<Request> {
     const requestNumber = await this.generateRequestNumber(dto.module);
 
-    return this.prisma.request.create({
-      data: {
-        id: this.generateId(),
-        requestNumber,
-        module: dto.module,
-        requesterProfileId,
-        requestType: dto.requestType,
-        details: dto.details,
-        status: RequestStatus.PENDING,
-        currentStep: 1,
-      },
-      include: {
-        requester: true,
-        approvalSteps: true,
-        attachments: true,
+    return this.requestRepository.create({
+      id: this.generateId(),
+      requestNumber,
+      module: dto.module,
+      requestType: dto.requestType,
+      details: dto.details,
+      status: RequestStatus.PENDING,
+      currentStep: 1,
+      requester: {
+        connect: { id: requesterProfileId },
       },
     });
   }
 
-  async findAll(filter?: RequestFilterDto): Promise<Request[]> {
-    const where: Prisma.RequestWhereInput = {};
+  async findAll(
+    filter?: RequestFilterDto,
+    pagination?: PaginationOptions,
+  ): Promise<PaginatedResult<Request>> {
+    return this.requestRepository.findAll(filter, pagination);
+  }
 
-    if (filter) {
-      if (filter.module) where.module = filter.module;
-      if (filter.requestType) where.requestType = filter.requestType;
-      if (filter.status) where.status = filter.status;
-      if (filter.requesterProfileId) where.requesterProfileId = filter.requesterProfileId;
-      
-      if (filter.startDate || filter.endDate) {
-        where.createdAt = {};
-        if (filter.startDate) {
-          where.createdAt.gte = new Date(filter.startDate);
-        }
-        if (filter.endDate) {
-          where.createdAt.lte = new Date(filter.endDate);
-        }
-      }
-    }
+  async findAllWithQuery(
+    query: RequestQueryDto,
+  ): Promise<PaginationResponseDto<Request>> {
+    const filter: RequestFilterDto = {
+      module: query.module,
+      requestType: query.requestType,
+      status: query.status,
+      requesterProfileId: query.requesterProfileId,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    };
 
-    return this.prisma.request.findMany({
-      where,
-      include: {
-        requester: true,
-        approvalSteps: {
-          include: {
-            approver: true,
-          },
-        },
-        attachments: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    const pagination: PaginationOptions = {
+      page: query.page,
+      limit: query.limit,
+    };
+
+    const result = await this.requestRepository.findAll(filter, pagination);
+    return new PaginationResponseDto(
+      result.data,
+      result.total,
+      result.page,
+      result.limit,
+    );
   }
 
   async findOne(id: string): Promise<Request> {
-    const request = await this.prisma.request.findUnique({
-      where: { id },
-      include: {
-        requester: true,
-        approvalSteps: {
-          include: {
-            approver: true,
-          },
-          orderBy: {
-            sequence: 'asc',
-          },
-        },
-        attachments: true,
-      },
-    });
+    const request = await this.requestRepository.findById(id);
 
     if (!request) {
       throw new NotFoundException(`Request with ID ${id} not found`);
@@ -108,79 +110,88 @@ export class RequestService {
     });
 
     if (!request) {
-      throw new NotFoundException(`Request with number ${requestNumber} not found`);
+      throw new NotFoundException(
+        `Request with number ${requestNumber} not found`,
+      );
     }
 
     return request;
   }
 
-  async findMyRequests(requesterProfileId: string, filter?: RequestFilterDto): Promise<Request[]> {
-    const where: Prisma.RequestWhereInput = {
+  async findMyRequests(
+    requesterProfileId: string,
+    filter?: RequestFilterDto,
+    pagination?: PaginationOptions,
+  ): Promise<PaginatedResult<Request>> {
+    return this.requestRepository.findByRequester(
       requesterProfileId,
+      filter,
+      pagination,
+    );
+  }
+
+  async findMyRequestsWithQuery(
+    requesterProfileId: string,
+    query: RequestQueryDto,
+  ): Promise<PaginationResponseDto<Request>> {
+    const filter: RequestFilterDto = {
+      module: query.module,
+      requestType: query.requestType,
+      status: query.status,
+      startDate: query.startDate,
+      endDate: query.endDate,
     };
 
-    if (filter) {
-      if (filter.module) where.module = filter.module;
-      if (filter.requestType) where.requestType = filter.requestType;
-      if (filter.status) where.status = filter.status;
-      
-      if (filter.startDate || filter.endDate) {
-        where.createdAt = {};
-        if (filter.startDate) {
-          where.createdAt.gte = new Date(filter.startDate);
-        }
-        if (filter.endDate) {
-          where.createdAt.lte = new Date(filter.endDate);
-        }
-      }
-    }
+    const pagination: PaginationOptions = {
+      page: query.page,
+      limit: query.limit,
+    };
 
-    return this.prisma.request.findMany({
-      where,
-      include: {
-        requester: true,
-        approvalSteps: {
-          include: {
-            approver: true,
-          },
-        },
-        attachments: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    const result = await this.requestRepository.findByRequester(
+      requesterProfileId,
+      filter,
+      pagination,
+    );
+    return new PaginationResponseDto(
+      result.data,
+      result.total,
+      result.page,
+      result.limit,
+    );
   }
 
-  async findPendingApprovals(approverProfileId: string): Promise<Request[]> {
-    return this.prisma.request.findMany({
-      where: {
-        approvalSteps: {
-          some: {
-            approverProfileId,
-            status: ApprovalStatus.WAITING,
-          },
-        },
-        status: {
-          in: [RequestStatus.PENDING, RequestStatus.IN_PROGRESS],
-        },
-      },
-      include: {
-        requester: true,
-        approvalSteps: {
-          include: {
-            approver: true,
-          },
-        },
-        attachments: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+  async findPendingApprovals(
+    approverProfileId: string,
+    pagination?: PaginationOptions,
+  ): Promise<PaginatedResult<Request>> {
+    return this.requestRepository.findPendingForApprover(
+      approverProfileId,
+      pagination,
+    );
   }
 
-  async update(id: string, dto: UpdateRequestDto, updaterProfileId: string): Promise<Request> {
+  async findPendingApprovalsWithPagination(
+    approverProfileId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<PaginationResponseDto<Request>> {
+    const result = await this.requestRepository.findPendingForApprover(
+      approverProfileId,
+      { page, limit },
+    );
+    return new PaginationResponseDto(
+      result.data,
+      result.total,
+      result.page,
+      result.limit,
+    );
+  }
+
+  async update(
+    id: string,
+    dto: UpdateRequestDto,
+    updaterProfileId: string,
+  ): Promise<Request> {
     const request = await this.findOne(id);
 
     // Only requester can update their own request
@@ -193,24 +204,27 @@ export class RequestService {
       throw new BadRequestException('Can only update pending requests');
     }
 
-    return this.prisma.request.update({
-      where: { id },
-      data: {
-        details: dto.details !== undefined ? dto.details : (request.details as any),
-      },
-      include: {
-        requester: true,
-        approvalSteps: {
-          include: {
-            approver: true,
-          },
-        },
-        attachments: true,
-      },
-    });
+    try {
+      return await this.requestRepository.update(id, {
+        details:
+          dto.details !== undefined ? dto.details : (request.details as any),
+        version: { increment: 1 },
+      });
+    } catch (error) {
+      if (error.message.includes('Concurrent update detected')) {
+        throw new ConflictException(
+          'Request has been modified by another user. Please refresh and try again.',
+        );
+      }
+      throw error;
+    }
   }
 
-  async cancel(id: string, dto: CancelRequestDto, cancelerProfileId: string): Promise<Request> {
+  async cancel(
+    id: string,
+    dto: CancelRequestDto,
+    cancelerProfileId: string,
+  ): Promise<Request> {
     const request = await this.findOne(id);
 
     // Only requester can cancel their own request
@@ -219,65 +233,58 @@ export class RequestService {
     }
 
     // Can only cancel pending or in-progress requests
-    const cancellableStatuses: RequestStatus[] = [RequestStatus.PENDING, RequestStatus.IN_PROGRESS];
+    const cancellableStatuses: RequestStatus[] = [
+      RequestStatus.PENDING,
+      RequestStatus.IN_PROGRESS,
+    ];
     if (!cancellableStatuses.includes(request.status)) {
-      throw new BadRequestException('Can only cancel pending or in-progress requests');
+      throw new BadRequestException(
+        'Can only cancel pending or in-progress requests',
+      );
     }
 
-    return this.prisma.request.update({
-      where: { id },
-      data: {
+    try {
+      return await this.requestRepository.update(id, {
         status: RequestStatus.CANCELLED,
         cancelledAt: new Date(),
         cancelReason: dto.cancelReason,
-      },
-      include: {
-        requester: true,
-        approvalSteps: {
-          include: {
-            approver: true,
-          },
-        },
-        attachments: true,
-      },
-    });
+        version: { increment: 1 },
+      });
+    } catch (error) {
+      if (error.message.includes('Concurrent update detected')) {
+        throw new ConflictException(
+          'Request has been modified by another user. Please refresh and try again.',
+        );
+      }
+      throw error;
+    }
   }
 
-  async updateStatus(id: string, status: RequestStatus): Promise<Request> {
-    return this.prisma.request.update({
-      where: { id },
-      data: {
+  async updateStatus(
+    id: string,
+    status: RequestStatus,
+    expectedVersion?: number,
+  ): Promise<Request> {
+    try {
+      return await this.requestRepository.updateStatus(
+        id,
         status,
-        completedAt: status === RequestStatus.APPROVED ? new Date() : undefined,
-      },
-      include: {
-        requester: true,
-        approvalSteps: {
-          include: {
-            approver: true,
-          },
-        },
-        attachments: true,
-      },
-    });
+        expectedVersion,
+      );
+    } catch (error) {
+      if (error.message.includes('Concurrent update detected')) {
+        throw new ConflictException(
+          'Request has been modified by another user. Please refresh and try again.',
+        );
+      }
+      throw error;
+    }
   }
 
   async updateCurrentStep(id: string, currentStep: number): Promise<Request> {
-    return this.prisma.request.update({
-      where: { id },
-      data: {
-        currentStep,
-        status: RequestStatus.IN_PROGRESS,
-      },
-      include: {
-        requester: true,
-        approvalSteps: {
-          include: {
-            approver: true,
-          },
-        },
-        attachments: true,
-      },
+    return this.requestRepository.update(id, {
+      currentStep,
+      status: RequestStatus.IN_PROGRESS,
     });
   }
 
@@ -285,7 +292,7 @@ export class RequestService {
     const date = new Date();
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
-    
+
     // Get the last request number for this month
     const lastRequest = await this.prisma.request.findFirst({
       where: {
@@ -300,7 +307,9 @@ export class RequestService {
 
     let sequence = 1;
     if (lastRequest) {
-      const lastSequence = parseInt(lastRequest.requestNumber.split('-').pop() || '0');
+      const lastSequence = parseInt(
+        lastRequest.requestNumber.split('-').pop() || '0',
+      );
       sequence = lastSequence + 1;
     }
 
@@ -308,6 +317,6 @@ export class RequestService {
   }
 
   private generateId(): string {
-    return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return uuidv7();
   }
 }

@@ -5,25 +5,33 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { 
-  CreateUserOverrideDto, 
-  UserOverrideResponseDto 
+import { v7 as uuidv7 } from 'uuid';
+import {
+  CreateUserOverrideDto,
+  UserOverrideResponseDto,
 } from '../dto/module-access.dto';
 import { CacheService } from '../../../cache/cache.service';
 import { PermissionAction } from '@prisma/client';
+import { UserOverride } from '../interfaces/module-management.interface';
+import { Transactional } from '../../../common/decorators/transaction.decorator';
+import { TransactionManager } from '../../../common/utils/transaction-manager.util';
 
 @Injectable()
 export class OverrideService {
   private readonly logger = new Logger(OverrideService.name);
+  private readonly transactionManager: TransactionManager;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
-  ) {}
+  ) {
+    this.transactionManager = new TransactionManager(prisma);
+  }
 
   /**
-   * Create a user override
+   * Create a user override with transaction support
    */
+  @Transactional({ isolationLevel: 'Serializable' })
   async createOverride(
     data: CreateUserOverrideDto,
     grantedBy: string,
@@ -35,7 +43,9 @@ export class OverrideService {
     ]);
 
     if (!userProfile) {
-      throw new NotFoundException(`User profile with ID ${data.userProfileId} not found`);
+      throw new NotFoundException(
+        `User profile with ID ${data.userProfileId} not found`,
+      );
     }
 
     if (!module) {
@@ -48,10 +58,7 @@ export class OverrideService {
         userProfileId: data.userProfileId,
         moduleId: data.moduleId,
         permissionType: data.permissionType,
-        OR: [
-          { validUntil: null },
-          { validUntil: { gte: new Date() } },
-        ],
+        OR: [{ validUntil: null }, { validUntil: { gte: new Date() } }],
       },
     });
 
@@ -61,8 +68,16 @@ export class OverrideService {
       );
     }
 
+    // Deactivate any existing opposite overrides
+    if (existingOverride && existingOverride.isGranted !== data.isGranted) {
+      await this.prisma.userOverride.update({
+        where: { id: existingOverride.id },
+        data: { validUntil: new Date() },
+      });
+    }
+
     try {
-      // If there's an opposite override, we can either update it or create a new one
+      // Create the new override
       const override = await this.prisma.userOverride.create({
         data: {
           id: this.generateId(),
@@ -105,10 +120,7 @@ export class OverrideService {
     const where: any = { userProfileId };
 
     if (activeOnly) {
-      where.OR = [
-        { validUntil: null },
-        { validUntil: { gte: new Date() } },
-      ];
+      where.OR = [{ validUntil: null }, { validUntil: { gte: new Date() } }];
     }
 
     const overrides = await this.prisma.userOverride.findMany({
@@ -134,10 +146,7 @@ export class OverrideService {
     const where: any = { moduleId };
 
     if (activeOnly) {
-      where.OR = [
-        { validUntil: null },
-        { validUntil: { gte: new Date() } },
-      ];
+      where.OR = [{ validUntil: null }, { validUntil: { gte: new Date() } }];
     }
 
     const overrides = await this.prisma.userOverride.findMany({
@@ -245,82 +254,68 @@ export class OverrideService {
   }> {
     const now = new Date();
 
-    const [total, active, expired, grants, revokes, byModule, byPermission] = await Promise.all([
-      // Total overrides
-      this.prisma.userOverride.count(),
+    const [total, active, expired, grants, revokes, byModule, byPermission] =
+      await Promise.all([
+        // Total overrides
+        this.prisma.userOverride.count(),
 
-      // Active overrides
-      this.prisma.userOverride.count({
-        where: {
-          OR: [
-            { validUntil: null },
-            { validUntil: { gte: now } },
-          ],
-        },
-      }),
-
-      // Expired overrides
-      this.prisma.userOverride.count({
-        where: {
-          validUntil: {
-            lt: now,
+        // Active overrides
+        this.prisma.userOverride.count({
+          where: {
+            OR: [{ validUntil: null }, { validUntil: { gte: now } }],
           },
-        },
-      }),
+        }),
 
-      // Grant overrides
-      this.prisma.userOverride.count({
-        where: {
-          isGranted: true,
-          OR: [
-            { validUntil: null },
-            { validUntil: { gte: now } },
-          ],
-        },
-      }),
+        // Expired overrides
+        this.prisma.userOverride.count({
+          where: {
+            validUntil: {
+              lt: now,
+            },
+          },
+        }),
 
-      // Revoke overrides
-      this.prisma.userOverride.count({
-        where: {
-          isGranted: false,
-          OR: [
-            { validUntil: null },
-            { validUntil: { gte: now } },
-          ],
-        },
-      }),
+        // Grant overrides
+        this.prisma.userOverride.count({
+          where: {
+            isGranted: true,
+            OR: [{ validUntil: null }, { validUntil: { gte: now } }],
+          },
+        }),
 
-      // By module
-      this.prisma.userOverride.groupBy({
-        by: ['moduleId'],
-        where: {
-          OR: [
-            { validUntil: null },
-            { validUntil: { gte: now } },
-          ],
-        },
-        _count: {
-          _all: true,
-        },
-      }),
+        // Revoke overrides
+        this.prisma.userOverride.count({
+          where: {
+            isGranted: false,
+            OR: [{ validUntil: null }, { validUntil: { gte: now } }],
+          },
+        }),
 
-      // By permission type
-      this.prisma.userOverride.groupBy({
-        by: ['permissionType'],
-        where: {
-          OR: [
-            { validUntil: null },
-            { validUntil: { gte: now } },
-          ],
-        },
-        _count: {
-          _all: true,
-        },
-      }),
-    ]);
+        // By module
+        this.prisma.userOverride.groupBy({
+          by: ['moduleId'],
+          where: {
+            OR: [{ validUntil: null }, { validUntil: { gte: now } }],
+          },
+          _count: {
+            _all: true,
+          },
+        }),
+
+        // By permission type
+        this.prisma.userOverride.groupBy({
+          by: ['permissionType'],
+          where: {
+            OR: [{ validUntil: null }, { validUntil: { gte: now } }],
+          },
+          _count: {
+            _all: true,
+          },
+        }),
+      ]);
 
     // Get module names
-    const moduleIds = byModule.map(m => m.moduleId);
+    const moduleIds = byModule.map((m) => m.moduleId);
     const modules = await this.prisma.module.findMany({
       where: {
         id: { in: moduleIds },
@@ -331,7 +326,7 @@ export class OverrideService {
       },
     });
 
-    const moduleMap = new Map(modules.map(m => [m.id, m.name]));
+    const moduleMap = new Map(modules.map((m) => [m.id, m.name]));
 
     return {
       total,
@@ -339,12 +334,12 @@ export class OverrideService {
       expired,
       grants,
       revokes,
-      byModule: byModule.map(m => ({
+      byModule: byModule.map((m) => ({
         moduleId: m.moduleId,
         moduleName: moduleMap.get(m.moduleId) || 'Unknown',
         count: m._count._all,
       })),
-      byPermission: byPermission.map(p => ({
+      byPermission: byPermission.map((p) => ({
         permission: p.permissionType,
         count: p._count._all,
       })),
@@ -356,30 +351,31 @@ export class OverrideService {
    */
   private async invalidateUserCache(userProfileId: string): Promise<void> {
     await this.cacheService.del(`module_access:${userProfileId}`);
-    
+
     // Also invalidate specific module permission caches
     const modules = await this.prisma.module.findMany({
       select: { id: true },
     });
 
     await Promise.all(
-      modules.map(module =>
+      modules.map((module) =>
         this.cacheService.del(`module_perm:${userProfileId}:${module.id}`),
       ),
     );
   }
 
   /**
-   * Generate unique ID
+   * Generate unique ID using UUID v7
+   * UUID v7 provides time-ordered, cryptographically secure identifiers
    */
   private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return uuidv7();
   }
 
   /**
    * Map database entity to response DTO
    */
-  private mapToResponseDto(entity: any): UserOverrideResponseDto {
+  private mapToResponseDto(entity: UserOverride): UserOverrideResponseDto {
     return {
       id: entity.id,
       userProfileId: entity.userProfileId,
@@ -387,7 +383,7 @@ export class OverrideService {
       permissionType: entity.permissionType,
       isGranted: entity.isGranted,
       validFrom: entity.validFrom,
-      validUntil: entity.validUntil || undefined,
+      validUntil: entity.validUntil || null,
       reason: entity.reason,
       grantedBy: entity.grantedBy,
       createdAt: entity.createdAt,

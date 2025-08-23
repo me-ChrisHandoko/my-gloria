@@ -1,0 +1,113 @@
+groups:
+  - name: permission_alerts
+    interval: 30s
+    rules:
+      # High Latency Alert
+      - alert: PermissionCheckHighLatency
+        expr: histogram_quantile(0.95, sum(rate(permission_check_duration_ms_bucket[5m])) by (le)) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: permission
+        annotations:
+          summary: "High permission check latency detected"
+          description: "95th percentile of permission check duration is {{ $value }}ms (threshold: 100ms)"
+
+      # Very High Latency Alert
+      - alert: PermissionCheckVeryHighLatency
+        expr: histogram_quantile(0.99, sum(rate(permission_check_duration_ms_bucket[5m])) by (le)) > 500
+        for: 3m
+        labels:
+          severity: critical
+          component: permission
+        annotations:
+          summary: "Very high permission check latency detected"
+          description: "99th percentile of permission check duration is {{ $value }}ms (threshold: 500ms)"
+
+      # Low Cache Hit Rate
+      - alert: PermissionLowCacheHitRate
+        expr: (sum(rate(permission_cache_hits_total[5m])) / (sum(rate(permission_cache_hits_total[5m])) + sum(rate(permission_cache_misses_total[5m])))) * 100 < 70
+        for: 10m
+        labels:
+          severity: warning
+          component: permission
+        annotations:
+          summary: "Low permission cache hit rate"
+          description: "Cache hit rate is {{ $value }}% (threshold: 70%)"
+
+      # Circuit Breaker Open
+      - alert: PermissionCircuitBreakerOpen
+        expr: permission_circuit_breaker_status == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: permission
+        annotations:
+          summary: "Permission circuit breaker is open"
+          description: "Circuit breaker for {{ $labels.service }} is open"
+
+      # High Error Rate
+      - alert: PermissionHighErrorRate
+        expr: sum(rate(permission_db_errors_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: permission
+        annotations:
+          summary: "High permission database error rate"
+          description: "Database error rate is {{ $value }} errors/sec"
+
+      # SLO Violations
+      - alert: PermissionSLOViolation
+        expr: sum(rate(permission_slo_violation_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: permission
+        annotations:
+          summary: "Permission SLO violations detected"
+          description: "SLO violation rate is {{ $value }} violations/sec for {{ $labels.slo_type }}"
+
+      # High Active Checks
+      - alert: PermissionHighActiveChecks
+        expr: permission_active_checks > 100
+        for: 3m
+        labels:
+          severity: warning
+          component: permission
+        annotations:
+          summary: "High number of active permission checks"
+          description: "{{ $value }} active permission checks (threshold: 100)"
+
+      # Permission Check Timeouts
+      - alert: PermissionCheckTimeouts
+        expr: sum(rate(permission_check_timeout_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: permission
+        annotations:
+          summary: "Permission check timeouts detected"
+          description: "Timeout rate is {{ $value }} timeouts/sec"
+
+      # Rate Limit Hits
+      - alert: PermissionRateLimitHits
+        expr: sum(rate(permission_rate_limit_hits_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: permission
+        annotations:
+          summary: "Permission rate limits being hit"
+          description: "Rate limit hit rate is {{ $value }} hits/sec"
+
+      # Cache Invalidation Storm
+      - alert: PermissionCacheInvalidationStorm
+        expr: sum(rate(permission_cache_invalidations_total[1m])) > 100
+        for: 2m
+        labels:
+          severity: critical
+          component: permission
+        annotations:
+          summary: "Permission cache invalidation storm detected"
+          description: "Cache invalidation rate is {{ $value }} invalidations/sec"

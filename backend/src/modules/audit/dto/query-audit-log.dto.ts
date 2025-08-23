@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   IsOptional,
   IsString,
@@ -8,29 +8,54 @@ import {
   IsArray,
   Min,
   Max,
+  MaxLength,
+  Matches,
+  IsUUID,
+  ValidationOptions,
 } from 'class-validator';
 import { AuditAction } from '@prisma/client';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
+// Custom decorator for safe string validation
+function IsSafeString(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    IsString(validationOptions)(object, propertyName);
+    MaxLength(255, validationOptions)(object, propertyName);
+    Matches(/^[a-zA-Z0-9_\-\.\/\s]+$/, {
+      message: `${propertyName} contains invalid characters`,
+      ...validationOptions,
+    })(object, propertyName);
+  };
+}
+
 export class QueryAuditLogDto {
   @ApiPropertyOptional({ description: 'Entity type to filter by' })
   @IsOptional()
-  @IsString()
+  @IsSafeString()
+  @Transform(({ value }) => value?.trim())
   entityType?: string;
 
   @ApiPropertyOptional({ description: 'Entity ID to filter by' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
+  @Transform(({ value }) => value?.trim())
   entityId?: string;
 
   @ApiPropertyOptional({ description: 'Module to filter by' })
   @IsOptional()
-  @IsString()
+  @IsSafeString()
+  @Transform(({ value }) => value?.trim())
   module?: string;
 
   @ApiPropertyOptional({ description: 'Actor (Clerk user ID) to filter by' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
+  @Matches(/^(user_|clerk_)?[a-zA-Z0-9_\-]+$/, {
+    message: 'Invalid Clerk user ID format',
+  })
+  @Transform(({ value }) => value?.trim())
   actorId?: string;
 
   @ApiPropertyOptional({
@@ -88,9 +113,13 @@ export class QueryAuditLogDto {
   @ApiPropertyOptional({
     description: 'Sort field',
     default: 'createdAt',
+    enum: ['createdAt', 'module', 'action', 'entityType', 'actorId'],
   })
   @IsOptional()
-  @IsString()
+  @IsEnum(['createdAt', 'module', 'action', 'entityType', 'actorId'], {
+    message:
+      'Sort field must be one of: createdAt, module, action, entityType, actorId',
+  })
   sortBy?: string = 'createdAt';
 
   @ApiPropertyOptional({
@@ -100,5 +129,6 @@ export class QueryAuditLogDto {
   })
   @IsOptional()
   @IsEnum(['asc', 'desc'])
+  @Transform(({ value }) => value?.toLowerCase())
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

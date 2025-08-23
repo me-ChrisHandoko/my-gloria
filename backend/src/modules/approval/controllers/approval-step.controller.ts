@@ -8,12 +8,23 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { ClerkAuthGuard } from '../../../auth/guards/clerk-auth.guard';
-import { CanRead, CanUpdate } from '../../permission/decorators/permission.decorator';
+import {
+  CanRead,
+  CanUpdate,
+} from '../../permission/decorators/permission.decorator';
 import { WorkflowService } from '../services/workflow.service';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { ProcessApprovalDto, ApprovalStepFilterDto } from '../dto/approval-step.dto';
+import {
+  ProcessApprovalDto,
+  ApprovalStepFilterDto,
+} from '../dto/approval-step.dto';
 
 @ApiTags('Approval Steps')
 @ApiBearerAuth()
@@ -33,7 +44,8 @@ export class ApprovalStepController {
     const where: any = {};
 
     if (filter.requestId) where.requestId = filter.requestId;
-    if (filter.approverProfileId) where.approverProfileId = filter.approverProfileId;
+    if (filter.approverProfileId)
+      where.approverProfileId = filter.approverProfileId;
     if (filter.status) where.status = filter.status;
 
     return this.prisma.approvalStep.findMany({
@@ -42,17 +54,17 @@ export class ApprovalStepController {
         request: true,
         approver: true,
       },
-      orderBy: [
-        { requestId: 'asc' },
-        { sequence: 'asc' },
-      ],
+      orderBy: [{ requestId: 'asc' }, { sequence: 'asc' }],
     });
   }
 
   @Get('request/:requestId')
   @CanRead('approval_step')
   @ApiOperation({ summary: 'Get approval steps for a specific request' })
-  @ApiResponse({ status: 200, description: 'List of approval steps for the request' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of approval steps for the request',
+  })
   async findByRequest(@Param('requestId') requestId: string) {
     return this.prisma.approvalStep.findMany({
       where: { requestId },
@@ -99,7 +111,12 @@ export class ApprovalStepController {
     @Req() req: any,
   ) {
     const userProfile = await this.getUserProfile(req.user.clerkId);
-    return this.workflowService.processApproval(requestId, stepId, dto, userProfile.id);
+    return this.workflowService.processApproval(
+      requestId,
+      stepId,
+      dto,
+      userProfile.id,
+    );
   }
 
   @Get('my-pending')
@@ -107,7 +124,7 @@ export class ApprovalStepController {
   @ApiResponse({ status: 200, description: 'List of pending approval steps' })
   async getMyPendingSteps(@Req() req: any) {
     const userProfile = await this.getUserProfile(req.user.clerkId);
-    
+
     return this.prisma.approvalStep.findMany({
       where: {
         approverProfileId: userProfile.id,
@@ -136,7 +153,9 @@ export class ApprovalStepController {
   @CanRead('approval_step')
   @ApiOperation({ summary: 'Get approval history for a specific approver' })
   @ApiResponse({ status: 200, description: 'List of processed approvals' })
-  async getApprovalHistory(@Param('approverProfileId') approverProfileId: string) {
+  async getApprovalHistory(
+    @Param('approverProfileId') approverProfileId: string,
+  ) {
     return this.prisma.approvalStep.findMany({
       where: {
         approverProfileId,

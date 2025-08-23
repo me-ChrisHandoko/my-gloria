@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+import { CacheModule } from '../../cache/cache.module';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 
 // Controllers
 import { PermissionController } from './controllers/permission.controller';
@@ -9,15 +9,29 @@ import { RoleController } from './controllers/role.controller';
 import { UserPermissionController } from './controllers/user-permission.controller';
 import { PermissionPolicyController } from './controllers/permission-policy.controller';
 import { PermissionGroupController } from './controllers/permission-group.controller';
+import { PermissionMonitoringController } from './controllers/monitoring.controller';
+import { PermissionTemplateController } from './controllers/permission-template.controller';
+import { PermissionDelegationController } from './controllers/permission-delegation.controller';
+import { PermissionAnalyticsController } from './controllers/permission-analytics.controller';
+import { PermissionBulkController } from './controllers/permission-bulk.controller';
 
 // Services
 import { PermissionService } from './services/permission.service';
 import { RoleService } from './services/role.service';
 import { UserPermissionService } from './services/user-permission.service';
 import { PermissionPolicyService } from './services/permission-policy.service';
-import { PermissionCacheService } from './services/permission-cache.service';
 import { PolicyEngineService } from './services/policy-engine.service';
 import { PermissionGroupService } from './services/permission-group.service';
+import { PermissionMatrixService } from './services/permission-matrix.service';
+import { PermissionLogRetentionService } from './services/permission-log-retention.service';
+import { JsonSchemaValidatorService } from './services/json-schema-validator.service';
+import { PermissionMetricsService } from './services/permission-metrics.service';
+import { CircuitBreakerService } from './services/circuit-breaker.service';
+import { PermissionTemplateService } from './services/permission-template.service';
+import { PermissionDelegationService } from './services/permission-delegation.service';
+import { PermissionAnalyticsService } from './services/permission-analytics.service';
+import { PermissionBulkService } from './services/permission-bulk.service';
+import { PermissionChangeHistoryService } from './services/permission-change-history.service';
 
 // Guards & Decorators
 import { PermissionGuard } from './guards/permission.guard';
@@ -30,6 +44,9 @@ import { AttributeBasedPolicyEngine } from './engines/attribute-based-policy.eng
 // External Services
 import { AuditService } from '../audit/services/audit.service';
 
+// Metrics Providers
+import { permissionMetricsProviders } from './providers/metrics.provider';
+
 /**
  * Consolidated Permission Module
  *
@@ -38,19 +55,32 @@ import { AuditService } from '../audit/services/audit.service';
  * - Role management and hierarchy
  * - User permission grants
  * - Permission policies (time, location, attribute-based)
- * - Permission caching
+ * - Permission caching (using Redis-based cache from CacheModule)
  * - Guards and decorators for authorization
  *
  * Architecture follows the organization module pattern for consistency.
  */
 @Module({
-  imports: [PrismaModule],
+  imports: [
+    PrismaModule,
+    CacheModule,
+    PrometheusModule.register({
+      defaultMetrics: {
+        enabled: false, // We'll use custom metrics
+      },
+    }),
+  ],
   controllers: [
     PermissionController,
     RoleController,
     UserPermissionController,
     PermissionPolicyController,
     PermissionGroupController,
+    PermissionMonitoringController,
+    PermissionTemplateController,
+    PermissionDelegationController,
+    PermissionAnalyticsController,
+    PermissionBulkController,
   ],
   providers: [
     // Core Services
@@ -58,9 +88,18 @@ import { AuditService } from '../audit/services/audit.service';
     RoleService,
     UserPermissionService,
     PermissionPolicyService,
-    PermissionCacheService,
     PolicyEngineService,
     PermissionGroupService,
+    PermissionMatrixService,
+    PermissionLogRetentionService,
+    JsonSchemaValidatorService,
+    PermissionMetricsService,
+    CircuitBreakerService,
+    PermissionTemplateService,
+    PermissionDelegationService,
+    PermissionAnalyticsService,
+    PermissionBulkService,
+    PermissionChangeHistoryService,
 
     // Guards
     PermissionGuard,
@@ -72,25 +111,9 @@ import { AuditService } from '../audit/services/audit.service';
 
     // External Services
     AuditService,
-
-    // Cache Manager (for PermissionCacheService)
-    {
-      provide: CACHE_MANAGER,
-      useFactory: () => {
-        // This will be injected from the global CacheModule
-        // For now, return a mock to prevent errors
-        return {
-          get: async () => null,
-          set: async () => {},
-          del: async () => {},
-          reset: async () => {},
-          wrap: async () => {},
-          store: {
-            keys: async () => [],
-          },
-        } as unknown as Cache;
-      },
-    },
+    
+    // Metrics Providers
+    ...permissionMetricsProviders,
   ],
   exports: [
     // Export services that other modules might need
@@ -99,7 +122,9 @@ import { AuditService } from '../audit/services/audit.service';
     UserPermissionService,
     PermissionPolicyService,
     PermissionGuard,
-    PermissionCacheService,
+    PermissionTemplateService,
+    PermissionDelegationService,
+    PermissionAnalyticsService,
   ],
 })
 export class PermissionModule {}
