@@ -1101,6 +1101,47 @@ enum AssigneeType {
   @@schema("gloria_ops")
 }
 
+// ==================== SYSTEM CONFIGURATION ====================
+
+// System configuration storage for feature flags, maintenance mode, and other settings
+model SystemConfig {
+  id                String              @id @default(uuid())
+  key               String              @unique @db.VarChar(255)
+  value             Json
+  category          String?             @db.VarChar(50)
+  description       String?             @db.Text
+  isEncrypted       Boolean             @default(false) @map("is_encrypted")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") @db.VarChar(255)
+  updatedBy         String?             @map("updated_by") @db.VarChar(255)
+  
+  @@index([key])
+  @@index([category])
+  @@index([updatedAt(sort: Desc)])
+  @@map("system_configs")
+  @@schema("gloria_ops")
+}
+
+// Feature flags for gradual rollout and A/B testing
+model FeatureFlag {
+  id                String              @id @default(cuid())
+  name              String              @unique
+  description       String?
+  enabled           Boolean             @default(false)
+  allowedGroups     Json?               @map("allowed_groups") // Array of allowed user group IDs
+  rolloutPercentage Int                 @default(100) @map("rollout_percentage") // 0-100
+  metadata          Json?               // Additional configuration data
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  createdBy         String?             @map("created_by") // Clerk user ID
+  updatedBy         String?             @map("updated_by") // Clerk user ID
+  
+  @@index([name, enabled])
+  @@map("feature_flags")
+  @@schema("gloria_ops")
+}
+
 // ==================== NOTIFICATION PREFERENCES ====================
 
 // Notification channels available for delivery
@@ -1206,5 +1247,27 @@ model NotificationFrequencyTracking {
   @@unique([preferenceId, notificationType, windowType, windowStart])
   @@index([preferenceId, windowStart])
   @@map("notification_frequency_tracking")
+  @@schema("gloria_ops")
+}
+
+// ==================== SYSTEM CONFIGURATION ====================
+
+// System backup records
+model SystemBackup {
+  id                String              @id @default(cuid())
+  fileName          String              @map("file_name")
+  filePath          String              @map("file_path")
+  fileSize          BigInt              @map("file_size")
+  status            String              // 'pending', 'in_progress', 'completed', 'failed'
+  metadata          Json?               // Additional backup metadata
+  error             String?             @db.Text // Error message if failed
+  
+  createdAt         DateTime            @default(now()) @map("created_at")
+  createdBy         String              @map("created_by") // Clerk user ID
+  organizationId    String?             @map("organization_id")
+  
+  @@index([status, createdAt])
+  @@index([createdBy])
+  @@map("system_backups")
   @@schema("gloria_ops")
 }

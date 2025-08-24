@@ -1,7 +1,10 @@
 import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { MaintenanceModeDto } from '../dto/system-config.dto';
 import { AuditService } from '../../../modules/audit/services/audit.service';
+import { RateLimiterUtil } from '../utils/rate-limiter.util';
+import { ValidationUtil } from '../utils/validation.util';
 
 export interface MaintenanceConfig {
   enabled: boolean;
@@ -22,21 +25,19 @@ export class MaintenanceService {
   constructor(
     private prisma: PrismaService,
     private auditService: AuditService,
+    private rateLimiter: RateLimiterUtil,
   ) {
     this.loadMaintenanceConfig();
   }
 
   private async loadMaintenanceConfig(): Promise<void> {
     try {
-      const stored = await this.prisma.$queryRaw<any[]>`
-        SELECT value 
-        FROM gloria_ops.system_configs 
-        WHERE key = ${this.STORAGE_KEY}
-        LIMIT 1
-      `.catch(() => null);
+      const stored = await this.prisma.systemConfig.findUnique({
+        where: { key: this.STORAGE_KEY },
+      });
 
-      if (stored && stored[0]?.value) {
-        this.maintenanceConfig = JSON.parse(stored[0].value);
+      if (stored?.value) {
+        this.maintenanceConfig = stored.value as unknown as MaintenanceConfig;
         this.logger.log(
           `Loaded maintenance config: ${this.maintenanceConfig.enabled ? 'ENABLED' : 'DISABLED'}`,
         );
@@ -48,15 +49,20 @@ export class MaintenanceService {
 
   private async saveMaintenanceConfig(): Promise<void> {
     try {
-      const value = JSON.stringify(this.maintenanceConfig);
-
-      await this.prisma.$executeRaw`
-        INSERT INTO gloria_ops.system_configs (key, value, category, updated_at)
-        VALUES (${this.STORAGE_KEY}, ${value}, 'maintenance', NOW())
-        ON CONFLICT (key) DO UPDATE
-        SET value = EXCLUDED.value,
-            updated_at = NOW()
-      `;
+      await this.prisma.systemConfig.upsert({
+        where: { key: this.STORAGE_KEY },
+        update: {
+          value: this.maintenanceConfig as unknown as Prisma.InputJsonValue,
+          category: 'maintenance',
+          updatedAt: new Date(),
+        },
+        create: {
+          key: this.STORAGE_KEY,
+          value: this.maintenanceConfig as unknown as Prisma.InputJsonValue,
+          category: 'maintenance',
+          description: 'Maintenance mode configuration',
+        },
+      });
     } catch (error) {
       this.logger.error('Failed to save maintenance config', error);
       throw error;
@@ -67,8 +73,16 @@ export class MaintenanceService {
     dto: MaintenanceModeDto,
     userId: string,
   ): Promise<MaintenanceConfig> {
+    // Check rate limit
+    await this.rateLimiter.checkRateLimit(userId, 'maintenance.enable');
+    
     if (!dto.enabled) {
       return this.disableMaintenanceMode(userId);
+    }
+    
+    // Validate IP addresses if provided
+    if (dto.allowedIps && dto.allowedIps.length > 0) {
+      dto.allowedIps = ValidationUtil.validateIpAddresses(dto.allowedIps);
     }
 
     const previousState = { ...this.maintenanceConfig };

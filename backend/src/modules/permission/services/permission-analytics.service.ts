@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { v4 as uuidv4 } from 'uuid';
+import { v7 as uuidv7 } from 'uuid';
 import { Prisma } from '@prisma/client';
 import { Cron } from '@nestjs/schedule';
 
@@ -59,7 +59,7 @@ export class PermissionAnalyticsService {
 
     await this.prisma.permissionAnalytics.create({
       data: {
-        id: uuidv4(),
+        id: uuidv7(),
         userProfileId: dto.userProfileId,
         permissionCode: dto.permissionCode,
         action: dto.action,
@@ -69,9 +69,10 @@ export class PermissionAnalyticsService {
         responseTime: dto.responseTime,
         context: dto.context || Prisma.JsonNull,
         anomalyScore: anomalyAnalysis.score,
-        anomalyReasons: anomalyAnalysis.reasons.length > 0 
-          ? anomalyAnalysis.reasons 
-          : Prisma.JsonNull,
+        anomalyReasons:
+          anomalyAnalysis.reasons.length > 0
+            ? anomalyAnalysis.reasons
+            : Prisma.JsonNull,
       },
     });
   }
@@ -110,8 +111,8 @@ export class PermissionAnalyticsService {
 
     // Group by permission code
     const patterns = new Map<string, any[]>();
-    
-    analytics.forEach(record => {
+
+    analytics.forEach((record) => {
       if (!patterns.has(record.permissionCode)) {
         patterns.set(record.permissionCode, []);
       }
@@ -121,19 +122,20 @@ export class PermissionAnalyticsService {
     const results: UsagePattern[] = [];
 
     for (const [permissionCode, records] of patterns) {
-      const allowedCount = records.filter(r => r.result === 'allowed').length;
-      const deniedCount = records.filter(r => r.result === 'denied').length;
+      const allowedCount = records.filter((r) => r.result === 'allowed').length;
+      const deniedCount = records.filter((r) => r.result === 'denied').length;
       const responseTimes = records
-        .filter(r => r.responseTime !== null)
-        .map(r => r.responseTime!);
-      
-      const avgResponseTime = responseTimes.length > 0
-        ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
-        : 0;
+        .filter((r) => r.responseTime !== null)
+        .map((r) => r.responseTime!);
+
+      const avgResponseTime =
+        responseTimes.length > 0
+          ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
+          : 0;
 
       // Calculate peak hours
       const hourCounts = new Map<number, number>();
-      records.forEach(r => {
+      records.forEach((r) => {
         const hour = r.timestamp.getHours();
         hourCounts.set(hour, (hourCounts.get(hour) || 0) + 1);
       });
@@ -145,9 +147,12 @@ export class PermissionAnalyticsService {
 
       // Get top resources
       const resourceCounts = new Map<string, number>();
-      records.forEach(r => {
+      records.forEach((r) => {
         if (r.resource) {
-          resourceCounts.set(r.resource, (resourceCounts.get(r.resource) || 0) + 1);
+          resourceCounts.set(
+            r.resource,
+            (resourceCounts.get(r.resource) || 0) + 1,
+          );
         }
       });
 
@@ -209,11 +214,14 @@ export class PermissionAnalyticsService {
       orderBy: { timestamp: 'desc' },
     });
 
-    const anomalies = recentAnomalies.map(record => {
+    const anomalies = recentAnomalies.map((record) => {
       const reasons = record.anomalyReasons as any[];
-      const severity: 'low' | 'medium' | 'high' = record.anomalyScore! >= 0.9 ? 'high' 
-        : record.anomalyScore! >= 0.8 ? 'medium' 
-        : 'low';
+      const severity: 'low' | 'medium' | 'high' =
+        record.anomalyScore! >= 0.9
+          ? 'high'
+          : record.anomalyScore! >= 0.8
+            ? 'medium'
+            : 'low';
 
       return {
         type: reasons[0]?.type || 'unknown',
@@ -245,7 +253,8 @@ export class PermissionAnalyticsService {
 
     // 1. Check unusual access time
     const hour = new Date().getHours();
-    if (hour < 6 || hour > 22) { // Outside business hours
+    if (hour < 6 || hour > 22) {
+      // Outside business hours
       score += 0.2;
       reasons.push({
         type: 'unusual_time',
@@ -255,7 +264,10 @@ export class PermissionAnalyticsService {
     }
 
     // 2. Check response time anomaly
-    if (event.responseTime && event.responseTime > this.RESPONSE_TIME_THRESHOLD) {
+    if (
+      event.responseTime &&
+      event.responseTime > this.RESPONSE_TIME_THRESHOLD
+    ) {
       score += 0.3;
       reasons.push({
         type: 'slow_response',
@@ -339,10 +351,7 @@ export class PermissionAnalyticsService {
     return { score: Math.min(score, 1), reasons };
   }
 
-  async getDashboardStats(params?: { 
-    startDate?: Date; 
-    endDate?: Date;
-  }) {
+  async getDashboardStats(params?: { startDate?: Date; endDate?: Date }) {
     const where: Prisma.PermissionAnalyticsWhereInput = {};
 
     if (params?.startDate || params?.endDate) {
@@ -404,11 +413,11 @@ export class PermissionAnalyticsService {
         anomalyCount,
         avgResponseTime: Math.round(avgResponseTime._avg.responseTime || 0),
       },
-      topUsers: topUsers.map(u => ({
+      topUsers: topUsers.map((u) => ({
         userProfileId: u.userProfileId,
         count: u._count,
       })),
-      topPermissions: topPermissions.map(p => ({
+      topPermissions: topPermissions.map((p) => ({
         permissionCode: p.permissionCode,
         count: p._count,
       })),
@@ -439,7 +448,7 @@ export class PermissionAnalyticsService {
       date: yesterday.toISOString().split('T')[0],
       stats,
       anomalyCount: anomalies.length,
-      criticalAnomalies: anomalies.filter(a => a.anomalyScore >= 0.9).length,
+      criticalAnomalies: anomalies.filter((a) => a.anomalyScore >= 0.9).length,
     });
 
     return {
@@ -469,9 +478,9 @@ export class PermissionAnalyticsService {
     // Group by day
     const dailyStats = new Map<string, any>();
 
-    data.forEach(record => {
+    data.forEach((record) => {
       const day = record.timestamp.toISOString().split('T')[0];
-      
+
       if (!dailyStats.has(day)) {
         dailyStats.set(day, {
           date: day,
@@ -485,7 +494,7 @@ export class PermissionAnalyticsService {
 
       const stats = dailyStats.get(day)!;
       stats.total++;
-      
+
       if (record.result === 'allowed') {
         stats.allowed++;
       } else if (record.result === 'denied') {
@@ -498,10 +507,12 @@ export class PermissionAnalyticsService {
     });
 
     // Calculate averages
-    const trends = Array.from(dailyStats.values()).map(stats => {
-      const avgResponseTime = stats.responseTimes.length > 0
-        ? stats.responseTimes.reduce((a: number, b: number) => a + b, 0) / stats.responseTimes.length
-        : 0;
+    const trends = Array.from(dailyStats.values()).map((stats) => {
+      const avgResponseTime =
+        stats.responseTimes.length > 0
+          ? stats.responseTimes.reduce((a: number, b: number) => a + b, 0) /
+            stats.responseTimes.length
+          : 0;
 
       return {
         date: stats.date,

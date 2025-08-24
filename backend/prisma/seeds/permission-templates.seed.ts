@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
+import { v7 as uuidv7 } from 'uuid';
 
 const prisma = new PrismaClient();
 
@@ -55,7 +55,8 @@ async function seedPermissionTemplates() {
     {
       code: 'department_head_template',
       name: 'Department Head Template',
-      description: 'Full access to department resources with approval capabilities',
+      description:
+        'Full access to department resources with approval capabilities',
       category: 'department_head',
       permissions: [
         { permission: 'workorder.read', scope: 'department' },
@@ -76,7 +77,10 @@ async function seedPermissionTemplates() {
         { permission: 'permission.delegate' },
       ],
       moduleAccess: [
-        { module: 'workorder', actions: ['read', 'create', 'update', 'delete', 'approve'] },
+        {
+          module: 'workorder',
+          actions: ['read', 'create', 'update', 'delete', 'approve'],
+        },
         { module: 'kpi', actions: ['read', 'create', 'update', 'approve'] },
         { module: 'user', actions: ['read', 'update'] },
         { module: 'notification', actions: ['read', 'create'] },
@@ -128,11 +132,20 @@ async function seedPermissionTemplates() {
         { permission: 'report.generate', scope: 'all' },
       ],
       moduleAccess: [
-        { module: 'workorder', actions: ['read', 'create', 'update', 'delete', 'approve'] },
-        { module: 'kpi', actions: ['read', 'create', 'update', 'delete', 'approve'] },
+        {
+          module: 'workorder',
+          actions: ['read', 'create', 'update', 'delete', 'approve'],
+        },
+        {
+          module: 'kpi',
+          actions: ['read', 'create', 'update', 'delete', 'approve'],
+        },
         { module: 'user', actions: ['read', 'create', 'update', 'delete'] },
         { module: 'role', actions: ['read', 'create', 'update', 'delete'] },
-        { module: 'permission', actions: ['read', 'create', 'update', 'delete'] },
+        {
+          module: 'permission',
+          actions: ['read', 'create', 'update', 'delete'],
+        },
         { module: 'system', actions: ['read', 'update'] },
         { module: 'audit', actions: ['read'] },
         { module: 'dashboard', actions: ['view'] },
@@ -150,7 +163,7 @@ async function seedPermissionTemplates() {
     if (!existing) {
       await prisma.permissionTemplate.create({
         data: {
-          id: uuidv4(),
+          id: uuidv7(),
           ...template,
           createdBy: 'system',
         },
@@ -164,29 +177,131 @@ async function seedPermissionTemplates() {
   // Create permissions for the new features if they don't exist
   const newPermissions = [
     // Permission Template permissions
-    { code: 'permission.template.create', name: 'Create Permission Templates', resource: 'permission', action: 'CREATE', scope: 'SYSTEM' },
-    { code: 'permission.template.read', name: 'View Permission Templates', resource: 'permission', action: 'READ', scope: 'SYSTEM' },
-    { code: 'permission.template.update', name: 'Update Permission Templates', resource: 'permission', action: 'UPDATE', scope: 'SYSTEM' },
-    { code: 'permission.template.delete', name: 'Delete Permission Templates', resource: 'permission', action: 'DELETE', scope: 'SYSTEM' },
-    { code: 'permission.template.apply', name: 'Apply Permission Templates', resource: 'permission', action: 'UPDATE', scope: 'SYSTEM' },
-    { code: 'permission.template.revoke', name: 'Revoke Permission Templates', resource: 'permission', action: 'UPDATE', scope: 'SYSTEM' },
-    
+    {
+      code: 'permission.template.create',
+      name: 'Create Permission Templates',
+      resource: 'permission',
+      action: 'CREATE',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.template.read',
+      name: 'View Permission Templates',
+      resource: 'permission',
+      action: 'READ',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.template.update',
+      name: 'Update Permission Templates',
+      resource: 'permission',
+      action: 'UPDATE',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.template.delete',
+      name: 'Delete Permission Templates',
+      resource: 'permission',
+      action: 'DELETE',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.template.apply',
+      name: 'Apply Permission Templates',
+      resource: 'permission',
+      action: 'UPDATE',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.template.revoke',
+      name: 'Revoke Permission Templates',
+      resource: 'permission',
+      action: 'UPDATE',
+      scope: 'SYSTEM',
+    },
+
     // Delegation permissions
-    { code: 'permission.delegation.create', name: 'Create Permission Delegations', resource: 'permission', action: 'CREATE', scope: 'SYSTEM' },
-    { code: 'permission.delegation.read', name: 'View Permission Delegations', resource: 'permission', action: 'READ', scope: 'SYSTEM' },
-    { code: 'permission.delegation.revoke', name: 'Revoke Permission Delegations', resource: 'permission', action: 'UPDATE', scope: 'SYSTEM' },
-    { code: 'permission.delegation.update', name: 'Update Permission Delegations', resource: 'permission', action: 'UPDATE', scope: 'SYSTEM' },
-    { code: 'permission.delegation.admin', name: 'Admin Permission Delegations', resource: 'permission', action: 'UPDATE', scope: 'SYSTEM' },
-    { code: 'permission.delegate', name: 'Delegate Permissions', resource: 'permission', action: 'CREATE', scope: 'OWN' },
-    
+    {
+      code: 'permission.delegation.create',
+      name: 'Create Permission Delegations',
+      resource: 'permission',
+      action: 'CREATE',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.delegation.read',
+      name: 'View Permission Delegations',
+      resource: 'permission',
+      action: 'READ',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.delegation.revoke',
+      name: 'Revoke Permission Delegations',
+      resource: 'permission',
+      action: 'UPDATE',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.delegation.update',
+      name: 'Update Permission Delegations',
+      resource: 'permission',
+      action: 'UPDATE',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.delegation.admin',
+      name: 'Admin Permission Delegations',
+      resource: 'permission',
+      action: 'UPDATE',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.delegate',
+      name: 'Delegate Permissions',
+      resource: 'permission',
+      action: 'CREATE',
+      scope: 'OWN',
+    },
+
     // Analytics permissions
-    { code: 'permission.analytics.view', name: 'View Permission Analytics', resource: 'permission', action: 'READ', scope: 'SYSTEM' },
-    { code: 'permission.analytics.anomaly', name: 'View Anomaly Reports', resource: 'permission', action: 'READ', scope: 'SYSTEM' },
-    { code: 'permission.analytics.admin', name: 'Admin Permission Analytics', resource: 'permission', action: 'UPDATE', scope: 'SYSTEM' },
-    
+    {
+      code: 'permission.analytics.view',
+      name: 'View Permission Analytics',
+      resource: 'permission',
+      action: 'READ',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.analytics.anomaly',
+      name: 'View Anomaly Reports',
+      resource: 'permission',
+      action: 'READ',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.analytics.admin',
+      name: 'Admin Permission Analytics',
+      resource: 'permission',
+      action: 'UPDATE',
+      scope: 'SYSTEM',
+    },
+
     // Bulk operations permissions
-    { code: 'permission.bulk.grant', name: 'Bulk Grant Permissions', resource: 'permission', action: 'CREATE', scope: 'SYSTEM' },
-    { code: 'permission.bulk.revoke', name: 'Bulk Revoke Permissions', resource: 'permission', action: 'DELETE', scope: 'SYSTEM' },
+    {
+      code: 'permission.bulk.grant',
+      name: 'Bulk Grant Permissions',
+      resource: 'permission',
+      action: 'CREATE',
+      scope: 'SYSTEM',
+    },
+    {
+      code: 'permission.bulk.revoke',
+      name: 'Bulk Revoke Permissions',
+      resource: 'permission',
+      action: 'DELETE',
+      scope: 'SYSTEM',
+    },
   ];
 
   for (const perm of newPermissions) {
@@ -197,7 +312,7 @@ async function seedPermissionTemplates() {
     if (!existing) {
       await prisma.permission.create({
         data: {
-          id: uuidv4(),
+          id: uuidv7(),
           ...perm,
           description: perm.name,
           isActive: true,

@@ -54,8 +54,11 @@ export class SystemConfigController {
     description: 'Feature flag created successfully',
   })
   @ApiResponse({ status: 400, description: 'Bad request' })
-  async createFeatureFlag(@Body() dto: FeatureFlagDto) {
-    return this.featureFlagService.createFeatureFlag(dto);
+  async createFeatureFlag(
+    @Body() dto: FeatureFlagDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.featureFlagService.createFeatureFlag(dto, user.userId);
   }
 
   @Get('feature-flags')
@@ -114,8 +117,9 @@ export class SystemConfigController {
   async updateFeatureFlag(
     @Param('name') name: string,
     @Body() dto: UpdateFeatureFlagDto,
+    @CurrentUser() user: any,
   ) {
-    return this.featureFlagService.updateFeatureFlag(name, dto);
+    return this.featureFlagService.updateFeatureFlag(name, dto, user.userId);
   }
 
   @Post('feature-flags/:name/toggle')
@@ -125,8 +129,11 @@ export class SystemConfigController {
     description: 'Feature flag toggled successfully',
   })
   @ApiResponse({ status: 404, description: 'Feature flag not found' })
-  async toggleFeatureFlag(@Param('name') name: string) {
-    return this.featureFlagService.toggleFeatureFlag(name);
+  async toggleFeatureFlag(
+    @Param('name') name: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.featureFlagService.toggleFeatureFlag(name, user.userId);
   }
 
   @Delete('feature-flags/:name')
@@ -137,8 +144,8 @@ export class SystemConfigController {
   })
   @ApiResponse({ status: 404, description: 'Feature flag not found' })
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteFeatureFlag(@Param('name') name: string) {
-    await this.featureFlagService.deleteFeatureFlag(name);
+  async deleteFeatureFlag(@Param('name') name: string, @CurrentUser() user: any) {
+    await this.featureFlagService.deleteFeatureFlag(name, user.userId);
   }
 
   // ==================== Maintenance Mode ====================

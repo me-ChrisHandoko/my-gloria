@@ -1,15 +1,21 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/services/audit.service';
-import { 
-  CreatePermissionTemplateDto, 
-  UpdatePermissionTemplateDto, 
-  ApplyPermissionTemplateDto, 
+import {
+  CreatePermissionTemplateDto,
+  UpdatePermissionTemplateDto,
+  ApplyPermissionTemplateDto,
   RevokePermissionTemplateDto,
-  TemplateTargetType
+  TemplateTargetType,
 } from '../dto/permission-template';
 import { PermissionChangeHistoryService } from './permission-change-history.service';
-import { v4 as uuidv4 } from 'uuid';
+import { v7 as uuidv7 } from 'uuid';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
@@ -26,13 +32,15 @@ export class PermissionTemplateService {
     });
 
     if (existing) {
-      throw new ConflictException(`Permission template with code ${dto.code} already exists`);
+      throw new ConflictException(
+        `Permission template with code ${dto.code} already exists`,
+      );
     }
 
     const template = await this.prisma.$transaction(async (tx) => {
       const created = await tx.permissionTemplate.create({
         data: {
-          id: uuidv4(),
+          id: uuidv7(),
           code: dto.code,
           name: dto.name,
           description: dto.description,
@@ -102,10 +110,7 @@ export class PermissionTemplateService {
           },
         },
       },
-      orderBy: [
-        { category: 'asc' },
-        { name: 'asc' },
-      ],
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
     });
   }
 
@@ -122,7 +127,9 @@ export class PermissionTemplateService {
     });
 
     if (!template) {
-      throw new NotFoundException(`Permission template with ID ${id} not found`);
+      throw new NotFoundException(
+        `Permission template with ID ${id} not found`,
+      );
     }
 
     return template;
@@ -138,7 +145,7 @@ export class PermissionTemplateService {
     const updated = await this.prisma.$transaction(async (tx) => {
       try {
         const result = await tx.permissionTemplate.update({
-          where: { 
+          where: {
             id,
             version: dto.version,
           },
@@ -161,7 +168,9 @@ export class PermissionTemplateService {
           entityDisplay: result.name,
           oldValues: existing,
           newValues: result,
-          metadata: { changedFields: Object.keys(dto).filter(key => key !== 'version') },
+          metadata: {
+            changedFields: Object.keys(dto).filter((key) => key !== 'version'),
+          },
         });
 
         await this.changeHistoryService.recordChange({
@@ -177,7 +186,9 @@ export class PermissionTemplateService {
         return result;
       } catch (error) {
         if (error.code === 'P2025') {
-          throw new ConflictException('Template was modified by another user. Please refresh and try again.');
+          throw new ConflictException(
+            'Template was modified by another user. Please refresh and try again.',
+          );
         }
         throw error;
       }
@@ -194,15 +205,17 @@ export class PermissionTemplateService {
     }
 
     // Check if already applied
-    const existing = await this.prisma.permissionTemplateApplication.findUnique({
-      where: {
-        templateId_targetType_targetId: {
-          templateId: dto.templateId,
-          targetType: dto.targetType,
-          targetId: dto.targetId,
+    const existing = await this.prisma.permissionTemplateApplication.findUnique(
+      {
+        where: {
+          templateId_targetType_targetId: {
+            templateId: dto.templateId,
+            targetType: dto.targetType,
+            targetId: dto.targetId,
+          },
         },
       },
-    });
+    );
 
     if (existing && existing.isActive) {
       throw new ConflictException('Template is already applied to this target');
@@ -224,7 +237,7 @@ export class PermissionTemplateService {
           })
         : await tx.permissionTemplateApplication.create({
             data: {
-              id: uuidv4(),
+              id: uuidv7(),
               templateId: dto.templateId,
               targetType: dto.targetType,
               targetId: dto.targetId,
@@ -248,7 +261,7 @@ export class PermissionTemplateService {
         entityId: app.id,
         entityDisplay: `${template.name} → ${dto.targetType}:${dto.targetId}`,
         newValues: app,
-        metadata: { 
+        metadata: {
           templateName: template.name,
           targetType: dto.targetType,
           targetId: dto.targetId,
@@ -266,7 +279,7 @@ export class PermissionTemplateService {
           permissions: template.permissions,
         },
         performedBy: actorId,
-        metadata: { 
+        metadata: {
           templateName: template.name,
           notes: dto.notes,
         },
@@ -279,10 +292,11 @@ export class PermissionTemplateService {
   }
 
   async revoke(dto: RevokePermissionTemplateDto, actorId: string) {
-    const application = await this.prisma.permissionTemplateApplication.findUnique({
-      where: { id: dto.applicationId },
-      include: { template: true },
-    });
+    const application =
+      await this.prisma.permissionTemplateApplication.findUnique({
+        where: { id: dto.applicationId },
+        include: { template: true },
+      });
 
     if (!application) {
       throw new NotFoundException('Template application not found');
@@ -310,7 +324,7 @@ export class PermissionTemplateService {
         previousState: application,
         newState: updated,
         performedBy: actorId,
-        metadata: { 
+        metadata: {
           reason: dto.reason,
           templateName: application.template.name,
         },
@@ -335,14 +349,14 @@ export class PermissionTemplateService {
   }
 
   private async applyToRole(
-    tx: Prisma.TransactionClient, 
-    template: any, 
-    roleId: string, 
-    actorId: string
+    tx: Prisma.TransactionClient,
+    template: any,
+    roleId: string,
+    actorId: string,
   ) {
     // Apply permissions from template
     const permissions = template.permissions as any[];
-    
+
     for (const perm of permissions) {
       const permission = await tx.permission.findUnique({
         where: { code: perm.permission },
@@ -361,7 +375,7 @@ export class PermissionTemplateService {
       if (!existing) {
         await tx.rolePermission.create({
           data: {
-            id: uuidv4(),
+            id: uuidv7(),
             roleId,
             permissionId: permission.id,
             conditions: perm.conditions || null,
@@ -375,7 +389,7 @@ export class PermissionTemplateService {
     // Apply module access if specified
     if (template.moduleAccess) {
       const moduleAccess = template.moduleAccess as any[];
-      
+
       for (const access of moduleAccess) {
         const module = await tx.module.findUnique({
           where: { code: access.module },
@@ -391,7 +405,7 @@ export class PermissionTemplateService {
             },
           },
           create: {
-            id: uuidv4(),
+            id: uuidv7(),
             roleId,
             moduleId: module.id,
             permissions: access.actions,
@@ -407,14 +421,14 @@ export class PermissionTemplateService {
   }
 
   private async applyToUser(
-    tx: Prisma.TransactionClient, 
-    template: any, 
-    userProfileId: string, 
-    actorId: string
+    tx: Prisma.TransactionClient,
+    template: any,
+    userProfileId: string,
+    actorId: string,
   ) {
     // Apply permissions from template
     const permissions = template.permissions as any[];
-    
+
     for (const perm of permissions) {
       const permission = await tx.permission.findUnique({
         where: { code: perm.permission },
@@ -433,7 +447,7 @@ export class PermissionTemplateService {
       if (!existing) {
         await tx.userPermission.create({
           data: {
-            id: uuidv4(),
+            id: uuidv7(),
             userProfileId,
             permissionId: permission.id,
             conditions: perm.conditions || null,
@@ -447,7 +461,7 @@ export class PermissionTemplateService {
     // Apply module access if specified
     if (template.moduleAccess) {
       const moduleAccess = template.moduleAccess as any[];
-      
+
       for (const access of moduleAccess) {
         const module = await tx.module.findUnique({
           where: { code: access.module },
@@ -457,10 +471,10 @@ export class PermissionTemplateService {
 
         await tx.userModuleAccess.upsert({
           where: {
-            id: uuidv4(), // This will always create new record
+            id: uuidv7(), // This will always create new record
           },
           create: {
-            id: uuidv4(),
+            id: uuidv7(),
             userProfileId,
             moduleId: module.id,
             permissions: access.actions,
@@ -493,16 +507,17 @@ export class PermissionTemplateService {
     }
 
     // Check if template is in use
-    const activeApplications = await this.prisma.permissionTemplateApplication.count({
-      where: {
-        templateId: id,
-        isActive: true,
-      },
-    });
+    const activeApplications =
+      await this.prisma.permissionTemplateApplication.count({
+        where: {
+          templateId: id,
+          isActive: true,
+        },
+      });
 
     if (activeApplications > 0) {
       throw new BadRequestException(
-        `Cannot delete template that is currently applied to ${activeApplications} targets`
+        `Cannot delete template that is currently applied to ${activeApplications} targets`,
       );
     }
 

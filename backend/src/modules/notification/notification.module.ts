@@ -7,6 +7,8 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { AuditModule } from '../audit/audit.module';
 import { CacheModule } from '../../cache/cache.module';
+import { PermissionModule } from '../permission/permission.module';
+import { createQueueConfig } from './config/bull.config';
 import { NotificationController } from './notification.controller';
 import { NotificationHealthController } from './controllers/health.controller';
 import { QueueManagementController } from './controllers/queue-management.controller';
@@ -41,100 +43,108 @@ import { PostmarkProvider } from './providers/postmark.provider';
     PrismaModule,
     AuditModule,
     CacheModule,
+    PermissionModule,
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     PrometheusModule.register({
       defaultMetrics: {
         enabled: true,
       },
-      path: '/metrics',
+      path: '/prometheus-metrics',
       defaultLabels: {
         app: 'notification-service',
       },
     }),
     // Main notification queue
-    BullModule.registerQueue({
-      name: 'notifications',
-      defaultJobOptions: {
-        removeOnComplete: true,
-        removeOnFail: false,
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
+    BullModule.registerQueue(
+      createQueueConfig('notifications', {
+        defaultJobOptions: {
+          removeOnComplete: true,
+          removeOnFail: false,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
         },
-      },
-    }),
+      }),
+    ),
     // Dead letter queue for failed notifications
-    BullModule.registerQueue({
-      name: 'dead-letter-notifications',
-      defaultJobOptions: {
-        removeOnComplete: false,
-        removeOnFail: false,
-        attempts: 1,
-      },
-    }),
+    BullModule.registerQueue(
+      createQueueConfig('dead-letter-notifications', {
+        defaultJobOptions: {
+          removeOnComplete: false,
+          removeOnFail: false,
+          attempts: 1,
+        },
+      }),
+    ),
     // Weighted queues for different priorities
-    BullModule.registerQueue({
-      name: 'notifications-critical',
-      defaultJobOptions: {
-        removeOnComplete: true,
-        removeOnFail: false,
-        attempts: 5,
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
+    BullModule.registerQueue(
+      createQueueConfig('notifications-critical', {
+        defaultJobOptions: {
+          removeOnComplete: true,
+          removeOnFail: false,
+          attempts: 5,
+          backoff: {
+            type: 'exponential',
+            delay: 1000,
+          },
         },
-      },
-    }),
-    BullModule.registerQueue({
-      name: 'notifications-urgent',
-      defaultJobOptions: {
-        removeOnComplete: true,
-        removeOnFail: false,
-        attempts: 4,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
+      }),
+    ),
+    BullModule.registerQueue(
+      createQueueConfig('notifications-urgent', {
+        defaultJobOptions: {
+          removeOnComplete: true,
+          removeOnFail: false,
+          attempts: 4,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
         },
-      },
-    }),
-    BullModule.registerQueue({
-      name: 'notifications-high',
-      defaultJobOptions: {
-        removeOnComplete: true,
-        removeOnFail: false,
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 3000,
+      }),
+    ),
+    BullModule.registerQueue(
+      createQueueConfig('notifications-high', {
+        defaultJobOptions: {
+          removeOnComplete: true,
+          removeOnFail: false,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 3000,
+          },
         },
-      },
-    }),
-    BullModule.registerQueue({
-      name: 'notifications-medium',
-      defaultJobOptions: {
-        removeOnComplete: true,
-        removeOnFail: false,
-        attempts: 3,
-        backoff: {
-          type: 'fixed',
-          delay: 5000,
+      }),
+    ),
+    BullModule.registerQueue(
+      createQueueConfig('notifications-medium', {
+        defaultJobOptions: {
+          removeOnComplete: true,
+          removeOnFail: false,
+          attempts: 3,
+          backoff: {
+            type: 'fixed',
+            delay: 5000,
+          },
         },
-      },
-    }),
-    BullModule.registerQueue({
-      name: 'notifications-low',
-      defaultJobOptions: {
-        removeOnComplete: true,
-        removeOnFail: false,
-        attempts: 2,
-        backoff: {
-          type: 'fixed',
-          delay: 10000,
+      }),
+    ),
+    BullModule.registerQueue(
+      createQueueConfig('notifications-low', {
+        defaultJobOptions: {
+          removeOnComplete: true,
+          removeOnFail: false,
+          attempts: 2,
+          backoff: {
+            type: 'fixed',
+            delay: 10000,
+          },
         },
-      },
-    }),
+      }),
+    ),
   ],
   controllers: [
     NotificationController,

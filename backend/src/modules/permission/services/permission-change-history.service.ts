@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { v4 as uuidv4 } from 'uuid';
+import { v7 as uuidv7 } from 'uuid';
 import { Prisma } from '@prisma/client';
 
 export interface RecordChangeDto {
@@ -27,7 +31,7 @@ export class PermissionChangeHistoryService {
   async recordChange(dto: RecordChangeDto) {
     return this.prisma.permissionChangeHistory.create({
       data: {
-        id: uuidv4(),
+        id: uuidv7(),
         entityType: dto.entityType,
         entityId: dto.entityId,
         operation: dto.operation,
@@ -136,7 +140,9 @@ export class PermissionChangeHistoryService {
           rollbackState = await this.rollbackDelegation(tx, change);
           break;
         default:
-          throw new BadRequestException(`Rollback not supported for entity type: ${change.entityType}`);
+          throw new BadRequestException(
+            `Rollback not supported for entity type: ${change.entityType}`,
+          );
       }
 
       // Mark the original change as rolled back
@@ -151,7 +157,7 @@ export class PermissionChangeHistoryService {
       // Record the rollback as a new change
       const rollbackChange = await tx.permissionChangeHistory.create({
         data: {
-          id: uuidv4(),
+          id: uuidv7(),
           entityType: change.entityType,
           entityId: change.entityId,
           operation: `rollback_${change.operation}`,
@@ -173,7 +179,10 @@ export class PermissionChangeHistoryService {
     return rollbackResult;
   }
 
-  private async rollbackUserPermission(tx: Prisma.TransactionClient, change: any) {
+  private async rollbackUserPermission(
+    tx: Prisma.TransactionClient,
+    change: any,
+  ) {
     const previousState = change.previousState as any;
 
     switch (change.operation) {
@@ -203,7 +212,10 @@ export class PermissionChangeHistoryService {
     return previousState;
   }
 
-  private async rollbackRolePermission(tx: Prisma.TransactionClient, change: any) {
+  private async rollbackRolePermission(
+    tx: Prisma.TransactionClient,
+    change: any,
+  ) {
     const previousState = change.previousState as any;
 
     switch (change.operation) {
@@ -233,7 +245,10 @@ export class PermissionChangeHistoryService {
     return previousState;
   }
 
-  private async rollbackTemplateApplication(tx: Prisma.TransactionClient, change: any) {
+  private async rollbackTemplateApplication(
+    tx: Prisma.TransactionClient,
+    change: any,
+  ) {
     const previousState = change.previousState as any;
 
     if (change.operation === 'apply_template') {
@@ -283,7 +298,10 @@ export class PermissionChangeHistoryService {
     });
   }
 
-  async getUserActivity(userId: string, params?: { limit?: number; offset?: number }) {
+  async getUserActivity(
+    userId: string,
+    params?: { limit?: number; offset?: number },
+  ) {
     return this.getHistory({
       performedBy: userId,
       limit: params?.limit,
@@ -291,9 +309,9 @@ export class PermissionChangeHistoryService {
     });
   }
 
-  async getRollbackableChanges(params?: { 
-    entityType?: string; 
-    limit?: number; 
+  async getRollbackableChanges(params?: {
+    entityType?: string;
+    limit?: number;
     offset?: number;
   }) {
     const where: Prisma.PermissionChangeHistoryWhereInput = {

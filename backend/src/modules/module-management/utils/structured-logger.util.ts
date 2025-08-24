@@ -1,5 +1,5 @@
 import { Injectable, Logger, Scope } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { v7 as uuidv7 } from 'uuid';
 
 /**
  * Log levels for structured logging
@@ -62,7 +62,7 @@ export class StructuredLogger {
 
   constructor(serviceName: string) {
     this.logger = new Logger(serviceName);
-    this.correlationId = uuidv4();
+    this.correlationId = uuidv7();
   }
 
   /**

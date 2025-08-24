@@ -64,11 +64,7 @@ import { permissionMetricsProviders } from './providers/metrics.provider';
   imports: [
     PrismaModule,
     CacheModule,
-    PrometheusModule.register({
-      defaultMetrics: {
-        enabled: false, // We'll use custom metrics
-      },
-    }),
+    // PrometheusModule removed to avoid route conflicts - metrics handled by notification module
   ],
   controllers: [
     PermissionController,

@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { AuditService } from '../../../modules/audit/services/audit.service';
 import {
   BackupConfigDto,
@@ -13,16 +14,18 @@ import {
   BackupType,
   BackupStatus,
 } from '../dto/system-config.dto';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import * as zlib from 'zlib';
-import { pipeline } from 'stream/promises';
-import { createReadStream, createWriteStream } from 'fs';
-
-const execAsync = promisify(exec);
+import {
+  SecureDatabaseConnection,
+  SecureConnectionConfig,
+} from '../utils/secure-db-connection';
+import { SecureBackupUtility, BackupOptions } from '../utils/secure-backup';
+import { SecureConnectionPool } from '../utils/secure-connection-pool';
+import { ValidationUtil } from '../utils/validation.util';
+import { RateLimiterUtil } from '../utils/rate-limiter.util';
+import { QueueService } from '../../queue/services/queue.service';
 
 interface BackupRecord {
   id: string;
@@ -45,19 +48,71 @@ export class BackupService {
   private readonly BACKUP_DIR = process.env.BACKUP_DIR || './backups';
   private readonly STORAGE_KEY = 'system:backups';
   private isBackupInProgress = false;
+  private secureDbConnection: SecureDatabaseConnection;
+  private secureBackupUtil: SecureBackupUtility;
+  private connectionPool: SecureConnectionPool;
 
   constructor(
     private prisma: PrismaService,
     private auditService: AuditService,
+    private rateLimiter: RateLimiterUtil,
+    private queueService: QueueService,
   ) {
+    this.secureDbConnection = new SecureDatabaseConnection();
+    this.secureBackupUtil = new SecureBackupUtility(this.secureDbConnection);
+    this.connectionPool = new SecureConnectionPool(this.secureDbConnection);
     this.initializeBackupDirectory();
     this.loadBackupHistory();
+    this.initializeConnectionPool();
+  }
+
+  private async initializeConnectionPool(): Promise<void> {
+    try {
+      const dbUrl = process.env.DATABASE_URL;
+      if (!dbUrl) {
+        this.logger.error('DATABASE_URL not configured');
+        return;
+      }
+
+      const config = this.parseDbUrl(dbUrl);
+      await this.connectionPool.createPool(config, {
+        maxConnections: 10,
+        minConnections: 2,
+        connectionTimeout: 30000,
+        idleTimeout: 30000,
+        statementTimeout: 300000, // 5 minutes for backup operations
+        enableQueryLogging: process.env.NODE_ENV !== 'production',
+      });
+
+      this.logger.log('Secure connection pool initialized');
+    } catch (error) {
+      this.logger.error('Failed to initialize connection pool', error);
+    }
+  }
+
+  private parseDbUrl(dbUrl: string): SecureConnectionConfig {
+    const urlParts = new URL(dbUrl);
+    return {
+      host: urlParts.hostname,
+      port: parseInt(urlParts.port || '5432', 10),
+      database: urlParts.pathname.substring(1),
+      username: urlParts.username,
+      password: decodeURIComponent(urlParts.password || ''),
+      ssl: process.env.NODE_ENV === 'production',
+    };
   }
 
   private async initializeBackupDirectory(): Promise<void> {
     try {
-      await fs.mkdir(this.BACKUP_DIR, { recursive: true });
-      this.logger.log(`Backup directory initialized: ${this.BACKUP_DIR}`);
+      // Validate and resolve backup directory path
+      const validatedPath = ValidationUtil.validateBackupDirectory(this.BACKUP_DIR);
+      
+      await fs.mkdir(validatedPath, { recursive: true });
+
+      // Verify the directory is writable
+      await fs.access(validatedPath, fs.constants.W_OK);
+
+      this.logger.log(`Backup directory initialized: ${validatedPath}`);
     } catch (error) {
       this.logger.error('Failed to create backup directory', error);
     }
@@ -65,15 +120,12 @@ export class BackupService {
 
   private async loadBackupHistory(): Promise<void> {
     try {
-      const stored = await this.prisma.$queryRaw<any[]>`
-        SELECT value 
-        FROM gloria_ops.system_configs 
-        WHERE key = ${this.STORAGE_KEY}
-        LIMIT 1
-      `.catch(() => null);
+      const stored = await this.prisma.systemConfig.findUnique({
+        where: { key: this.STORAGE_KEY },
+      });
 
-      if (stored && stored[0]?.value) {
-        const backups = JSON.parse(stored[0].value);
+      if (stored?.value) {
+        const backups = stored.value as unknown as BackupRecord[];
         backups.forEach((backup: BackupRecord) => {
           this.backups.set(backup.id, backup);
         });
@@ -87,15 +139,21 @@ export class BackupService {
   private async saveBackupHistory(): Promise<void> {
     try {
       const backups = Array.from(this.backups.values());
-      const value = JSON.stringify(backups);
 
-      await this.prisma.$executeRaw`
-        INSERT INTO gloria_ops.system_configs (key, value, category, updated_at)
-        VALUES (${this.STORAGE_KEY}, ${value}, 'backup', NOW())
-        ON CONFLICT (key) DO UPDATE
-        SET value = EXCLUDED.value,
-            updated_at = NOW()
-      `;
+      await this.prisma.systemConfig.upsert({
+        where: { key: this.STORAGE_KEY },
+        update: {
+          value: backups as unknown as Prisma.InputJsonValue,
+          category: 'backup',
+          updatedAt: new Date(),
+        },
+        create: {
+          key: this.STORAGE_KEY,
+          value: backups as unknown as Prisma.InputJsonValue,
+          category: 'backup',
+          description: 'Backup records',
+        },
+      });
     } catch (error) {
       this.logger.error('Failed to save backup history', error);
       throw error;
@@ -106,15 +164,25 @@ export class BackupService {
     config: BackupConfigDto,
     userId: string,
   ): Promise<BackupStatusDto> {
-    if (this.isBackupInProgress) {
-      throw new BadRequestException('A backup is already in progress');
-    }
-
-    this.isBackupInProgress = true;
+    // Check rate limit
+    await this.rateLimiter.checkRateLimit(userId, 'backup.create');
     const backupId = crypto.randomUUID();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileName = `backup-${config.type}-${timestamp}.sql`;
-    const filePath = path.join(this.BACKUP_DIR, fileName);
+    
+    // Validate file path to prevent path traversal
+    const filePath = ValidationUtil.validateFilePath(
+      path.join(this.BACKUP_DIR, fileName),
+      this.BACKUP_DIR,
+    );
+
+    // Validate table names if provided
+    const validatedIncludeTables = config.includeTables
+      ? ValidationUtil.validateTableNames(config.includeTables)
+      : undefined;
+    const validatedExcludeTables = config.excludeTables
+      ? ValidationUtil.validateTableNames(config.excludeTables)
+      : undefined;
 
     const backupRecord: BackupRecord = {
       id: backupId,
@@ -123,8 +191,8 @@ export class BackupService {
       startedAt: new Date(),
       description: config.description,
       metadata: {
-        includeTables: config.includeTables,
-        excludeTables: config.excludeTables,
+        includeTables: validatedIncludeTables,
+        excludeTables: validatedExcludeTables,
         compress: config.compress,
         encrypt: config.encrypt,
       },
@@ -147,17 +215,39 @@ export class BackupService {
       },
     });
 
-    // Execute backup asynchronously
-    this.executeBackup(backupId, filePath, config)
-      .then(async () => {
-        this.logger.log(`Backup ${backupId} completed successfully`);
-      })
-      .catch(async (error) => {
-        this.logger.error(`Backup ${backupId} failed`, error);
-      })
-      .finally(() => {
-        this.isBackupInProgress = false;
+    // Add backup job to queue
+    try {
+      const job = await this.queueService.addBackupJob({
+        backupId,
+        tables: validatedIncludeTables,
+        excludeTables: validatedExcludeTables,
+        compression: config.compress,
+        userId,
+        metadata: {
+          type: config.type,
+          description: config.description,
+          encrypt: config.encrypt,
+        },
       });
+
+      // Update backup record with job ID
+      backupRecord.metadata = {
+        ...backupRecord.metadata,
+        jobId: job.id,
+      };
+      this.backups.set(backupId, backupRecord);
+      await this.saveBackupHistory();
+
+      this.logger.log(`Backup job ${job.id} queued for backup ${backupId}`);
+    } catch (error) {
+      // Update backup status to failed
+      backupRecord.status = BackupStatus.FAILED;
+      backupRecord.error = error.message;
+      this.backups.set(backupId, backupRecord);
+      await this.saveBackupHistory();
+      
+      throw new BadRequestException(`Failed to queue backup: ${error.message}`);
+    }
 
     return this.mapToStatusDto(backupRecord);
   }
@@ -177,90 +267,65 @@ export class BackupService {
         throw new Error('DATABASE_URL not configured');
       }
 
-      // Parse connection string
-      const urlParts = new URL(dbUrl);
-      const host = urlParts.hostname;
-      const port = urlParts.port || '5432';
-      const database = urlParts.pathname.substring(1);
-      const username = urlParts.username;
-      const password = urlParts.password;
+      // Parse connection config securely
+      const dbConfig = this.parseDbUrl(dbUrl);
 
-      // Build pg_dump command
-      let command = `PGPASSWORD=${password} pg_dump`;
-      command += ` -h ${host} -p ${port} -U ${username} -d ${database}`;
-      command += ` -f ${filePath}`;
-      command += ' --schema=gloria_ops'; // Only backup gloria_ops schema
+      // Additional validation for file path (double-check)
+      const validatedFilePath = ValidationUtil.validateFilePath(
+        filePath,
+        this.BACKUP_DIR,
+      );
 
-      // Add type-specific options
-      if (config.type === BackupType.INCREMENTAL) {
-        command += ' --data-only';
-      } else if (config.type === BackupType.DIFFERENTIAL) {
-        command += ' --schema-only';
-      }
+      // Build backup options with validated table names
+      const backupOptions: BackupOptions = {
+        schema: 'gloria_ops',
+        includeTables: backup.metadata.includeTables,
+        excludeTables: backup.metadata.excludeTables,
+        dataOnly: config.type === BackupType.INCREMENTAL,
+        schemaOnly: config.type === BackupType.DIFFERENTIAL,
+        compress: config.compress || false,
+      };
 
-      // Add table filters
-      if (config.includeTables && config.includeTables.length > 0) {
-        config.includeTables.forEach((table) => {
-          command += ` -t gloria_ops.${table}`;
-        });
-      }
+      // Execute backup using secure utility
+      this.logger.log(`Executing secure backup for ${backupId}`);
+      const result = await this.secureBackupUtil.createBackup(
+        dbConfig,
+        validatedFilePath,
+        backupOptions,
+      );
 
-      if (config.excludeTables && config.excludeTables.length > 0) {
-        config.excludeTables.forEach((table) => {
-          command += ` -T gloria_ops.${table}`;
-        });
-      }
-
-      // Execute backup
-      this.logger.log(`Executing backup command for ${backupId}`);
-      await execAsync(command);
-
-      // Get file stats
-      const stats = await fs.stat(filePath);
-      let finalPath = filePath;
-      let finalSize = stats.size;
-
-      // Compress if requested
-      if (config.compress) {
-        const compressedPath = `${filePath}.gz`;
-        await pipeline(
-          createReadStream(filePath),
-          zlib.createGzip(),
-          createWriteStream(compressedPath),
-        );
-
-        // Remove uncompressed file
-        await fs.unlink(filePath);
-        finalPath = compressedPath;
-
-        const compressedStats = await fs.stat(compressedPath);
-        finalSize = compressedStats.size;
-
-        this.logger.log(
-          `Backup ${backupId} compressed from ${stats.size} to ${finalSize} bytes`,
-        );
+      if (!result.success) {
+        throw new Error(result.error || 'Backup failed');
       }
 
       // Update backup record
       backup.status = BackupStatus.COMPLETED;
       backup.completedAt = new Date();
-      backup.filePath = finalPath;
-      backup.sizeBytes = finalSize;
+      backup.filePath = result.filePath;
+      backup.sizeBytes = result.sizeBytes;
 
       this.backups.set(backupId, backup);
       await this.saveBackupHistory();
+
+      // Log connection security status
+      const connId =
+        this.secureDbConnection.createConnectionIdentifier(dbConfig);
+      this.logger.log(
+        `Backup ${backupId} completed [${connId}] - Size: ${result.sizeBytes} bytes, Duration: ${result.duration}ms`,
+      );
 
       // Audit successful backup
       await this.auditService.log({
         actorId: backup.createdBy,
         module: 'system-config',
-        action: 'CREATE' as any, // backup.complete
+        action: 'CREATE' as any,
         entityType: 'system',
         entityId: backupId,
         metadata: {
-          filePath: finalPath,
-          sizeBytes: finalSize,
-          duration: backup.completedAt.getTime() - backup.startedAt.getTime(),
+          filePath: result.filePath,
+          sizeBytes: result.sizeBytes,
+          duration: result.duration,
+          secure: true,
         },
       });
     } catch (error) {
@@ -276,7 +341,7 @@ export class BackupService {
       await this.auditService.log({
         actorId: backup.createdBy,
         module: 'system-config',
-        action: 'CREATE' as any, // backup.fail
+        action: 'CREATE' as any,
         entityType: 'system',
         entityId: backupId,
         metadata: {
@@ -289,6 +354,9 @@ export class BackupService {
   }
 
   async restoreBackup(dto: RestoreBackupDto, userId: string): Promise<void> {
+    // Check rate limit
+    await this.rateLimiter.checkRateLimit(userId, 'backup.restore');
+    
     const backup = this.backups.get(dto.backupId);
     if (!backup) {
       throw new NotFoundException(`Backup ${dto.backupId} not found`);
@@ -302,9 +370,15 @@ export class BackupService {
       throw new BadRequestException(`Backup ${dto.backupId} has no file path`);
     }
 
+    // Validate backup file path to prevent path traversal
+    const validatedBackupPath = ValidationUtil.validateFilePath(
+      backup.filePath,
+      this.BACKUP_DIR,
+    );
+
     // Check if file exists
     try {
-      await fs.access(backup.filePath);
+      await fs.access(validatedBackupPath);
     } catch {
       throw new NotFoundException(`Backup file not found: ${backup.filePath}`);
     }
@@ -313,7 +387,7 @@ export class BackupService {
     await this.auditService.log({
       actorId: userId,
       module: 'system-config',
-      action: 'UPDATE' as any, // backup.restore_start
+      action: 'UPDATE' as any,
       entityType: 'system',
       entityId: dto.backupId,
       metadata: {
@@ -329,52 +403,39 @@ export class BackupService {
         throw new Error('DATABASE_URL not configured');
       }
 
-      const urlParts = new URL(dbUrl);
-      const host = urlParts.hostname;
-      const port = urlParts.port || '5432';
-      const database = urlParts.pathname.substring(1);
-      const username = urlParts.username;
-      const password = urlParts.password;
+      // Parse connection config securely
+      const dbConfig = this.parseDbUrl(dbUrl);
 
-      let restoreFile = backup.filePath;
+      // Execute restore using secure utility
+      this.logger.log(`Executing secure restore for backup ${dto.backupId}`);
+      const result = await this.secureBackupUtil.restoreBackup(
+        dbConfig,
+        validatedBackupPath,
+        dto.verify || false,
+      );
 
-      // Decompress if needed
-      if (backup.filePath.endsWith('.gz')) {
-        const tempFile = backup.filePath.replace('.gz', '.temp.sql');
-        await pipeline(
-          createReadStream(backup.filePath),
-          zlib.createGunzip(),
-          createWriteStream(tempFile),
-        );
-        restoreFile = tempFile;
+      if (!result.success) {
+        throw new Error(result.error || 'Restore failed');
       }
 
-      // Verify backup if requested
-      if (dto.verify) {
-        const verifyCommand = `PGPASSWORD=${password} psql -h ${host} -p ${port} -U ${username} -d ${database} -f ${restoreFile} --dry-run`;
-        await execAsync(verifyCommand).catch((error) => {
-          throw new BadRequestException(
-            `Backup verification failed: ${error.message}`,
-          );
-        });
-      }
-
-      // Execute restore
-      const restoreCommand = `PGPASSWORD=${password} psql -h ${host} -p ${port} -U ${username} -d ${database} -f ${restoreFile}`;
-      await execAsync(restoreCommand);
-
-      // Clean up temp file if created
-      if (restoreFile !== backup.filePath) {
-        await fs.unlink(restoreFile);
-      }
+      // Log connection security status
+      const connId =
+        this.secureDbConnection.createConnectionIdentifier(dbConfig);
+      this.logger.log(
+        `Backup ${dto.backupId} restored successfully [${connId}] - Duration: ${result.duration}ms`,
+      );
 
       // Audit successful restore
       await this.auditService.log({
         actorId: userId,
         module: 'system-config',
-        action: 'UPDATE' as any, // backup.restore_complete
+        action: 'UPDATE' as any,
         entityType: 'system',
         entityId: dto.backupId,
+        metadata: {
+          duration: result.duration,
+          secure: true,
+        },
       });
 
       this.logger.log(
@@ -385,7 +446,7 @@ export class BackupService {
       await this.auditService.log({
         actorId: userId,
         module: 'system-config',
-        action: 'UPDATE' as any, // backup.restore_fail
+        action: 'UPDATE' as any,
         entityType: 'system',
         entityId: dto.backupId,
         metadata: {
@@ -427,6 +488,9 @@ export class BackupService {
   }
 
   async deleteBackup(backupId: string, userId: string): Promise<void> {
+    // Check rate limit
+    await this.rateLimiter.checkRateLimit(userId, 'backup.delete');
+    
     const backup = this.backups.get(backupId);
     if (!backup) {
       throw new NotFoundException(`Backup ${backupId} not found`);
@@ -499,5 +563,37 @@ export class BackupService {
       sizeBytes: backup.sizeBytes,
       error: backup.error,
     };
+  }
+
+  /**
+   * Gets connection pool health status
+   */
+  async getConnectionPoolHealth(): Promise<{
+    healthy: boolean;
+    metrics: any;
+    warnings: string[];
+  }> {
+    try {
+      return await this.connectionPool.checkHealth();
+    } catch (error) {
+      this.logger.error('Failed to get connection pool health', error);
+      return {
+        healthy: false,
+        metrics: null,
+        warnings: ['Connection pool health check failed'],
+      };
+    }
+  }
+
+  /**
+   * Cleanup method called on module destroy
+   */
+  async onModuleDestroy(): Promise<void> {
+    try {
+      await this.connectionPool.close();
+      this.logger.log('Backup service cleanup completed');
+    } catch (error) {
+      this.logger.error('Error during backup service cleanup', error);
+    }
   }
 }

@@ -8,7 +8,7 @@ import {
 import { Observable } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { v4 as uuidv4 } from 'uuid';
+import { v7 as uuidv7 } from 'uuid';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -21,7 +21,7 @@ export class LoggingInterceptor implements NestInterceptor {
 
     // Generate correlation ID if not present
     const correlationId =
-      (request.headers['x-correlation-id'] as string) || uuidv4();
+      (request.headers['x-correlation-id'] as string) || uuidv7();
 
     // Attach correlation ID to request and response
     (request as any).correlationId = correlationId;

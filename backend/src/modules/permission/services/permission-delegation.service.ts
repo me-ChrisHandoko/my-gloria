@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/services/audit.service';
 import { PermissionChangeHistoryService } from './permission-change-history.service';
 import { CreateDelegationDto, RevokeDelegationDto } from '../dto/delegation';
-import { v4 as uuidv4 } from 'uuid';
+import { v7 as uuidv7 } from 'uuid';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
@@ -20,7 +25,9 @@ export class PermissionDelegationService {
     const validUntil = new Date(dto.validUntil);
 
     if (validFrom >= validUntil) {
-      throw new BadRequestException('Valid from date must be before valid until date');
+      throw new BadRequestException(
+        'Valid from date must be before valid until date',
+      );
     }
 
     if (validUntil <= new Date()) {
@@ -63,33 +70,35 @@ export class PermissionDelegationService {
 
     // Verify delegator has the permissions they're trying to delegate
     const delegatorPermissionCodes = this.extractUserPermissionCodes(delegator);
-    const requestedPermissions = dto.permissions.map(p => p.permission);
+    const requestedPermissions = dto.permissions.map((p) => p.permission);
 
     const unauthorizedPermissions = requestedPermissions.filter(
-      perm => !delegatorPermissionCodes.includes(perm)
+      (perm) => !delegatorPermissionCodes.includes(perm),
     );
 
     if (unauthorizedPermissions.length > 0) {
       throw new ForbiddenException(
-        `Cannot delegate permissions you don't have: ${unauthorizedPermissions.join(', ')}`
+        `Cannot delegate permissions you don't have: ${unauthorizedPermissions.join(', ')}`,
       );
     }
 
     // Check for existing active delegations with overlapping permissions
-    const existingDelegations = await this.prisma.permissionDelegation.findMany({
-      where: {
-        delegatorId,
-        delegateId: dto.delegateId,
-        isRevoked: false,
-        validUntil: { gte: new Date() },
+    const existingDelegations = await this.prisma.permissionDelegation.findMany(
+      {
+        where: {
+          delegatorId,
+          delegateId: dto.delegateId,
+          isRevoked: false,
+          validUntil: { gte: new Date() },
+        },
       },
-    });
+    );
 
     // Create the delegation
     const delegation = await this.prisma.$transaction(async (tx) => {
       const created = await tx.permissionDelegation.create({
         data: {
-          id: uuidv4(),
+          id: uuidv7(),
           delegatorId,
           delegateId: dto.delegateId,
           permissions: dto.permissions as unknown as Prisma.InputJsonValue,
@@ -175,10 +184,7 @@ export class PermissionDelegationService {
           },
         },
       },
-      orderBy: [
-        { validFrom: 'desc' },
-        { createdAt: 'desc' },
-      ],
+      orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }],
     });
   }
 
@@ -217,7 +223,9 @@ export class PermissionDelegationService {
       });
 
       if (!actor?.isSuperadmin) {
-        throw new ForbiddenException('Only the delegator or an admin can revoke this delegation');
+        throw new ForbiddenException(
+          'Only the delegator or an admin can revoke this delegation',
+        );
       }
     }
 
@@ -293,12 +301,12 @@ export class PermissionDelegationService {
 
   async getDelegatedPermissions(userId: string): Promise<string[]> {
     const activeDelegations = await this.getActiveDelegations(userId);
-    
+
     const permissions = new Set<string>();
-    
+
     for (const delegation of activeDelegations) {
       const delegationPerms = delegation.permissions as any[];
-      delegationPerms.forEach(perm => {
+      delegationPerms.forEach((perm) => {
         if (typeof perm === 'string') {
           permissions.add(perm);
         } else if (perm.permission) {
@@ -387,11 +395,17 @@ export class PermissionDelegationService {
     return Array.from(permissions);
   }
 
-  async extendDelegation(delegationId: string, newValidUntil: Date, actorId: string) {
+  async extendDelegation(
+    delegationId: string,
+    newValidUntil: Date,
+    actorId: string,
+  ) {
     const delegation = await this.findOne(delegationId);
 
     if (delegation.delegatorId !== actorId) {
-      throw new ForbiddenException('Only the delegator can extend this delegation');
+      throw new ForbiddenException(
+        'Only the delegator can extend this delegation',
+      );
     }
 
     if (delegation.isRevoked) {
@@ -399,7 +413,9 @@ export class PermissionDelegationService {
     }
 
     if (newValidUntil <= delegation.validUntil) {
-      throw new BadRequestException('New expiry date must be later than current expiry');
+      throw new BadRequestException(
+        'New expiry date must be later than current expiry',
+      );
     }
 
     const extended = await this.prisma.$transaction(async (tx) => {

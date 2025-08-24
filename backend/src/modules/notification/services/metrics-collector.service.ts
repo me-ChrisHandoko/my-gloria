@@ -45,38 +45,64 @@ export class MetricsCollectorService implements OnModuleInit {
       ];
 
       for (const { name, queue } of queues) {
-        const [waiting, active, completed, failed, delayed] = await Promise.all(
-          [
-            queue.getWaitingCount(),
-            queue.getActiveCount(),
-            queue.getCompletedCount(),
-            queue.getFailedCount(),
-            queue.getDelayedCount(),
-          ],
-        );
+        try {
+          // Check if the queue client is connected
+          const client = queue.client;
+          if (!client || client.status !== 'ready') {
+            this.logger.warn(
+              `Queue ${name} Redis client is not ready, skipping metrics collection`,
+            );
+            continue;
+          }
 
-        const totalSize = waiting + active + delayed;
+          const [waiting, active, completed, failed, delayed] =
+            await Promise.all([
+              queue.getWaitingCount(),
+              queue.getActiveCount(),
+              queue.getCompletedCount(),
+              queue.getFailedCount(),
+              queue.getDelayedCount(),
+            ]);
 
-        // Update metrics
-        this.metricsService.updateQueueSize(name, totalSize);
+          const totalSize = waiting + active + delayed;
 
-        if (name === 'dead-letter') {
-          this.metricsService.updateDeadLetterQueueSize(totalSize);
+          // Update metrics
+          this.metricsService.updateQueueSize(name, totalSize);
 
-          // Check alert thresholds for dead letter queue
-          this.checkDeadLetterQueueAlerts(totalSize);
-        } else {
-          // Check alert thresholds for regular queues
-          this.checkQueueSizeAlerts(name, totalSize);
+          if (name === 'dead-letter') {
+            this.metricsService.updateDeadLetterQueueSize(totalSize);
+
+            // Check alert thresholds for dead letter queue
+            this.checkDeadLetterQueueAlerts(totalSize);
+          } else {
+            // Check alert thresholds for regular queues
+            this.checkQueueSizeAlerts(name, totalSize);
+          }
+
+          // Log queue stats for debugging
+          this.logger.debug(
+            `Queue ${name}: waiting=${waiting}, active=${active}, completed=${completed}, failed=${failed}, delayed=${delayed}`,
+          );
+        } catch (queueError) {
+          // Handle individual queue errors without stopping the entire metrics collection
+          this.logger.error(
+            `Error collecting metrics for queue ${name}:`,
+            queueError,
+          );
+
+          // Emit an event for monitoring purposes
+          this.eventEmitter.emit('notification.queue.error', {
+            queue: name,
+            error:
+              queueError instanceof Error
+                ? queueError.message
+                : String(queueError),
+            timestamp: new Date(),
+          });
         }
-
-        // Log queue stats for debugging
-        this.logger.debug(
-          `Queue ${name}: waiting=${waiting}, active=${active}, completed=${completed}, failed=${failed}, delayed=${delayed}`,
-        );
       }
     } catch (error) {
-      this.logger.error('Error collecting queue metrics', error);
+      this.logger.error('Error in queue metrics collection process', error);
     }
   }
 
@@ -85,7 +111,7 @@ export class MetricsCollectorService implements OnModuleInit {
   async collectHealthMetrics() {
     try {
       // This would be integrated with actual health checks
-      const healthStatus = await this.checkSystemHealth();
+      const healthStatus = this.checkSystemHealth();
 
       // Update circuit breaker metrics
       for (const [service, status] of Object.entries(
@@ -116,15 +142,20 @@ export class MetricsCollectorService implements OnModuleInit {
       this.eventEmitter.emit('notification.performance.report', snapshot);
 
       // Check for performance degradation
-      await this.checkPerformanceAlerts(snapshot);
+      this.checkPerformanceAlerts(snapshot);
     } catch (error) {
       this.logger.error('Error calculating performance stats', error);
     }
   }
 
   private async collectInitialMetrics() {
-    await this.collectQueueMetrics();
-    await this.collectHealthMetrics();
+    try {
+      await this.collectQueueMetrics();
+      await this.collectHealthMetrics();
+    } catch (error) {
+      this.logger.error('Error during initial metrics collection', error);
+      // Don't throw - allow the service to start even if initial collection fails
+    }
   }
 
   private checkQueueSizeAlerts(queueName: string, size: number) {
@@ -195,15 +226,16 @@ export class MetricsCollectorService implements OnModuleInit {
     }
   }
 
-  private async checkPerformanceAlerts(snapshot: any) {
+  private checkPerformanceAlerts(snapshot: {
+    averageProcessingTime?: Record<string, number>;
+    errorRates?: Record<string, number>;
+  }) {
     // Check average processing time
     if (snapshot.averageProcessingTime) {
       for (const [type, avgTime] of Object.entries(
         snapshot.averageProcessingTime,
       )) {
-        if (
-          (avgTime as number) >= ALERT_THRESHOLDS.PROCESSING_TIME_CRITICAL_MS
-        ) {
+        if (avgTime >= ALERT_THRESHOLDS.PROCESSING_TIME_CRITICAL_MS) {
           this.emitAlert(
             'critical',
             `Processing time critical for ${type}: ${avgTime}ms`,
@@ -213,9 +245,7 @@ export class MetricsCollectorService implements OnModuleInit {
               threshold: ALERT_THRESHOLDS.PROCESSING_TIME_CRITICAL_MS,
             },
           );
-        } else if (
-          (avgTime as number) >= ALERT_THRESHOLDS.PROCESSING_TIME_WARNING_MS
-        ) {
+        } else if (avgTime >= ALERT_THRESHOLDS.PROCESSING_TIME_WARNING_MS) {
           this.emitAlert(
             'warning',
             `Processing time warning for ${type}: ${avgTime}ms`,
@@ -232,7 +262,7 @@ export class MetricsCollectorService implements OnModuleInit {
     // Check error rates
     if (snapshot.errorRates) {
       for (const [channel, rate] of Object.entries(snapshot.errorRates)) {
-        if ((rate as number) >= ALERT_THRESHOLDS.ERROR_RATE_CRITICAL) {
+        if (rate >= ALERT_THRESHOLDS.ERROR_RATE_CRITICAL) {
           this.emitAlert(
             'critical',
             `Error rate critical for ${channel}: ${rate}%`,
@@ -242,7 +272,7 @@ export class MetricsCollectorService implements OnModuleInit {
               threshold: ALERT_THRESHOLDS.ERROR_RATE_CRITICAL,
             },
           );
-        } else if ((rate as number) >= ALERT_THRESHOLDS.ERROR_RATE_WARNING) {
+        } else if (rate >= ALERT_THRESHOLDS.ERROR_RATE_WARNING) {
           this.emitAlert(
             'warning',
             `Error rate warning for ${channel}: ${rate}%`,
@@ -272,7 +302,7 @@ export class MetricsCollectorService implements OnModuleInit {
     });
   }
 
-  private async checkSystemHealth() {
+  private checkSystemHealth() {
     // This would integrate with actual health checks
     return {
       circuitBreakers: {

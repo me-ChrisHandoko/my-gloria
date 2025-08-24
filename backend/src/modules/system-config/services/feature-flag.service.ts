@@ -1,131 +1,221 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { FeatureFlagDto, UpdateFeatureFlagDto } from '../dto/system-config.dto';
+import { FeatureFlag as PrismaFeatureFlag, AuditAction } from '@prisma/client';
+import { AuditService } from '../../audit/services/audit.service';
+import { RateLimiterUtil } from '../utils/rate-limiter.util';
+import { ValidationUtil } from '../utils/validation.util';
 import * as crypto from 'crypto';
-
-export interface FeatureFlag {
-  id: string;
-  name: string;
-  enabled: boolean;
-  description?: string;
-  allowedGroups?: string[];
-  rolloutPercentage?: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
 
 @Injectable()
 export class FeatureFlagService {
   private readonly logger = new Logger(FeatureFlagService.name);
-  private featureFlags: Map<string, FeatureFlag> = new Map();
-  private readonly STORAGE_KEY = 'system:feature_flags';
 
-  constructor(private prisma: PrismaService) {
-    this.loadFeatureFlags();
-  }
+  constructor(
+    private prisma: PrismaService,
+    private auditService: AuditService,
+    private rateLimiter: RateLimiterUtil,
+  ) {}
 
-  private async loadFeatureFlags(): Promise<void> {
-    try {
-      // Load from database (using a generic key-value store approach)
-      const stored = await this.prisma.$queryRaw<any[]>`
-        SELECT value 
-        FROM gloria_ops.system_configs 
-        WHERE key = ${this.STORAGE_KEY}
-        LIMIT 1
-      `.catch(() => null);
-
-      if (stored && stored[0]?.value) {
-        const flags = JSON.parse(stored[0].value);
-        flags.forEach((flag: FeatureFlag) => {
-          this.featureFlags.set(flag.name, flag);
-        });
-        this.logger.log(`Loaded ${this.featureFlags.size} feature flags`);
-      }
-    } catch (error) {
-      this.logger.error('Failed to load feature flags', error);
+  async createFeatureFlag(dto: FeatureFlagDto, createdBy?: string): Promise<PrismaFeatureFlag> {
+    // Check rate limit if user is provided
+    if (createdBy) {
+      await this.rateLimiter.checkRateLimit(createdBy, 'feature-flag.create');
     }
-  }
-
-  private async saveFeatureFlags(): Promise<void> {
+    
+    // Validate feature flag name
+    const validatedName = ValidationUtil.validateFeatureFlagName(dto.name);
+    
+    // Validate rollout percentage if provided
+    const validatedRolloutPercentage = dto.rolloutPercentage !== undefined
+      ? ValidationUtil.validateRolloutPercentage(dto.rolloutPercentage)
+      : undefined;
+    
     try {
-      const flags = Array.from(this.featureFlags.values());
-      const value = JSON.stringify(flags);
+      const flag = await this.prisma.featureFlag.create({
+        data: {
+          name: validatedName,
+          enabled: dto.enabled,
+          description: dto.description,
+          allowedGroups: dto.allowedGroups,
+          rolloutPercentage: validatedRolloutPercentage,
+          createdBy,
+          updatedBy: createdBy,
+        },
+      });
 
-      await this.prisma.$executeRaw`
-        INSERT INTO gloria_ops.system_configs (key, value, category, updated_at)
-        VALUES (${this.STORAGE_KEY}, ${value}, 'feature', NOW())
-        ON CONFLICT (key) DO UPDATE
-        SET value = EXCLUDED.value,
-            updated_at = NOW()
-      `;
+      // Audit log
+      if (createdBy) {
+        await this.auditService.log({
+          actorId: createdBy,
+          module: 'SystemConfig',
+          entityType: 'FeatureFlag',
+          entityId: flag.id,
+          entityDisplay: flag.name,
+          action: AuditAction.CREATE,
+          newValues: flag,
+          metadata: {
+            flagName: flag.name,
+            enabled: flag.enabled,
+            rolloutPercentage: flag.rolloutPercentage,
+          },
+        });
+      }
+
+      this.logger.log(`Created feature flag: ${flag.name}`);
+      return flag;
     } catch (error) {
-      this.logger.error('Failed to save feature flags', error);
+      if (error.code === 'P2002') {
+        throw new ConflictException(`Feature flag '${dto.name}' already exists`);
+      }
       throw error;
     }
-  }
-
-  async createFeatureFlag(dto: FeatureFlagDto): Promise<FeatureFlag> {
-    const flag: FeatureFlag = {
-      id: crypto.randomUUID(),
-      name: dto.name,
-      enabled: dto.enabled,
-      description: dto.description,
-      allowedGroups: dto.allowedGroups,
-      rolloutPercentage: dto.rolloutPercentage,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    this.featureFlags.set(flag.name, flag);
-    await this.saveFeatureFlags();
-
-    this.logger.log(`Created feature flag: ${flag.name}`);
-    return flag;
   }
 
   async updateFeatureFlag(
     name: string,
     dto: UpdateFeatureFlagDto,
-  ): Promise<FeatureFlag> {
-    const flag = this.featureFlags.get(name);
+    updatedBy?: string,
+  ): Promise<PrismaFeatureFlag> {
+    // Check rate limit if user is provided
+    if (updatedBy) {
+      await this.rateLimiter.checkRateLimit(updatedBy, 'feature-flag.update');
+    }
+    
+    // Validate feature flag name
+    ValidationUtil.validateFeatureFlagName(name);
+    
+    // Validate rollout percentage if provided
+    if (dto.rolloutPercentage !== undefined) {
+      dto.rolloutPercentage = ValidationUtil.validateRolloutPercentage(dto.rolloutPercentage);
+    }
+    
+    try {
+      // Get old values for audit
+      const oldFlag = await this.prisma.featureFlag.findUnique({
+        where: { name },
+      });
+
+      if (!oldFlag) {
+        throw new NotFoundException(`Feature flag '${name}' not found`);
+      }
+
+      const flag = await this.prisma.featureFlag.update({
+        where: { name },
+        data: {
+          ...dto,
+          updatedBy,
+        },
+      });
+
+      // Audit log
+      if (updatedBy) {
+        const changedFields: string[] = [];
+        if (dto.enabled !== undefined && dto.enabled !== oldFlag.enabled) {
+          changedFields.push('enabled');
+        }
+        if (dto.description !== undefined && dto.description !== oldFlag.description) {
+          changedFields.push('description');
+        }
+        if (dto.allowedGroups !== undefined) {
+          changedFields.push('allowedGroups');
+        }
+        if (dto.rolloutPercentage !== undefined && dto.rolloutPercentage !== oldFlag.rolloutPercentage) {
+          changedFields.push('rolloutPercentage');
+        }
+
+        await this.auditService.log({
+          actorId: updatedBy,
+          module: 'SystemConfig',
+          entityType: 'FeatureFlag',
+          entityId: flag.id,
+          entityDisplay: flag.name,
+          action: AuditAction.UPDATE,
+          oldValues: oldFlag,
+          newValues: flag,
+          metadata: {
+            flagName: flag.name,
+            changedFields,
+          },
+        });
+      }
+
+      this.logger.log(`Updated feature flag: ${name}`);
+      return flag;
+    } catch (error) {
+      if (error.code === 'P2025') {
+        throw new NotFoundException(`Feature flag '${name}' not found`);
+      }
+      throw error;
+    }
+  }
+
+  async deleteFeatureFlag(name: string, deletedBy?: string): Promise<void> {
+    // Check rate limit if user is provided
+    if (deletedBy) {
+      await this.rateLimiter.checkRateLimit(deletedBy, 'feature-flag.delete');
+    }
+    
+    // Validate feature flag name
+    ValidationUtil.validateFeatureFlagName(name);
+    
+    try {
+      // Get flag for audit before deletion
+      const flag = await this.prisma.featureFlag.findUnique({
+        where: { name },
+      });
+      
+      if (!flag) {
+        throw new NotFoundException(`Feature flag '${name}' not found`);
+      }
+      
+      await this.prisma.featureFlag.delete({
+        where: { name },
+      });
+
+      // Audit log
+      if (deletedBy) {
+        await this.auditService.log({
+          actorId: deletedBy,
+          module: 'SystemConfig',
+          entityType: 'FeatureFlag',
+          entityId: flag.id,
+          entityDisplay: flag.name,
+          action: AuditAction.DELETE,
+          oldValues: flag,
+          metadata: {
+            flagName: flag.name,
+          },
+        });
+      }
+
+      this.logger.log(`Deleted feature flag: ${name}`);
+    } catch (error) {
+      if (error.code === 'P2025') {
+        throw new NotFoundException(`Feature flag '${name}' not found`);
+      }
+      throw error;
+    }
+  }
+
+  async getFeatureFlag(name: string): Promise<PrismaFeatureFlag> {
+    const flag = await this.prisma.featureFlag.findUnique({
+      where: { name },
+    });
+
     if (!flag) {
       throw new NotFoundException(`Feature flag '${name}' not found`);
     }
 
-    const updated: FeatureFlag = {
-      ...flag,
-      ...dto,
-      updatedAt: new Date(),
-    };
-
-    this.featureFlags.set(name, updated);
-    await this.saveFeatureFlags();
-
-    this.logger.log(`Updated feature flag: ${name}`);
-    return updated;
-  }
-
-  async deleteFeatureFlag(name: string): Promise<void> {
-    if (!this.featureFlags.has(name)) {
-      throw new NotFoundException(`Feature flag '${name}' not found`);
-    }
-
-    this.featureFlags.delete(name);
-    await this.saveFeatureFlags();
-
-    this.logger.log(`Deleted feature flag: ${name}`);
-  }
-
-  async getFeatureFlag(name: string): Promise<FeatureFlag> {
-    const flag = this.featureFlags.get(name);
-    if (!flag) {
-      throw new NotFoundException(`Feature flag '${name}' not found`);
-    }
     return flag;
   }
 
-  async getAllFeatureFlags(): Promise<FeatureFlag[]> {
-    return Array.from(this.featureFlags.values());
+  async getAllFeatureFlags(): Promise<PrismaFeatureFlag[]> {
+    return await this.prisma.featureFlag.findMany({
+      orderBy: [
+        { name: 'asc' },
+      ],
+    });
   }
 
   async isFeatureEnabled(
@@ -133,7 +223,9 @@ export class FeatureFlagService {
     userId?: string,
     userGroups?: string[],
   ): Promise<boolean> {
-    const flag = this.featureFlags.get(name);
+    const flag = await this.prisma.featureFlag.findUnique({
+      where: { name },
+    });
 
     if (!flag) {
       // Default to disabled for unknown features
@@ -145,17 +237,18 @@ export class FeatureFlagService {
     }
 
     // Check group restrictions
-    if (flag.allowedGroups && flag.allowedGroups.length > 0) {
+    if (flag.allowedGroups && Array.isArray(flag.allowedGroups) && flag.allowedGroups.length > 0) {
+      const allowedGroupsArray = flag.allowedGroups as string[];
       if (
         !userGroups ||
-        !userGroups.some((group) => flag.allowedGroups?.includes(group))
+        !userGroups.some((group) => allowedGroupsArray.includes(group))
       ) {
         return false;
       }
     }
 
     // Check rollout percentage
-    if (flag.rolloutPercentage !== undefined && flag.rolloutPercentage < 100) {
+    if (flag.rolloutPercentage !== null && flag.rolloutPercentage < 100) {
       if (!userId) {
         // No user ID, can't determine rollout
         return false;
@@ -175,34 +268,91 @@ export class FeatureFlagService {
     return true;
   }
 
-  async toggleFeatureFlag(name: string): Promise<FeatureFlag> {
-    const flag = this.featureFlags.get(name);
-    if (!flag) {
-      throw new NotFoundException(`Feature flag '${name}' not found`);
-    }
+  async toggleFeatureFlag(name: string, updatedBy?: string): Promise<PrismaFeatureFlag> {
+    // Use transaction to ensure atomicity
+    return await this.prisma.$transaction(async (tx) => {
+      const flag = await tx.featureFlag.findUnique({
+        where: { name },
+      });
 
-    flag.enabled = !flag.enabled;
-    flag.updatedAt = new Date();
+      if (!flag) {
+        throw new NotFoundException(`Feature flag '${name}' not found`);
+      }
 
-    this.featureFlags.set(name, flag);
-    await this.saveFeatureFlags();
+      const updated = await tx.featureFlag.update({
+        where: { name },
+        data: {
+          enabled: !flag.enabled,
+          updatedBy,
+        },
+      });
 
-    this.logger.log(`Toggled feature flag '${name}' to ${flag.enabled}`);
-    return flag;
+      this.logger.log(`Toggled feature flag '${name}' to ${updated.enabled}`);
+      return updated;
+    });
   }
 
   async getEnabledFeatures(
     userId?: string,
     userGroups?: string[],
   ): Promise<string[]> {
+    const allFlags = await this.prisma.featureFlag.findMany({
+      where: { enabled: true },
+    });
+
     const enabledFeatures: string[] = [];
 
-    for (const [name, flag] of this.featureFlags.entries()) {
-      if (await this.isFeatureEnabled(name, userId, userGroups)) {
-        enabledFeatures.push(name);
+    for (const flag of allFlags) {
+      if (await this.isFeatureEnabled(flag.name, userId, userGroups)) {
+        enabledFeatures.push(flag.name);
       }
     }
 
     return enabledFeatures;
+  }
+
+  // Batch operations with transaction support
+  async createFeatureFlagsBatch(dtos: FeatureFlagDto[], createdBy?: string): Promise<PrismaFeatureFlag[]> {
+    return await this.prisma.$transaction(async (tx) => {
+      const flags = await Promise.all(
+        dtos.map((dto) =>
+          tx.featureFlag.create({
+            data: {
+              name: dto.name,
+              enabled: dto.enabled,
+              description: dto.description,
+              allowedGroups: dto.allowedGroups,
+              rolloutPercentage: dto.rolloutPercentage,
+              createdBy,
+              updatedBy: createdBy,
+            },
+          })
+        )
+      );
+
+      this.logger.log(`Created ${flags.length} feature flags in batch`);
+      return flags;
+    });
+  }
+
+  // Get feature flags with filtering
+  async getFeatureFlagsFiltered(
+    enabled?: boolean,
+    nameContains?: string,
+  ): Promise<PrismaFeatureFlag[]> {
+    return await this.prisma.featureFlag.findMany({
+      where: {
+        ...(enabled !== undefined && { enabled }),
+        ...(nameContains && {
+          name: {
+            contains: nameContains,
+            mode: 'insensitive',
+          },
+        }),
+      },
+      orderBy: [
+        { name: 'asc' },
+      ],
+    });
   }
 }
