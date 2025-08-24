@@ -1,9 +1,6 @@
 import {
   Injectable,
-  NotFoundException,
-  ConflictException,
   ForbiddenException,
-  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
@@ -16,6 +13,8 @@ import {
 import { DepartmentValidator } from '../../../validators/department.validator';
 import { RowLevelSecurityService } from '../../../security/row-level-security.service';
 import { AuditService } from '../../audit/services/audit.service';
+import { BusinessException } from '../../../common/exceptions/business.exception';
+import { PaginationResponseDto } from '../../../common/dto/pagination.dto';
 import { Prisma } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
 
@@ -64,9 +63,12 @@ export class DepartmentService {
   }
 
   /**
-   * Find all departments with RLS and sanitized search
+   * Find all departments with RLS, sanitized search and pagination
    */
-  async findAll(filters: DepartmentFilterDto, userId: string): Promise<any[]> {
+  async findAll(
+    filters: DepartmentFilterDto,
+    userId: string,
+  ): Promise<PaginationResponseDto<any>> {
     const context = await this.rlsService.getUserContext(userId);
 
     const where: Prisma.DepartmentWhereInput = {};
@@ -107,6 +109,14 @@ export class DepartmentService {
       }
     }
 
+    // Get pagination values
+    const page = filters.page || 1;
+    const limit = filters.limit || 10;
+    const skip = (page - 1) * limit;
+
+    // Get total count for pagination
+    const total = await this.prisma.department.count({ where });
+
     const departments = await this.prisma.department.findMany({
       where,
       include: {
@@ -119,15 +129,22 @@ export class DepartmentService {
           },
         },
       },
-      orderBy: [{ schoolId: 'asc' }, { parentId: 'asc' }, { name: 'asc' }],
+      skip,
+      take: limit,
+      orderBy: filters.sortBy
+        ? { [filters.sortBy]: filters.sortOrder || 'asc' }
+        : [{ schoolId: 'asc' }, { parentId: 'asc' }, { name: 'asc' }],
     });
 
     // Build tree structure if requested
+    let data: any[];
     if (filters.includeChildren) {
-      return this.buildDepartmentTree(departments);
+      data = this.buildDepartmentTree(departments);
+    } else {
+      data = departments;
     }
 
-    return departments;
+    return new PaginationResponseDto(data, total, page, limit);
   }
 
   /**
@@ -143,7 +160,7 @@ export class DepartmentService {
     );
 
     if (!canAccess) {
-      throw new ForbiddenException('Access denied to this department');
+      throw BusinessException.unauthorized('Access denied to this department');
     }
 
     const department = await this.prisma.department.findUnique({
@@ -174,7 +191,7 @@ export class DepartmentService {
     });
 
     if (!department) {
-      throw new NotFoundException('Department not found');
+      throw BusinessException.notFound('Department');
     }
 
     // Calculate employee count
@@ -216,7 +233,7 @@ export class DepartmentService {
       });
 
       if (!oldDepartment) {
-        throw new NotFoundException('Department not found');
+        throw BusinessException.notFound('Department');
       }
 
       const updated = await tx.department.update({
@@ -268,7 +285,7 @@ export class DepartmentService {
       });
 
       if (!department) {
-        throw new NotFoundException('Department not found');
+        throw BusinessException.notFound('Department');
       }
 
       const updated = await tx.department.update({
@@ -327,7 +344,7 @@ export class DepartmentService {
       });
 
       if (!department) {
-        throw new NotFoundException('Department not found');
+        throw BusinessException.notFound('Department');
       }
 
       await tx.department.delete({

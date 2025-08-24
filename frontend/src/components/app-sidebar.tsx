@@ -70,6 +70,10 @@ const data = {
           title: "Hierarchy",
           url: "/organization/hierarchy",
         },
+        {
+          title: "User Positions",
+          url: "/organization/user-positions",
+        },
       ],
     },
     {

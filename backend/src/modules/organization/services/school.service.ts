@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
   CreateSchoolDto,
@@ -14,6 +9,8 @@ import { RowLevelSecurityService } from '../../../security/row-level-security.se
 import { AuditService } from '../../audit/services/audit.service';
 import { Prisma } from '@prisma/client';
 import { BaseService } from '../../../common/base/base.service';
+import { BusinessException } from '../../../common/exceptions/business.exception';
+import { PaginationResponseDto } from '../../../common/dto/pagination.dto';
 import { v7 as uuidv7 } from 'uuid';
 
 @Injectable()
@@ -36,9 +33,7 @@ export class SchoolService extends BaseService {
     });
 
     if (existing) {
-      throw new ConflictException(
-        `School with code ${dto.code} already exists`,
-      );
+      throw BusinessException.duplicate('School', 'code', dto.code);
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -62,9 +57,12 @@ export class SchoolService extends BaseService {
   }
 
   /**
-   * Find all schools with RLS and filters
+   * Find all schools with RLS and filters and pagination
    */
-  async findAll(filters: SchoolFilterDto, userId: string): Promise<any[]> {
+  async findAll(
+    filters: SchoolFilterDto,
+    userId: string,
+  ): Promise<PaginationResponseDto<any>> {
     const context = await this.rlsService.getUserContext(userId);
 
     const where: Prisma.SchoolWhereInput = {};
@@ -93,6 +91,14 @@ export class SchoolService extends BaseService {
       where.id = { in: context.schoolIds };
     }
 
+    // Get pagination values
+    const page = filters.page || 1;
+    const limit = filters.limit || 10;
+    const skip = (page - 1) * limit;
+
+    // Get total count for pagination
+    const total = await this.prisma.school.count({ where });
+
     const schools = await this.prisma.school.findMany({
       where,
       include: {
@@ -103,44 +109,66 @@ export class SchoolService extends BaseService {
           },
         },
       },
-      orderBy: [{ lokasi: 'asc' }, { name: 'asc' }],
+      skip,
+      take: limit,
+      orderBy: filters.sortBy
+        ? { [filters.sortBy]: filters.sortOrder || 'asc' }
+        : [{ lokasi: 'asc' }, { name: 'asc' }],
     });
 
-    // Get employee counts in batch
+    // Get employee counts in batch using proper aggregation
     const schoolIds = schools.map((s) => s.id);
+
+    // First, get all positions for all schools in one query
+    const allPositions = await this.prisma.position.findMany({
+      where: { schoolId: { in: schoolIds } },
+      select: { id: true, schoolId: true },
+    });
+
+    // Create a map of schoolId to positionIds
+    const schoolPositionMap = new Map<string, string[]>();
+    allPositions.forEach((pos) => {
+      if (pos.schoolId) {
+        const posIds = schoolPositionMap.get(pos.schoolId) || [];
+        posIds.push(pos.id);
+        schoolPositionMap.set(pos.schoolId, posIds);
+      }
+    });
+
+    // Get employee counts grouped by positionId
     const employeeCounts = await this.prisma.userPosition.groupBy({
       by: ['positionId'],
       where: {
         isActive: true,
-        position: {
-          schoolId: { in: schoolIds },
-        },
+        positionId: { in: allPositions.map((p) => p.id) },
       },
       _count: {
         id: true,
       },
     });
 
+    // Create a map of positionId to employee count
+    const positionEmployeeMap = new Map<string, number>();
+    employeeCounts.forEach((ec) => {
+      positionEmployeeMap.set(ec.positionId, ec._count.id);
+    });
+
     // Map employee counts to schools
     const schoolEmployeeMap = new Map<string, number>();
-    for (const school of schools) {
-      const positions = await this.prisma.position.findMany({
-        where: { schoolId: school.id },
-        select: { id: true },
-      });
+    schoolIds.forEach((schoolId) => {
+      const positionIds = schoolPositionMap.get(schoolId) || [];
+      const employeeCount = positionIds.reduce((sum, posId) => {
+        return sum + (positionEmployeeMap.get(posId) || 0);
+      }, 0);
+      schoolEmployeeMap.set(schoolId, employeeCount);
+    });
 
-      const positionIds = positions.map((p) => p.id);
-      const employeeCount = employeeCounts
-        .filter((ec) => positionIds.includes(ec.positionId))
-        .reduce((sum, ec) => sum + ec._count.id, 0);
-
-      schoolEmployeeMap.set(school.id, employeeCount);
-    }
-
-    return schools.map((school) => ({
+    const data = schools.map((school) => ({
       ...school,
       employeeCount: schoolEmployeeMap.get(school.id) || 0,
     }));
+
+    return new PaginationResponseDto(data, total, page, limit);
   }
 
   /**
@@ -156,7 +184,7 @@ export class SchoolService extends BaseService {
     );
 
     if (!canAccess) {
-      throw new ForbiddenException('Access denied to this school');
+      throw BusinessException.unauthorized('Access denied to this school');
     }
 
     const school = await this.prisma.school.findUnique({
@@ -186,7 +214,7 @@ export class SchoolService extends BaseService {
     });
 
     if (!school) {
-      throw new NotFoundException('School not found');
+      throw BusinessException.notFound('School', id);
     }
 
     // Calculate statistics
@@ -216,7 +244,9 @@ export class SchoolService extends BaseService {
     );
 
     if (!canAccess) {
-      throw new ForbiddenException('Access denied to update this school');
+      throw BusinessException.unauthorized(
+        'Access denied to update this school',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -225,7 +255,7 @@ export class SchoolService extends BaseService {
       });
 
       if (!oldSchool) {
-        throw new NotFoundException('School not found');
+        throw BusinessException.notFound('School', id);
       }
 
       // Check for code uniqueness if changed
@@ -234,9 +264,7 @@ export class SchoolService extends BaseService {
           where: { code: dto.code },
         });
         if (existing) {
-          throw new ConflictException(
-            `School with code ${dto.code} already exists`,
-          );
+          throw BusinessException.duplicate('School', 'code', dto.code);
         }
       }
 
@@ -274,7 +302,9 @@ export class SchoolService extends BaseService {
     );
 
     if (!canAccess) {
-      throw new ForbiddenException('Access denied to delete this school');
+      throw BusinessException.unauthorized(
+        'Access denied to delete this school',
+      );
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -284,7 +314,7 @@ export class SchoolService extends BaseService {
       });
 
       if (!school) {
-        throw new NotFoundException('School not found');
+        throw BusinessException.notFound('School', id);
       }
 
       // Check for dependent departments
@@ -293,7 +323,7 @@ export class SchoolService extends BaseService {
       });
 
       if (departmentCount > 0) {
-        throw new ConflictException(
+        throw BusinessException.invalidOperation(
           `Cannot delete school with ${departmentCount} department(s)`,
         );
       }
@@ -304,7 +334,7 @@ export class SchoolService extends BaseService {
       });
 
       if (positionCount > 0) {
-        throw new ConflictException(
+        throw BusinessException.invalidOperation(
           `Cannot delete school with ${positionCount} position(s)`,
         );
       }
@@ -336,7 +366,7 @@ export class SchoolService extends BaseService {
     );
 
     if (!canAccess) {
-      throw new ForbiddenException('Access denied to this school');
+      throw BusinessException.unauthorized('Access denied to this school');
     }
 
     const school = await this.prisma.school.findUnique({
@@ -376,7 +406,7 @@ export class SchoolService extends BaseService {
     });
 
     if (!school) {
-      throw new NotFoundException('School not found');
+      throw BusinessException.notFound('School', id);
     }
 
     // Build hierarchy tree
@@ -416,7 +446,7 @@ export class SchoolService extends BaseService {
     );
 
     if (!canAccess) {
-      throw new ForbiddenException('Access denied to this school');
+      throw BusinessException.unauthorized('Access denied to this school');
     }
 
     const school = await this.prisma.school.findUnique({
@@ -424,7 +454,7 @@ export class SchoolService extends BaseService {
     });
 
     if (!school) {
-      throw new NotFoundException('School not found');
+      throw BusinessException.notFound('School', id);
     }
 
     // Get comprehensive statistics
@@ -468,7 +498,7 @@ export class SchoolService extends BaseService {
       }),
     ]);
 
-    // Get department breakdown
+    // Get department breakdown with employee counts in a single query
     const departmentStats = await this.prisma.department.findMany({
       where: { schoolId: id, isActive: true },
       select: {
@@ -484,25 +514,46 @@ export class SchoolService extends BaseService {
       },
     });
 
-    // Get employee counts per department
-    const departmentEmployeeCounts = await Promise.all(
-      departmentStats.map(async (dept) => {
-        const count = await this.prisma.userPosition.count({
-          where: {
-            isActive: true,
-            position: {
-              departmentId: dept.id,
+    // Get all positions for these departments
+    const departmentIds = departmentStats.map((d) => d.id);
+    const positionsWithCounts = await this.prisma.position.findMany({
+      where: {
+        departmentId: { in: departmentIds },
+        isActive: true,
+      },
+      select: {
+        id: true,
+        departmentId: true,
+        _count: {
+          select: {
+            userPositions: {
+              where: { isActive: true },
             },
           },
-        });
-        return {
-          departmentId: dept.id,
-          departmentName: dept.name,
-          positionCount: dept._count.positions,
-          employeeCount: count,
-        };
-      }),
-    );
+        },
+      },
+    });
+
+    // Create a map of departmentId to employee count
+    const departmentEmployeeCountMap = new Map<string, number>();
+    positionsWithCounts.forEach((pos) => {
+      if (pos.departmentId) {
+        const currentCount =
+          departmentEmployeeCountMap.get(pos.departmentId) || 0;
+        departmentEmployeeCountMap.set(
+          pos.departmentId,
+          currentCount + pos._count.userPositions,
+        );
+      }
+    });
+
+    // Build the final department breakdown
+    const departmentEmployeeCounts = departmentStats.map((dept) => ({
+      departmentId: dept.id,
+      departmentName: dept.name,
+      positionCount: dept._count.positions,
+      employeeCount: departmentEmployeeCountMap.get(dept.id) || 0,
+    }));
 
     return {
       schoolId: school.id,
@@ -535,7 +586,7 @@ export class SchoolService extends BaseService {
     const context = await this.rlsService.getUserContext(userId);
 
     if (!context.isSuperadmin) {
-      throw new ForbiddenException(
+      throw BusinessException.unauthorized(
         'Only superadmins can sync school locations',
       );
     }

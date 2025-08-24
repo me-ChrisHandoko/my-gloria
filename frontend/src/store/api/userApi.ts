@@ -18,16 +18,26 @@ export interface UserListResponse {
   totalPages: number;
 }
 
+// Helper type for API responses from backend
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+  timestamp?: string;
+  path?: string;
+}
+
 export const userApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     // Get all users with pagination
     getUsers: builder.query<UserListResponse, UserListParams>({
       query: (params) => ({
-        url: '/users',
+        url: '/v1/users',
         params,
       }),
+      transformResponse: (response: ApiResponse<UserListResponse>) => response.data,
       providesTags: (result) =>
-        result
+        result && result.data
           ? [
               ...result.data.map(({ id }) => ({ type: 'UserProfile' as const, id })),
               { type: 'UserProfile', id: 'LIST' },
@@ -37,14 +47,15 @@ export const userApi = apiSlice.injectEndpoints({
 
     // Get single user by ID
     getUser: builder.query<UserProfile, string>({
-      query: (id) => `/users/${id}`,
+      query: (id) => `/v1/users/${id}`,
+      transformResponse: (response: ApiResponse<UserProfile>) => response.data,
       providesTags: (result, error, id) => [{ type: 'UserProfile', id }],
     }),
 
     // Create new user
     createUser: builder.mutation<UserProfile, Partial<UserProfile>>({
       query: (user) => ({
-        url: '/users',
+        url: '/v1/users',
         method: 'POST',
         body: user,
       }),
@@ -54,7 +65,7 @@ export const userApi = apiSlice.injectEndpoints({
     // Update user
     updateUser: builder.mutation<UserProfile, { id: string; data: Partial<UserProfile> }>({
       query: ({ id, data }) => ({
-        url: `/users/${id}`,
+        url: `/v1/users/${id}`,
         method: 'PATCH',
         body: data,
       }),
@@ -67,15 +78,16 @@ export const userApi = apiSlice.injectEndpoints({
     // Delete user
     deleteUser: builder.mutation<void, string>({
       query: (id) => ({
-        url: `/users/${id}`,
+        url: `/v1/users/${id}`,
         method: 'DELETE',
       }),
       invalidatesTags: [{ type: 'UserProfile', id: 'LIST' }],
     }),
 
-    // Get user positions
-    getUserPositions: builder.query<UserPosition[], string>({
-      query: (userId) => `/users/${userId}/positions`,
+    // Get positions for a specific user
+    getUserPositionsByUserId: builder.query<UserPosition[], string>({
+      query: (userId) => `/v1/users/${userId}/positions`,
+      transformResponse: (response: ApiResponse<UserPosition[]>) => response.data,
       providesTags: (result, error, userId) => [
         { type: 'Position', id: userId },
       ],
@@ -84,7 +96,7 @@ export const userApi = apiSlice.injectEndpoints({
     // Assign position to user
     assignPosition: builder.mutation<UserPosition, { userId: string; positionId: string; data: any }>({
       query: ({ userId, positionId, data }) => ({
-        url: `/users/${userId}/positions`,
+        url: `/v1/users/${userId}/positions`,
         method: 'POST',
         body: { positionId, ...data },
       }),
@@ -97,7 +109,7 @@ export const userApi = apiSlice.injectEndpoints({
     // Remove position from user
     removePosition: builder.mutation<void, { userId: string; positionId: string }>({
       query: ({ userId, positionId }) => ({
-        url: `/users/${userId}/positions/${positionId}`,
+        url: `/v1/users/${userId}/positions/${positionId}`,
         method: 'DELETE',
       }),
       invalidatesTags: (result, error, { userId }) => [
@@ -108,16 +120,17 @@ export const userApi = apiSlice.injectEndpoints({
 
     // Get user roles
     getUserRoles: builder.query<UserRole[], string>({
-      query: (userId) => `/users/${userId}/roles`,
+      query: (userId) => `/v1/users/${userId}/roles`,
+      transformResponse: (response: ApiResponse<UserRole[]>) => response.data,
       providesTags: (result, error, userId) => [
         { type: 'Role', id: userId },
       ],
     }),
 
     // Assign role to user
-    assignRole: builder.mutation<UserRole, { userId: string; roleId: string }>({
+    assignRoleToUser: builder.mutation<UserRole, { userId: string; roleId: string }>({
       query: ({ userId, roleId }) => ({
-        url: `/users/${userId}/roles`,
+        url: `/v1/users/${userId}/roles`,
         method: 'POST',
         body: { roleId },
       }),
@@ -130,7 +143,7 @@ export const userApi = apiSlice.injectEndpoints({
     // Remove role from user
     removeRole: builder.mutation<void, { userId: string; roleId: string }>({
       query: ({ userId, roleId }) => ({
-        url: `/users/${userId}/roles/${roleId}`,
+        url: `/v1/users/${userId}/roles/${roleId}`,
         method: 'DELETE',
       }),
       invalidatesTags: (result, error, { userId }) => [
@@ -139,7 +152,7 @@ export const userApi = apiSlice.injectEndpoints({
       ],
     }),
   }),
-  overrideExisting: false,
+  overrideExisting: process.env.NODE_ENV === 'development',
 });
 
 export const {
@@ -148,10 +161,10 @@ export const {
   useCreateUserMutation,
   useUpdateUserMutation,
   useDeleteUserMutation,
-  useGetUserPositionsQuery,
+  useGetUserPositionsByUserIdQuery,
   useAssignPositionMutation,
   useRemovePositionMutation,
   useGetUserRolesQuery,
-  useAssignRoleMutation,
+  useAssignRoleToUserMutation,
   useRemoveRoleMutation,
 } = userApi;

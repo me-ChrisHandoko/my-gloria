@@ -168,6 +168,14 @@ export interface PositionAvailabilityDto {
   }>;
 }
 
+// Permission Scope Enum
+export enum PermissionScopeEnum {
+  OWN = 'OWN',
+  DEPARTMENT = 'DEPARTMENT',
+  SCHOOL = 'SCHOOL',
+  ALL = 'ALL',
+}
+
 // User Position Types
 export interface UserPosition {
   id: string;
@@ -193,6 +201,49 @@ export interface CreateUserPositionDto {
   isPlt?: boolean;
 }
 
+// Advanced User Position DTOs
+export interface AssignPositionDto {
+  userProfileId: string;
+  positionId: string;
+  startDate: Date;
+  endDate?: Date;
+  isPlt?: boolean;
+  skNumber?: string;
+  notes?: string;
+  appointedBy?: string;
+  permissionScope?: PermissionScopeEnum;
+}
+
+export interface TerminatePositionDto {
+  userPositionId: string;
+  endDate: Date;
+  reason?: string;
+}
+
+export interface TransferPositionDto {
+  userProfileId: string;
+  fromPositionId: string;
+  toPositionId: string;
+  transferDate: Date;
+  reason?: string;
+  skNumber?: string;
+}
+
+export interface UserPositionHistoryDto {
+  id: string;
+  positionId: string;
+  positionName: string;
+  departmentName?: string;
+  schoolName?: string;
+  startDate: Date;
+  endDate?: Date;
+  isActive: boolean;
+  isPlt: boolean;
+  skNumber?: string;
+  appointedBy?: string;
+  duration: string;
+}
+
 export interface UpdateUserPositionDto extends Partial<CreateUserPositionDto> {
   modifiedBy?: string;
 }
@@ -208,6 +259,76 @@ export interface UserPositionFilterDto {
 }
 
 // Hierarchy Types
+export interface SetHierarchyDto {
+  positionId: string;
+  reportsToId?: string;
+  coordinatorId?: string;
+}
+
+export interface HierarchyNodeDto {
+  positionId: string;
+  positionName: string;
+  positionCode: string;
+  departmentName?: string;
+  hierarchyLevel: number;
+  currentHolder?: {
+    userProfileId: string;
+    name: string;
+    nip: string;
+    isPlt: boolean;
+  };
+  reportsTo?: {
+    positionId: string;
+    positionName: string;
+    holderName?: string;
+  };
+  coordinator?: {
+    positionId: string;
+    positionName: string;
+    holderName?: string;
+  };
+  directReports: HierarchyNodeDto[];
+  totalSubordinates: number;
+}
+
+export interface OrgChartDto {
+  root: HierarchyNodeDto;
+  metadata: {
+    totalPositions: number;
+    totalEmployees: number;
+    hierarchyLevels: number;
+    departmentCount: number;
+  };
+}
+
+export interface ReportingChainDto {
+  positionId: string;
+  positionName: string;
+  reportingChain: Array<{
+    level: number;
+    positionId: string;
+    positionName: string;
+    departmentName?: string;
+    holderName?: string;
+  }>;
+  chainLength: number;
+}
+
+export interface HierarchyValidationResultDto {
+  valid: boolean;
+  issues: string[];
+  circularReferences?: Array<{
+    positionId: string;
+    positionName: string;
+    conflictWith: string;
+  }>;
+  orphanedPositions?: Array<{
+    positionId: string;
+    positionName: string;
+    reason: string;
+  }>;
+}
+
 export interface HierarchyNode {
   id: string;
   type: 'school' | 'department' | 'position' | 'user';

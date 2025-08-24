@@ -12,6 +12,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
+import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
 export class CreatePositionDto {
   @ApiProperty({ description: 'Unique position code', example: 'MGR-IT' })
@@ -84,7 +85,7 @@ export class UpdatePositionDto extends PartialType(CreatePositionDto) {
   modifiedBy?: string;
 }
 
-export class PositionFilterDto {
+export class PositionFilterDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Filter by department ID' })
   @IsOptional()
   @IsUUID()
@@ -122,7 +123,7 @@ export class PositionFilterDto {
   @ApiPropertyOptional({ description: 'Search by name or code' })
   @IsOptional()
   @IsString()
-  search?: string;
+  declare search?: string;
 }
 
 export class PositionAvailabilityDto {

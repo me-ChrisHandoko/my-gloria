@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import { PositionDataTable } from '@/components/organization/PositionDataTable';
 import { PositionForm } from '@/components/organization/PositionForm';
+import { HierarchyManagement } from '@/components/organization/HierarchyManagement';
 import { Position } from '@/types/organization';
 import { useDebugAuth } from '@/hooks/useDebugAuth';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function PositionsPage() {
   useDebugAuth(); // Debug authentication state
@@ -36,15 +38,28 @@ export default function PositionsPage() {
       <div>
         <h1 className="text-3xl font-bold">Positions Management</h1>
         <p className="text-muted-foreground">
-          Manage job positions and roles within your organization
+          Manage job positions and organizational hierarchy
         </p>
       </div>
 
-      <PositionDataTable
-        onAdd={handleAddPosition}
-        onEdit={handleEditPosition}
-        onView={handleViewPosition}
-      />
+      <Tabs defaultValue="positions" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="positions">Positions</TabsTrigger>
+          <TabsTrigger value="hierarchy">Hierarchy Setup</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="positions">
+          <PositionDataTable
+            onAdd={handleAddPosition}
+            onEdit={handleEditPosition}
+            onView={handleViewPosition}
+          />
+        </TabsContent>
+
+        <TabsContent value="hierarchy">
+          <HierarchyManagement />
+        </TabsContent>
+      </Tabs>
 
       <PositionForm
         position={editingPosition}

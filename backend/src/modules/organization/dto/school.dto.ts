@@ -9,6 +9,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
+import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
 export class CreateSchoolDto {
   @ApiProperty({ description: 'Unique school code', example: 'SD01' })
@@ -77,7 +78,7 @@ export class UpdateSchoolDto extends PartialType(CreateSchoolDto) {
   modifiedBy?: string;
 }
 
-export class SchoolFilterDto {
+export class SchoolFilterDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Filter by active status' })
   @IsOptional()
   @IsBoolean()
@@ -92,7 +93,7 @@ export class SchoolFilterDto {
   @ApiPropertyOptional({ description: 'Search by name or code' })
   @IsOptional()
   @IsString()
-  search?: string;
+  declare search?: string;
 }
 
 export class SchoolResponseDto {

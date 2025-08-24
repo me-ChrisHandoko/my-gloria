@@ -381,11 +381,22 @@ export function PositionDataTable({
   });
 
   if (error) {
+    console.error('Position loading error:', error);
     return (
       <Card>
         <CardContent className="pt-6">
-          <div className="text-center text-red-500">
-            Failed to load positions. Please try again later.
+          <div className="text-center">
+            <div className="text-red-500 font-semibold mb-2">
+              Failed to load positions
+            </div>
+            {error && 'data' in error && (error as any).data?.message && (
+              <div className="text-sm text-muted-foreground">
+                {(error as any).data.message}
+              </div>
+            )}
+            <div className="text-sm text-muted-foreground mt-2">
+              If you're a new user, please contact your administrator to set up your profile.
+            </div>
           </div>
         </CardContent>
       </Card>

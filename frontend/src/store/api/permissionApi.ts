@@ -270,6 +270,113 @@ export const permissionApi = apiSlice.injectEndpoints({
       transformResponse: (response: ApiResponse<Permission[]>) => response.data,
       providesTags: (result, error, { userId }) => [{ type: 'UserPermission', id: `${userId}-effective` }],
     }),
+
+    // Batch Permission Check
+    batchCheckPermissions: builder.mutation<any, any>({
+      query: (batchCheckDto) => ({
+        url: '/v1/permissions/batch-check',
+        method: 'POST',
+        body: batchCheckDto,
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+    }),
+
+    // Bulk Operations
+    bulkGrantPermissions: builder.mutation<any, { userIds?: string[]; roleId?: string; permissionIds: string[] }>({
+      query: (data) => ({
+        url: '/v1/permissions/bulk/grant',
+        method: 'POST',
+        body: data,
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+      invalidatesTags: [
+        { type: 'UserPermission', id: 'LIST' },
+        { type: 'Role', id: 'LIST' },
+      ],
+    }),
+
+    bulkRevokePermissions: builder.mutation<any, { userIds?: string[]; roleId?: string; permissionIds: string[] }>({
+      query: (data) => ({
+        url: '/v1/permissions/bulk/revoke',
+        method: 'POST',
+        body: data,
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+      invalidatesTags: [
+        { type: 'UserPermission', id: 'LIST' },
+        { type: 'Role', id: 'LIST' },
+      ],
+    }),
+
+    // Permission Templates
+    getPermissionTemplates: builder.query<any[], void>({
+      query: () => ({
+        url: '/v1/permission-templates',
+        method: 'GET',
+      }),
+      transformResponse: (response: ApiResponse<any[]>) => response.data,
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map(({ id }) => ({ type: 'PermissionTemplate' as const, id })),
+              { type: 'PermissionTemplate', id: 'LIST' },
+            ]
+          : [{ type: 'PermissionTemplate', id: 'LIST' }],
+    }),
+
+    createPermissionTemplate: builder.mutation<any, any>({
+      query: (template) => ({
+        url: '/v1/permission-templates',
+        method: 'POST',
+        body: template,
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+      invalidatesTags: [{ type: 'PermissionTemplate', id: 'LIST' }],
+    }),
+
+    updatePermissionTemplate: builder.mutation<any, { id: string; data: any }>({
+      query: ({ id, data }) => ({
+        url: `/v1/permission-templates/${id}`,
+        method: 'PATCH',
+        body: data,
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+      invalidatesTags: (result, error, { id }) => [
+        { type: 'PermissionTemplate', id },
+        { type: 'PermissionTemplate', id: 'LIST' },
+      ],
+    }),
+
+    deletePermissionTemplate: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/v1/permission-templates/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (result, error, id) => [
+        { type: 'PermissionTemplate', id },
+        { type: 'PermissionTemplate', id: 'LIST' },
+      ],
+    }),
+
+    applyPermissionTemplate: builder.mutation<any, { templateId: string; userIds: string[] }>({
+      query: ({ templateId, userIds }) => ({
+        url: `/v1/permission-templates/${templateId}/apply`,
+        method: 'POST',
+        body: { userIds },
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+      invalidatesTags: [{ type: 'UserPermission', id: 'LIST' }],
+    }),
+
+    // Permission Analytics
+    getPermissionAnalytics: builder.query<any, { period?: string }>({
+      query: (params) => ({
+        url: '/v1/permissions/analytics',
+        method: 'GET',
+        params,
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+    }),
   }),
 });
 
@@ -303,4 +410,19 @@ export const {
   // User Permission hooks
   useGetUserPermissionsQuery,
   useGetEffectivePermissionsQuery,
+
+  // Batch and Bulk hooks
+  useBatchCheckPermissionsMutation,
+  useBulkGrantPermissionsMutation,
+  useBulkRevokePermissionsMutation,
+
+  // Permission Template hooks
+  useGetPermissionTemplatesQuery,
+  useCreatePermissionTemplateMutation,
+  useUpdatePermissionTemplateMutation,
+  useDeletePermissionTemplateMutation,
+  useApplyPermissionTemplateMutation,
+
+  // Analytics hooks
+  useGetPermissionAnalyticsQuery,
 } = permissionApi;

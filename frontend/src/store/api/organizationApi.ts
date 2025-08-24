@@ -22,6 +22,14 @@ import {
   UserPositionFilterDto,
   HierarchyNode,
   HierarchyFilterDto,
+  SetHierarchyDto,
+  OrgChartDto,
+  ReportingChainDto,
+  HierarchyValidationResultDto,
+  AssignPositionDto,
+  TerminatePositionDto,
+  TransferPositionDto,
+  UserPositionHistoryDto,
 } from '@/types/organization';
 
 // Helper type for API responses from backend
@@ -87,7 +95,7 @@ export const organizationApi = apiSlice.injectEndpoints({
         body: data,
       }),
       transformResponse: (response: ApiResponse<School>) => response.data,
-      invalidatesTags: (result, error, { id }) => [
+      invalidatesTags: (_result, _error, { id }) => [
         { type: 'School', id },
         { type: 'School', id: 'LIST' },
       ],
@@ -98,7 +106,7 @@ export const organizationApi = apiSlice.injectEndpoints({
         url: `/v1/schools/${id}`,
         method: 'DELETE',
       }),
-      invalidatesTags: (result, error, id) => [
+      invalidatesTags: (_result, _error, id) => [
         { type: 'School', id },
         { type: 'School', id: 'LIST' },
       ],
@@ -328,6 +336,125 @@ export const organizationApi = apiSlice.injectEndpoints({
     }),
 
     // Hierarchy Endpoints
+    setHierarchy: builder.mutation<any, SetHierarchyDto>({
+      query: (data) => ({
+        url: '/v1/hierarchy/set',
+        method: 'POST',
+        body: data,
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+      invalidatesTags: [
+        { type: 'Hierarchy', id: 'TREE' },
+        { type: 'Position', id: 'LIST' },
+      ],
+    }),
+
+    getOrgChart: builder.query<OrgChartDto, { rootPositionId?: string } | void>({
+      query: (params = {}) => ({
+        url: '/v1/hierarchy/org-chart',
+        method: 'GET',
+        params,
+      }),
+      transformResponse: (response: ApiResponse<OrgChartDto>) => response.data,
+      providesTags: [{ type: 'Hierarchy', id: 'ORG-CHART' }],
+    }),
+
+    getPositionHierarchy: builder.query<any, string>({
+      query: (id) => ({
+        url: `/v1/hierarchy/position/${id}`,
+        method: 'GET',
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+      providesTags: (result, error, id) => [{ type: 'Hierarchy', id: `POSITION-${id}` }],
+    }),
+
+    getReportingChain: builder.query<ReportingChainDto, string>({
+      query: (id) => ({
+        url: `/v1/hierarchy/position/${id}/reporting-chain`,
+        method: 'GET',
+      }),
+      transformResponse: (response: ApiResponse<ReportingChainDto>) => response.data,
+      providesTags: (result, error, id) => [{ type: 'Hierarchy', id: `REPORTING-${id}` }],
+    }),
+
+    getSubordinates: builder.query<any[], string>({
+      query: (id) => ({
+        url: `/v1/hierarchy/position/${id}/subordinates`,
+        method: 'GET',
+      }),
+      transformResponse: (response: ApiResponse<any[]>) => response.data,
+      providesTags: (result, error, id) => [{ type: 'Hierarchy', id: `SUBORDINATES-${id}` }],
+    }),
+
+    validateHierarchy: builder.mutation<HierarchyValidationResultDto, void>({
+      query: () => ({
+        url: '/v1/hierarchy/validate',
+        method: 'POST',
+      }),
+      transformResponse: (response: ApiResponse<HierarchyValidationResultDto>) => response.data,
+    }),
+
+    // User Position Advanced Endpoints
+    assignPosition: builder.mutation<any, AssignPositionDto>({
+      query: (data) => ({
+        url: '/v1/user-positions/assign',
+        method: 'POST',
+        body: data,
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+      invalidatesTags: [
+        { type: 'UserPosition', id: 'LIST' },
+        { type: 'Position', id: 'LIST' },
+        { type: 'Hierarchy', id: 'TREE' },
+      ],
+    }),
+
+    terminatePosition: builder.mutation<any, TerminatePositionDto>({
+      query: (data) => ({
+        url: '/v1/user-positions/terminate',
+        method: 'PUT',
+        body: data,
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+      invalidatesTags: [
+        { type: 'UserPosition', id: 'LIST' },
+        { type: 'Position', id: 'LIST' },
+        { type: 'Hierarchy', id: 'TREE' },
+      ],
+    }),
+
+    transferPosition: builder.mutation<any, TransferPositionDto>({
+      query: (data) => ({
+        url: '/v1/user-positions/transfer',
+        method: 'POST',
+        body: data,
+      }),
+      transformResponse: (response: ApiResponse<any>) => response.data,
+      invalidatesTags: [
+        { type: 'UserPosition', id: 'LIST' },
+        { type: 'Position', id: 'LIST' },
+        { type: 'Hierarchy', id: 'TREE' },
+      ],
+    }),
+
+    getUserHistory: builder.query<UserPositionHistoryDto[], string>({
+      query: (userProfileId) => ({
+        url: `/v1/user-positions/user/${userProfileId}/history`,
+        method: 'GET',
+      }),
+      transformResponse: (response: ApiResponse<UserPositionHistoryDto[]>) => response.data,
+      providesTags: (result, error, userProfileId) => [{ type: 'UserPosition', id: `HISTORY-${userProfileId}` }],
+    }),
+
+    getActivePositions: builder.query<any[], string>({
+      query: (userProfileId) => ({
+        url: `/v1/user-positions/user/${userProfileId}/active`,
+        method: 'GET',
+      }),
+      transformResponse: (response: ApiResponse<any[]>) => response.data,
+      providesTags: (result, error, userProfileId) => [{ type: 'UserPosition', id: `ACTIVE-${userProfileId}` }],
+    }),
+
     getOrganizationHierarchy: builder.query<HierarchyNode, HierarchyFilterDto | void>({
       queryFn: async (filters = {}, api, extraOptions, baseQuery) => {
         // Check if mock data is enabled
@@ -350,7 +477,89 @@ export const organizationApi = apiSlice.injectEndpoints({
           return { error: result.error };
         }
         
-        return { data: (result.data as ApiResponse<HierarchyNode>).data };
+        // Handle the backend response structure
+        if (result.data) {
+          const response = result.data as ApiResponse<any>;
+          
+          // Check if it's an ApiResponse with success/data structure
+          if (response.success !== undefined && response.data) {
+            const orgChart = response.data;
+            
+            // Convert backend HierarchyNodeDto to frontend HierarchyNode
+            if (orgChart.root) {
+              const convertNode = (node: any): HierarchyNode => {
+                const hierarchyNode: HierarchyNode = {
+                  id: node.positionId,
+                  type: 'position',
+                  name: node.positionName,
+                  code: node.positionCode,
+                  level: node.hierarchyLevel,
+                  children: [],
+                  metadata: {
+                    isActive: true,
+                    hierarchyLevel: node.hierarchyLevel,
+                    departmentName: node.departmentName,
+                    currentHolder: node.currentHolder,
+                    reportsTo: node.reportsTo,
+                    coordinator: node.coordinator,
+                    totalSubordinates: node.totalSubordinates,
+                  }
+                };
+                
+                // Recursively convert children
+                if (node.directReports && node.directReports.length > 0) {
+                  hierarchyNode.children = node.directReports.map(convertNode);
+                }
+                
+                return hierarchyNode;
+              };
+              
+              return { data: convertNode(orgChart.root) };
+            }
+          }
+          
+          // Handle direct OrgChartDto response (not wrapped in ApiResponse)
+          if ((result.data as any).root) {
+            const orgChart = result.data as any;
+            const convertNode = (node: any): HierarchyNode => {
+              const hierarchyNode: HierarchyNode = {
+                id: node.positionId,
+                type: 'position',
+                name: node.positionName,
+                code: node.positionCode,
+                level: node.hierarchyLevel,
+                children: [],
+                metadata: {
+                  isActive: true,
+                  hierarchyLevel: node.hierarchyLevel,
+                  departmentName: node.departmentName,
+                  currentHolder: node.currentHolder,
+                  reportsTo: node.reportsTo,
+                  coordinator: node.coordinator,
+                  totalSubordinates: node.totalSubordinates,
+                }
+              };
+              
+              // Recursively convert children
+              if (node.directReports && node.directReports.length > 0) {
+                hierarchyNode.children = node.directReports.map(convertNode);
+              }
+              
+              return hierarchyNode;
+            };
+            
+            return { data: convertNode(orgChart.root) };
+          }
+        }
+        
+        // Return error if no valid data structure found
+        return { 
+          error: { 
+            status: 'CUSTOM_ERROR', 
+            error: 'Invalid response structure from server',
+            data: result.data 
+          } 
+        };
       },
       providesTags: [{ type: 'Hierarchy', id: 'TREE' }],
       // Add caching and prefetching
@@ -378,9 +587,35 @@ export const organizationApi = apiSlice.injectEndpoints({
           return { error: result.error };
         }
         
-        return { data: (result.data as ApiResponse<HierarchyNode>).data };
+        // Handle various response structures
+        if (result.data) {
+          // If data is already a HierarchyNode (direct response)
+          if ((result.data as any).id && (result.data as any).type) {
+            return { data: result.data as HierarchyNode };
+          }
+          
+          // If data is wrapped in ApiResponse structure
+          const apiResponse = result.data as ApiResponse<HierarchyNode>;
+          if (apiResponse.success !== undefined && apiResponse.data) {
+            return { data: apiResponse.data };
+          }
+          
+          // If data property exists directly
+          if ((result.data as any).data) {
+            return { data: (result.data as any).data };
+          }
+        }
+        
+        // Return error if no valid data structure found
+        return { 
+          error: { 
+            status: 'CUSTOM_ERROR', 
+            error: 'Invalid response structure from server',
+            data: result.data 
+          } 
+        };
       },
-      providesTags: (result, error, userId) => [{ type: 'Hierarchy', id: `USER-${userId}` }],
+      providesTags: (_result, _error, userId) => [{ type: 'Hierarchy', id: `USER-${userId}` }],
       keepUnusedDataFor: 300, // Keep cached data for 5 minutes
     }),
   }),
@@ -421,6 +656,19 @@ export const {
   useRemoveUserPositionMutation,
 
   // Hierarchy hooks
+  useSetHierarchyMutation,
+  useGetOrgChartQuery,
+  useGetPositionHierarchyQuery,
+  useGetReportingChainQuery,
+  useGetSubordinatesQuery,
+  useValidateHierarchyMutation,
   useGetOrganizationHierarchyQuery,
   useGetUserHierarchyQuery,
+
+  // User Position Advanced hooks
+  useAssignPositionMutation,
+  useTerminatePositionMutation,
+  useTransferPositionMutation,
+  useGetUserHistoryQuery,
+  useGetActivePositionsQuery,
 } = organizationApi;

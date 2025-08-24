@@ -31,12 +31,14 @@ import {
 import { ClerkAuthGuard } from '../../../auth/guards/clerk-auth.guard';
 import { AuditInterceptor } from '../../../middleware/security.middleware';
 import { Audit } from '../../../middleware/security.middleware';
+import { PaginationResponseDto } from '../../../common/dto/pagination.dto';
+import { ApiResponseInterceptor } from '../../../common/interceptors/api-response.interceptor';
 
 @ApiTags('Departments')
 @ApiBearerAuth()
 @Controller('departments')
 @UseGuards(ClerkAuthGuard)
-@UseInterceptors(AuditInterceptor)
+@UseInterceptors(AuditInterceptor, ApiResponseInterceptor)
 export class DepartmentController {
   constructor(private readonly departmentService: DepartmentService) {}
 
@@ -56,12 +58,28 @@ export class DepartmentController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all departments' })
-  @ApiResponse({ status: 200, description: 'List of departments' })
+  @ApiOperation({ summary: 'Get all departments with pagination' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of departments with pagination',
+    schema: {
+      allOf: [
+        { $ref: '#/components/schemas/PaginationResponseDto' },
+        {
+          properties: {
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/Department' },
+            },
+          },
+        },
+      ],
+    },
+  })
   async findAll(
     @Query(ValidationPipe) filters: DepartmentFilterDto,
     @Req() req: any,
-  ): Promise<any[]> {
+  ): Promise<PaginationResponseDto<any>> {
     const userId = req.user?.clerkUserId || req.auth?.userId;
     return this.departmentService.findAll(filters, userId);
   }

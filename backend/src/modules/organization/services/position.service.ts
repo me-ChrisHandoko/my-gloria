@@ -1,7 +1,7 @@
 import {
   Injectable,
-  NotFoundException,
   ConflictException,
+  NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -14,6 +14,8 @@ import {
 import { PositionValidator } from '../../../validators/position.validator';
 import { RowLevelSecurityService } from '../../../security/row-level-security.service';
 import { AuditService } from '../../audit/services/audit.service';
+import { BusinessException } from '../../../common/exceptions/business.exception';
+import { PaginationResponseDto } from '../../../common/dto/pagination.dto';
 import { Prisma } from '@prisma/client';
 import { v7 as uuidv7 } from 'uuid';
 
@@ -36,9 +38,7 @@ export class PositionService {
     });
 
     if (existing) {
-      throw new ConflictException(
-        `Position with code ${dto.code} already exists`,
-      );
+      throw BusinessException.duplicate('Position', 'code', dto.code);
     }
 
     // Validate department/school alignment
@@ -87,9 +87,12 @@ export class PositionService {
   }
 
   /**
-   * Find all positions with RLS and filters
+   * Find all positions with RLS, filters and pagination
    */
-  async findAll(filters: PositionFilterDto, userId: string): Promise<any[]> {
+  async findAll(
+    filters: PositionFilterDto,
+    userId: string,
+  ): Promise<PaginationResponseDto<any>> {
     const context = await this.rlsService.getUserContext(userId);
 
     const where: Prisma.PositionWhereInput = {};
@@ -125,25 +128,134 @@ export class PositionService {
     }
 
     // Apply RLS
-    if (!context.isSuperadmin) {
-      const rlsFilter: Prisma.PositionWhereInput = {};
-
-      if (context.schoolIds.length > 0) {
-        rlsFilter.schoolId = { in: context.schoolIds };
-      }
-
-      if (context.departmentIds.length > 0) {
-        rlsFilter.OR = [{ departmentId: { in: context.departmentIds } }];
-      }
-
-      where.AND = [where, rlsFilter];
+    if (!context.isSuperadmin && !context.userProfileId) {
+      // User without profile - return empty result
+      return {
+        data: [],
+        total: 0,
+        page: filters.page || 1,
+        limit: filters.limit || 10,
+        totalPages: 0,
+      };
     }
+
+    if (!context.isSuperadmin) {
+      // Create arrays to ensure no circular references
+      const schoolIds = Array.from(new Set(context.schoolIds));
+      const departmentIds = Array.from(new Set(context.departmentIds));
+
+      if (schoolIds.length > 0 || departmentIds.length > 0) {
+        const rlsConditions: any[] = [];
+
+        if (schoolIds.length > 0) {
+          rlsConditions.push({ schoolId: { in: schoolIds } });
+        }
+
+        if (departmentIds.length > 0) {
+          rlsConditions.push({ departmentId: { in: departmentIds } });
+        }
+
+        // Apply RLS using OR logic to allow access to positions in either school or department
+        where.OR = [
+          ...(where.OR || []),
+          ...rlsConditions,
+        ];
+      }
+    }
+
+    // Get pagination values
+    const page = filters.page || 1;
+    const limit = filters.limit || 10;
+    const skip = (page - 1) * limit;
+
+    // For hasAvailableSlots filter, we need to get all positions first
+    // then filter in memory before pagination
+    if (filters.hasAvailableSlots) {
+      const allPositions = await this.prisma.position.findMany({
+        where,
+        include: {
+          department: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              schoolId: true,
+            },
+          },
+          school: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          userPositions: {
+            where: { isActive: true },
+            select: {
+              id: true,
+              isPlt: true,
+              userProfile: {
+                select: {
+                  id: true,
+                  dataKaryawan: {
+                    select: {
+                      nama: true,
+                      nip: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          _count: {
+            select: {
+              userPositions: {
+                where: { isActive: true },
+              },
+            },
+          },
+        },
+        orderBy: filters.sortBy
+          ? { [filters.sortBy]: filters.sortOrder || 'asc' }
+          : [{ hierarchyLevel: 'asc' }, { name: 'asc' }],
+      });
+
+      // Filter by availability
+      const availablePositions = allPositions.filter((pos) => {
+        const activeHolders = pos.userPositions.filter(
+          (up) => !up.isPlt,
+        ).length;
+        return activeHolders < pos.maxHolders;
+      });
+
+      // Apply pagination to filtered results
+      const total = availablePositions.length;
+      const data = availablePositions.slice(skip, skip + limit);
+
+      return new PaginationResponseDto(data, total, page, limit);
+    }
+
+    // Get total count for pagination
+    const total = await this.prisma.position.count({ where });
 
     const positions = await this.prisma.position.findMany({
       where,
       include: {
-        department: true,
-        school: true,
+        department: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            schoolId: true,
+          },
+        },
+        school: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
         userPositions: {
           where: { isActive: true },
           select: {
@@ -170,20 +282,14 @@ export class PositionService {
           },
         },
       },
-      orderBy: [{ hierarchyLevel: 'asc' }, { name: 'asc' }],
+      skip,
+      take: limit,
+      orderBy: filters.sortBy
+        ? { [filters.sortBy]: filters.sortOrder || 'asc' }
+        : [{ hierarchyLevel: 'asc' }, { name: 'asc' }],
     });
 
-    // Filter by availability if requested
-    if (filters.hasAvailableSlots) {
-      return positions.filter((pos) => {
-        const activeHolders = pos.userPositions.filter(
-          (up) => !up.isPlt,
-        ).length;
-        return activeHolders < pos.maxHolders;
-      });
-    }
-
-    return positions;
+    return new PaginationResponseDto(positions, total, page, limit);
   }
 
   /**
@@ -289,7 +395,7 @@ export class PositionService {
         dto.maxHolders !== undefined &&
         dto.maxHolders < oldPosition.userPositions.length
       ) {
-        throw new ConflictException(
+        throw BusinessException.invalidOperation(
           `Cannot reduce maxHolders below current holder count (${oldPosition.userPositions.length})`,
         );
       }

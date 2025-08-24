@@ -8,6 +8,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
+import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 
 export class CreateDepartmentDto {
   @ApiProperty({ description: 'Unique department code', example: 'IT' })
@@ -79,7 +80,7 @@ export class MoveDepartmentDto {
   newSchoolId?: string;
 }
 
-export class DepartmentFilterDto {
+export class DepartmentFilterDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Filter by school ID' })
   @IsOptional()
   @IsString()
@@ -104,7 +105,7 @@ export class DepartmentFilterDto {
   @ApiPropertyOptional({ description: 'Search by name or code' })
   @IsOptional()
   @IsString()
-  search?: string;
+  declare search?: string;
 
   @ApiPropertyOptional({
     description: 'Include child departments in tree structure',

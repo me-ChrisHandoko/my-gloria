@@ -7,6 +7,7 @@ import {
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bull';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { APP_INTERCEPTOR, APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -19,7 +20,6 @@ import { OrganizationModule } from './modules/organization/organization.module';
 import { PermissionModule } from './modules/permission/permission.module';
 import { CacheModule } from './cache/cache.module';
 import { ScheduledTaskModule } from './scheduled/scheduled.module';
-import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import {
@@ -82,6 +82,9 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
       },
     }),
 
+    // Event emitter for async events
+    EventEmitterModule.forRoot(),
+
     // Health checks
     HealthModule,
 
@@ -122,10 +125,6 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
     {
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,
-    },
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: TransformInterceptor,
     },
     // Global exception filter
     {

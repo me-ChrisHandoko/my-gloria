@@ -2,6 +2,7 @@
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { PageHeader } from "@/components/PageHeader";
+import { PageErrorBoundary } from "@/components/error/GlobalErrorBoundary";
 import {
   SidebarInset,
   SidebarProvider,
@@ -19,7 +20,9 @@ export default function AuthenticatedLayout({
         <div className="flex min-h-screen w-full flex-col">
           <PageHeader />
           <main className="flex-1 overflow-y-auto">
-            {children}
+            <PageErrorBoundary>
+              {children}
+            </PageErrorBoundary>
           </main>
         </div>
       </SidebarInset>

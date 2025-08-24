@@ -9,7 +9,7 @@ export enum PermissionScope {
   ALL = 'ALL', // Semua data
 }
 
-interface UserContext {
+export interface UserContext {
   userProfileId: string;
   clerkUserId: string;
   isSuperadmin: boolean;
@@ -58,7 +58,17 @@ export class RowLevelSecurityService {
     });
 
     if (!userProfile) {
-      throw new Error('User profile not found');
+      // Return a minimal context for users without profiles
+      // This allows them to at least see the UI without errors
+      return {
+        userProfileId: '',
+        clerkUserId,
+        isSuperadmin: false,
+        positionIds: [],
+        departmentIds: [],
+        schoolIds: [],
+        permissionScopes: new Map<string, PermissionScope>(),
+      };
     }
 
     // Extract unique department and school IDs

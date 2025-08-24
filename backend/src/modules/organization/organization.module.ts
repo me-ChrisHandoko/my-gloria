@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
+import { CacheModule } from './cache/cache.module';
 
 // Controllers
 import { SchoolController } from './controllers/school.controller';
@@ -25,7 +26,7 @@ import { RowLevelSecurityService } from '../../security/row-level-security.servi
 import { AuditService } from '../audit/services/audit.service';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, CacheModule],
   controllers: [
     SchoolController,
     DepartmentController,

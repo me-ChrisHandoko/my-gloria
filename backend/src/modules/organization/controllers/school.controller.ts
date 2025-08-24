@@ -30,12 +30,14 @@ import {
 import { ClerkAuthGuard } from '../../../auth/guards/clerk-auth.guard';
 import { AuditInterceptor } from '../../../middleware/security.middleware';
 import { Audit } from '../../../middleware/security.middleware';
+import { PaginationResponseDto } from '../../../common/dto/pagination.dto';
+import { ApiResponseInterceptor } from '../../../common/interceptors/api-response.interceptor';
 
 @ApiTags('Schools')
 @ApiBearerAuth()
 @Controller('schools')
 @UseGuards(ClerkAuthGuard)
-@UseInterceptors(AuditInterceptor)
+@UseInterceptors(AuditInterceptor, ApiResponseInterceptor)
 export class SchoolController {
   constructor(private readonly schoolService: SchoolService) {}
 
@@ -62,13 +64,25 @@ export class SchoolController {
   @ApiOperation({ summary: 'Get all schools' })
   @ApiResponse({
     status: 200,
-    description: 'List of schools',
-    type: [SchoolResponseDto],
+    description: 'List of schools with pagination',
+    schema: {
+      allOf: [
+        { $ref: '#/components/schemas/PaginationResponseDto' },
+        {
+          properties: {
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/SchoolResponseDto' },
+            },
+          },
+        },
+      ],
+    },
   })
   async findAll(
     @Query(ValidationPipe) filters: SchoolFilterDto,
     @Req() req: any,
-  ): Promise<SchoolResponseDto[]> {
+  ): Promise<PaginationResponseDto<SchoolResponseDto>> {
     const userId = req.user?.clerkUserId;
     return this.schoolService.findAll(filters, userId);
   }
