@@ -201,22 +201,6 @@ export class RLSHelperService {
   }
 
   /**
-   * Disable RLS on a table (admin only)
-   */
-  async disableRLS(tableName: string): Promise<boolean> {
-    try {
-      await this.prisma.$executeRawUnsafe(
-        `ALTER TABLE gloria_ops.${tableName} DISABLE ROW LEVEL SECURITY`,
-      );
-      this.logger.log(`RLS disabled on table: ${tableName}`);
-      return true;
-    } catch (error) {
-      this.logger.error(`Failed to disable RLS on ${tableName}:`, error);
-      return false;
-    }
-  }
-
-  /**
    * Check if RLS is enabled on a table
    */
   async isRLSEnabled(tableName: string): Promise<boolean> {

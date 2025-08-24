@@ -136,27 +136,27 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     // Temporarily disable all middleware to debug startup issue
-    // // RLS Bypass middleware for system operations (applied first)
-    // consumer
-    //   .apply(RLSBypassMiddleware)
-    //   .forRoutes(
-    //     { path: 'health/(.*)', method: RequestMethod.ALL },
-    //     { path: 'system/(.*)', method: RequestMethod.ALL },
-    //   );
-    // // RLS Debug middleware (development only)
-    // if (process.env.NODE_ENV === 'development') {
-    //   consumer
-    //     .apply(RLSDebugMiddleware)
-    //     .forRoutes({ path: '(.*)', method: RequestMethod.ALL });
-    // }
-    // // RLS Context middleware for authenticated routes
-    // consumer
-    //   .apply(RLSContextMiddleware)
-    //   .exclude(
-    //     { path: 'health/(.*)', method: RequestMethod.ALL },
-    //     { path: 'auth/webhook', method: RequestMethod.POST },
-    //     { path: '', method: RequestMethod.GET }, // Root health check
-    //   )
-    //   .forRoutes({ path: '(.*)', method: RequestMethod.ALL });
+    // RLS Bypass middleware for system operations (applied first)
+    consumer
+      .apply(RLSBypassMiddleware)
+      .forRoutes(
+        { path: 'health/(.*)', method: RequestMethod.ALL },
+        { path: 'system/(.*)', method: RequestMethod.ALL },
+      );
+    // RLS Debug middleware (development only)
+    if (process.env.NODE_ENV === 'development') {
+      consumer
+        .apply(RLSDebugMiddleware)
+        .forRoutes({ path: '(.*)', method: RequestMethod.ALL });
+    }
+    // RLS Context middleware for authenticated routes
+    consumer
+      .apply(RLSContextMiddleware)
+      .exclude(
+        { path: 'health/(.*)', method: RequestMethod.ALL },
+        { path: 'auth/webhook', method: RequestMethod.POST },
+        { path: '', method: RequestMethod.GET }, // Root health check
+      )
+      .forRoutes({ path: '(.*)', method: RequestMethod.ALL });
   }
 }
