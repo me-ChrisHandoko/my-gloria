@@ -6,133 +6,176 @@ import (
 	"backend/internal/domain"
 	"backend/internal/repository"
 
-	"golang.org/x/crypto/bcrypt"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 var (
-	ErrUserNotFound     = errors.New("user not found")
-	ErrEmailExists      = errors.New("email already exists")
-	ErrInvalidPassword  = errors.New("invalid password")
+	ErrUserProfileNotFound = errors.New("user profile not found")
+	ErrNIPExists           = errors.New("NIP already exists")
+	ErrClerkUserIDExists   = errors.New("clerk user ID already exists")
 )
 
-// UserService defines the interface for user business logic
-type UserService interface {
-	GetAll() ([]domain.UserResponse, error)
-	GetByID(id uint) (*domain.UserResponse, error)
-	Create(req *domain.CreateUserRequest) (*domain.UserResponse, error)
-	Update(id uint, req *domain.UpdateUserRequest) (*domain.UserResponse, error)
-	Delete(id uint) error
+// UserProfileService defines the interface for user profile business logic
+type UserProfileService interface {
+	GetAll() ([]domain.UserProfileListResponse, error)
+	GetByID(id string) (*domain.UserProfileResponse, error)
+	GetByClerkUserID(clerkUserID string) (*domain.UserProfileResponse, error)
+	GetByNIP(nip string) (*domain.UserProfileResponse, error)
+	Create(req *domain.CreateUserProfileRequest, createdBy *string) (*domain.UserProfileResponse, error)
+	Update(id string, req *domain.UpdateUserProfileRequest) (*domain.UserProfileResponse, error)
+	Delete(id string) error
+	GetWithFullDetails(id string) (*domain.UserProfileResponse, error)
 }
 
-// userService implements UserService
-type userService struct {
-	repo repository.UserRepository
+// userProfileService implements UserProfileService
+type userProfileService struct {
+	repo repository.UserProfileRepository
 }
 
-// NewUserService creates a new user service instance
-func NewUserService(repo repository.UserRepository) UserService {
-	return &userService{repo: repo}
+// NewUserProfileService creates a new user profile service instance
+func NewUserProfileService(repo repository.UserProfileRepository) UserProfileService {
+	return &userProfileService{repo: repo}
 }
 
-// GetAll retrieves all users
-func (s *userService) GetAll() ([]domain.UserResponse, error) {
-	users, err := s.repo.FindAll()
+// GetAll retrieves all user profiles
+func (s *userProfileService) GetAll() ([]domain.UserProfileListResponse, error) {
+	profiles, err := s.repo.FindAll()
 	if err != nil {
 		return nil, err
 	}
 
-	responses := make([]domain.UserResponse, len(users))
-	for i, user := range users {
-		responses[i] = *user.ToResponse()
+	responses := make([]domain.UserProfileListResponse, len(profiles))
+	for i, profile := range profiles {
+		responses[i] = *profile.ToListResponse()
 	}
 	return responses, nil
 }
 
-// GetByID retrieves a user by ID
-func (s *userService) GetByID(id uint) (*domain.UserResponse, error) {
-	user, err := s.repo.FindByID(id)
+// GetByID retrieves a user profile by ID
+func (s *userProfileService) GetByID(id string) (*domain.UserProfileResponse, error) {
+	profile, err := s.repo.FindByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrUserNotFound
+			return nil, ErrUserProfileNotFound
 		}
 		return nil, err
 	}
-	return user.ToResponse(), nil
+	return profile.ToResponse(), nil
 }
 
-// Create creates a new user
-func (s *userService) Create(req *domain.CreateUserRequest) (*domain.UserResponse, error) {
-	// Check if email already exists
-	existing, err := s.repo.FindByEmail(req.Email)
+// GetByClerkUserID retrieves a user profile by Clerk user ID
+func (s *userProfileService) GetByClerkUserID(clerkUserID string) (*domain.UserProfileResponse, error) {
+	profile, err := s.repo.FindByClerkUserID(clerkUserID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserProfileNotFound
+		}
+		return nil, err
+	}
+	return profile.ToResponse(), nil
+}
+
+// GetByNIP retrieves a user profile by NIP
+func (s *userProfileService) GetByNIP(nip string) (*domain.UserProfileResponse, error) {
+	profile, err := s.repo.FindByNIP(nip)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserProfileNotFound
+		}
+		return nil, err
+	}
+	return profile.ToResponse(), nil
+}
+
+// Create creates a new user profile
+func (s *userProfileService) Create(req *domain.CreateUserProfileRequest, createdBy *string) (*domain.UserProfileResponse, error) {
+	// Check if NIP already exists
+	existing, err := s.repo.FindByNIP(req.NIP)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 	if existing != nil {
-		return nil, ErrEmailExists
+		return nil, ErrNIPExists
 	}
 
-	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	// Check if Clerk user ID already exists
+	existing, err = s.repo.FindByClerkUserID(req.ClerkUserID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, ErrClerkUserIDExists
+	}
+
+	profile := &domain.UserProfile{
+		ID:          uuid.New().String(),
+		ClerkUserID: req.ClerkUserID,
+		NIP:         req.NIP,
+		IsActive:    true,
+		Preferences: req.Preferences,
+		CreatedBy:   createdBy,
+	}
+
+	if err := s.repo.Create(profile); err != nil {
+		return nil, err
+	}
+
+	// Fetch the created profile with relations
+	created, err := s.repo.FindByID(profile.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	user := &domain.User{
-		Name:     req.Name,
-		Email:    req.Email,
-		Password: string(hashedPassword),
-	}
-
-	if err := s.repo.Create(user); err != nil {
-		return nil, err
-	}
-
-	return user.ToResponse(), nil
+	return created.ToResponse(), nil
 }
 
-// Update updates an existing user
-func (s *userService) Update(id uint, req *domain.UpdateUserRequest) (*domain.UserResponse, error) {
-	user, err := s.repo.FindByID(id)
+// Update updates an existing user profile
+func (s *userProfileService) Update(id string, req *domain.UpdateUserProfileRequest) (*domain.UserProfileResponse, error) {
+	profile, err := s.repo.FindByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrUserNotFound
+			return nil, ErrUserProfileNotFound
 		}
 		return nil, err
 	}
 
-	// Check if new email is taken by another user
-	if req.Email != "" && req.Email != user.Email {
-		existing, err := s.repo.FindByEmail(req.Email)
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
-		if existing != nil && existing.ID != id {
-			return nil, ErrEmailExists
-		}
-		user.Email = req.Email
+	if req.IsActive != nil {
+		profile.IsActive = *req.IsActive
 	}
 
-	if req.Name != "" {
-		user.Name = req.Name
+	if req.Preferences != nil {
+		profile.Preferences = req.Preferences
 	}
 
-	if err := s.repo.Update(user); err != nil {
+	if err := s.repo.Update(profile); err != nil {
 		return nil, err
 	}
 
-	return user.ToResponse(), nil
+	return profile.ToResponse(), nil
 }
 
-// Delete deletes a user by ID
-func (s *userService) Delete(id uint) error {
+// Delete deletes a user profile by ID
+func (s *userProfileService) Delete(id string) error {
 	_, err := s.repo.FindByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrUserNotFound
+			return ErrUserProfileNotFound
 		}
 		return err
 	}
 
 	return s.repo.Delete(id)
+}
+
+// GetWithFullDetails retrieves a user profile with all related data
+func (s *userProfileService) GetWithFullDetails(id string) (*domain.UserProfileResponse, error) {
+	profile, err := s.repo.FindWithFullDetails(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserProfileNotFound
+		}
+		return nil, err
+	}
+	return profile.ToResponse(), nil
 }

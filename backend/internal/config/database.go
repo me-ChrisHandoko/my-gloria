@@ -23,6 +23,9 @@ func InitDB(cfg *Config) (*gorm.DB, error) {
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
+		// Disable FK constraint creation during AutoMigrate to handle cross-schema relations
+		// FK constraints are added manually via custom migrations in database/migrations.go
+		DisableForeignKeyConstraintWhenMigrating: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)

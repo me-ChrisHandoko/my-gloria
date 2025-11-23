@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"backend/internal/domain"
 	"backend/internal/service"
@@ -11,63 +10,150 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// UserHandler handles HTTP requests for users
-type UserHandler struct {
-	service service.UserService
+// UserProfileHandler handles HTTP requests for user profiles
+type UserProfileHandler struct {
+	service service.UserProfileService
 }
 
-// NewUserHandler creates a new user handler instance
-func NewUserHandler(service service.UserService) *UserHandler {
-	return &UserHandler{service: service}
+// NewUserProfileHandler creates a new user profile handler instance
+func NewUserProfileHandler(service service.UserProfileService) *UserProfileHandler {
+	return &UserProfileHandler{service: service}
 }
 
-// GetAll handles GET /users
-func (h *UserHandler) GetAll(c *gin.Context) {
-	users, err := h.service.GetAll()
+// GetAll handles GET /user-profiles
+func (h *UserProfileHandler) GetAll(c *gin.Context) {
+	profiles, err := h.service.GetAll()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve users",
+			"error": "Failed to retrieve user profiles",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": users,
+		"data": profiles,
 	})
 }
 
-// GetByID handles GET /users/:id
-func (h *UserHandler) GetByID(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
+// GetByID handles GET /user-profiles/:id
+func (h *UserProfileHandler) GetByID(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid user ID",
+			"error": "Invalid user profile ID",
 		})
 		return
 	}
 
-	user, err := h.service.GetByID(uint(id))
+	profile, err := h.service.GetByID(id)
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
+		if errors.Is(err, service.ErrUserProfileNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
-				"error": "User not found",
+				"error": "User profile not found",
 			})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve user",
+			"error": "Failed to retrieve user profile",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": user,
+		"data": profile,
 	})
 }
 
-// Create handles POST /users
-func (h *UserHandler) Create(c *gin.Context) {
-	var req domain.CreateUserRequest
+// GetByClerkUserID handles GET /user-profiles/clerk/:clerkUserId
+func (h *UserProfileHandler) GetByClerkUserID(c *gin.Context) {
+	clerkUserID := c.Param("clerkUserId")
+	if clerkUserID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid Clerk user ID",
+		})
+		return
+	}
+
+	profile, err := h.service.GetByClerkUserID(clerkUserID)
+	if err != nil {
+		if errors.Is(err, service.ErrUserProfileNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "User profile not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve user profile",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": profile,
+	})
+}
+
+// GetByNIP handles GET /user-profiles/nip/:nip
+func (h *UserProfileHandler) GetByNIP(c *gin.Context) {
+	nip := c.Param("nip")
+	if nip == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid NIP",
+		})
+		return
+	}
+
+	profile, err := h.service.GetByNIP(nip)
+	if err != nil {
+		if errors.Is(err, service.ErrUserProfileNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "User profile not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve user profile",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": profile,
+	})
+}
+
+// GetWithFullDetails handles GET /user-profiles/:id/full
+func (h *UserProfileHandler) GetWithFullDetails(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user profile ID",
+		})
+		return
+	}
+
+	profile, err := h.service.GetWithFullDetails(id)
+	if err != nil {
+		if errors.Is(err, service.ErrUserProfileNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "User profile not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve user profile details",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": profile,
+	})
+}
+
+// Create handles POST /user-profiles
+func (h *UserProfileHandler) Create(c *gin.Context) {
+	var req domain.CreateUserProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
@@ -75,37 +161,46 @@ func (h *UserHandler) Create(c *gin.Context) {
 		return
 	}
 
-	user, err := h.service.Create(&req)
+	// TODO: Get createdBy from authentication context
+	var createdBy *string
+
+	profile, err := h.service.Create(&req, createdBy)
 	if err != nil {
-		if errors.Is(err, service.ErrEmailExists) {
+		if errors.Is(err, service.ErrNIPExists) {
 			c.JSON(http.StatusConflict, gin.H{
-				"error": "Email already exists",
+				"error": "NIP already exists",
+			})
+			return
+		}
+		if errors.Is(err, service.ErrClerkUserIDExists) {
+			c.JSON(http.StatusConflict, gin.H{
+				"error": "Clerk user ID already exists",
 			})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to create user",
+			"error": "Failed to create user profile",
 		})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"data":    user,
-		"message": "User created successfully",
+		"data":    profile,
+		"message": "User profile created successfully",
 	})
 }
 
-// Update handles PUT /users/:id
-func (h *UserHandler) Update(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
+// Update handles PUT /user-profiles/:id
+func (h *UserProfileHandler) Update(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid user ID",
+			"error": "Invalid user profile ID",
 		})
 		return
 	}
 
-	var req domain.UpdateUserRequest
+	var req domain.UpdateUserProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
@@ -113,56 +208,50 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
-	user, err := h.service.Update(uint(id), &req)
+	profile, err := h.service.Update(id, &req)
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
+		if errors.Is(err, service.ErrUserProfileNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
-				"error": "User not found",
-			})
-			return
-		}
-		if errors.Is(err, service.ErrEmailExists) {
-			c.JSON(http.StatusConflict, gin.H{
-				"error": "Email already exists",
+				"error": "User profile not found",
 			})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to update user",
+			"error": "Failed to update user profile",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":    user,
-		"message": "User updated successfully",
+		"data":    profile,
+		"message": "User profile updated successfully",
 	})
 }
 
-// Delete handles DELETE /users/:id
-func (h *UserHandler) Delete(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
+// Delete handles DELETE /user-profiles/:id
+func (h *UserProfileHandler) Delete(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid user ID",
+			"error": "Invalid user profile ID",
 		})
 		return
 	}
 
-	if err := h.service.Delete(uint(id)); err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
+	if err := h.service.Delete(id); err != nil {
+		if errors.Is(err, service.ErrUserProfileNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
-				"error": "User not found",
+				"error": "User profile not found",
 			})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to delete user",
+			"error": "Failed to delete user profile",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "User deleted successfully",
+		"message": "User profile deleted successfully",
 	})
 }

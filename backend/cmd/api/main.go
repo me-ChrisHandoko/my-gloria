@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"backend/internal/config"
+	"backend/internal/database"
 	"backend/internal/domain"
 	"backend/internal/handler"
 	"backend/internal/middleware"
@@ -24,16 +25,64 @@ func main() {
 	}
 	log.Println("Successfully connected to database!")
 
-	// Auto migrate
-	if err := db.AutoMigrate(&domain.User{}); err != nil {
-		log.Fatal("Failed to migrate database:", err)
+	// Run migrations only if enabled
+	if cfg.RunMigrations {
+		// Create schemas if they don't exist
+		db.Exec("CREATE SCHEMA IF NOT EXISTS gloria_master")
+		db.Exec("CREATE SCHEMA IF NOT EXISTS gloria_ops")
+		log.Println("Database schemas ensured!")
+
+		// Auto migrate all domain models
+		if err := db.AutoMigrate(
+			// gloria_master schema
+			&domain.DataKaryawan{},
+			// gloria_ops schema - organization
+			&domain.School{},
+			&domain.Department{},
+			&domain.Position{},
+			&domain.PositionHierarchy{},
+			// gloria_ops schema - roles & permissions
+			&domain.Role{},
+			&domain.RoleHierarchy{},
+			&domain.Permission{},
+			&domain.ModulePermission{},
+			&domain.RolePermission{},
+			// gloria_ops schema - modules
+			&domain.Module{},
+			&domain.RoleModuleAccess{},
+			&domain.UserModuleAccess{},
+			// gloria_ops schema - users
+			&domain.UserProfile{},
+			&domain.UserRole{},
+			&domain.UserPosition{},
+			&domain.UserPermission{},
+			// gloria_ops schema - delegations & api
+			&domain.Delegation{},
+			&domain.ApiKey{},
+			// gloria_ops schema - audit & system
+			&domain.AuditLog{},
+			&domain.FeatureFlag{},
+			&domain.FeatureFlagEvaluation{},
+			&domain.Workflow{},
+			&domain.BulkOperationProgress{},
+			&domain.SystemConfiguration{},
+		); err != nil {
+			log.Fatal("Failed to migrate database:", err)
+		}
+		log.Println("Database migration completed!")
+
+		// Run custom migrations (indexes with DESC sorting, composite constraints)
+		if err := database.RunCustomMigrations(db); err != nil {
+			log.Printf("Warning: Some custom migrations failed: %v", err)
+		}
+	} else {
+		log.Println("Database migrations skipped (RUN_MIGRATIONS=false)")
 	}
-	log.Println("Database migration completed!")
 
 	// Initialize layers
-	userRepo := repository.NewUserRepository(db)
-	userService := service.NewUserService(userRepo)
-	userHandler := handler.NewUserHandler(userService)
+	userProfileRepo := repository.NewUserProfileRepository(db)
+	userProfileService := service.NewUserProfileService(userProfileRepo)
+	userProfileHandler := handler.NewUserProfileHandler(userProfileService)
 
 	// Setup router
 	router := gin.Default()
@@ -50,13 +99,17 @@ func main() {
 	// API routes
 	api := router.Group("/api/v1")
 	{
-		users := api.Group("/users")
+		// User Profile routes
+		userProfiles := api.Group("/user-profiles")
 		{
-			users.GET("", userHandler.GetAll)
-			users.GET("/:id", userHandler.GetByID)
-			users.POST("", userHandler.Create)
-			users.PUT("/:id", userHandler.Update)
-			users.DELETE("/:id", userHandler.Delete)
+			userProfiles.GET("", userProfileHandler.GetAll)
+			userProfiles.GET("/:id", userProfileHandler.GetByID)
+			userProfiles.GET("/:id/full", userProfileHandler.GetWithFullDetails)
+			userProfiles.GET("/clerk/:clerkUserId", userProfileHandler.GetByClerkUserID)
+			userProfiles.GET("/nip/:nip", userProfileHandler.GetByNIP)
+			userProfiles.POST("", userProfileHandler.Create)
+			userProfiles.PUT("/:id", userProfileHandler.Update)
+			userProfiles.DELETE("/:id", userProfileHandler.Delete)
 		}
 	}
 
