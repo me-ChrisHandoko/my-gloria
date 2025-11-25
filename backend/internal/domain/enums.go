@@ -45,12 +45,14 @@ const (
 	AuditCategorySystemConfig   AuditCategory = "SYSTEM_CONFIG"
 	AuditCategoryUserManagement AuditCategory = "USER_MANAGEMENT"
 	AuditCategoryDataChange     AuditCategory = "DATA_CHANGE"
+	AuditCategorySecurity       AuditCategory = "SECURITY"
 )
 
 func (a AuditCategory) IsValid() bool {
 	switch a {
 	case AuditCategoryPermission, AuditCategoryModule, AuditCategoryWorkflow,
-		AuditCategorySystemConfig, AuditCategoryUserManagement, AuditCategoryDataChange:
+		AuditCategorySystemConfig, AuditCategoryUserManagement, AuditCategoryDataChange,
+		AuditCategorySecurity:
 		return true
 	}
 	return false
@@ -197,6 +199,7 @@ func AllAuditCategories() []AuditCategory {
 	return []AuditCategory{
 		AuditCategoryPermission, AuditCategoryModule, AuditCategoryWorkflow,
 		AuditCategorySystemConfig, AuditCategoryUserManagement, AuditCategoryDataChange,
+		AuditCategorySecurity,
 	}
 }
 

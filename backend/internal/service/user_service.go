@@ -19,6 +19,7 @@ var (
 // UserProfileService defines the interface for user profile business logic
 type UserProfileService interface {
 	GetAll() ([]domain.UserProfileListResponse, error)
+	GetAllPaginated(page, limit int, search string) ([]domain.UserProfileListResponse, int64, error)
 	GetByID(id string) (*domain.UserProfileResponse, error)
 	GetByClerkUserID(clerkUserID string) (*domain.UserProfileResponse, error)
 	GetByNIP(nip string) (*domain.UserProfileResponse, error)
@@ -26,6 +27,21 @@ type UserProfileService interface {
 	Update(id string, req *domain.UpdateUserProfileRequest) (*domain.UserProfileResponse, error)
 	Delete(id string) error
 	GetWithFullDetails(id string) (*domain.UserProfileResponse, error)
+
+	// Role management
+	AssignRole(userID string, req *domain.AssignRoleToUserRequest, assignedBy *string) (*domain.UserRoleResponse, error)
+	RemoveRole(userID string, roleID string) error
+	GetUserRoles(userID string) ([]domain.UserRoleResponse, error)
+
+	// Position management
+	AssignPosition(userID string, req *domain.AssignPositionToUserRequest, appointedBy *string) (*domain.UserPositionResponse, error)
+	RemovePosition(userID string, positionID string) error
+	GetUserPositions(userID string) ([]domain.UserPositionResponse, error)
+
+	// Permission management
+	GrantPermission(userID string, req *domain.AssignPermissionToUserRequest, grantedBy string) error
+	RevokePermission(userID string, permissionID string) error
+	GetUserDirectPermissions(userID string) ([]domain.UserPermission, error)
 }
 
 // userProfileService implements UserProfileService
@@ -50,6 +66,20 @@ func (s *userProfileService) GetAll() ([]domain.UserProfileListResponse, error) 
 		responses[i] = *profile.ToListResponse()
 	}
 	return responses, nil
+}
+
+// GetAllPaginated retrieves user profiles with pagination
+func (s *userProfileService) GetAllPaginated(page, limit int, search string) ([]domain.UserProfileListResponse, int64, error) {
+	profiles, total, err := s.repo.FindAllPaginated(page, limit, search)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	responses := make([]domain.UserProfileListResponse, len(profiles))
+	for i, profile := range profiles {
+		responses[i] = *profile.ToListResponse()
+	}
+	return responses, total, nil
 }
 
 // GetByID retrieves a user profile by ID
@@ -178,4 +208,131 @@ func (s *userProfileService) GetWithFullDetails(id string) (*domain.UserProfileR
 		return nil, err
 	}
 	return profile.ToResponse(), nil
+}
+
+// AssignRole assigns a role to a user
+func (s *userProfileService) AssignRole(userID string, req *domain.AssignRoleToUserRequest, assignedBy *string) (*domain.UserRoleResponse, error) {
+	// Verify user exists
+	_, err := s.repo.FindByID(userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserProfileNotFound
+		}
+		return nil, err
+	}
+
+	userRole, err := s.repo.AssignRole(userID, req, assignedBy)
+	if err != nil {
+		return nil, err
+	}
+
+	return userRole.ToResponse(), nil
+}
+
+// RemoveRole removes a role from a user
+func (s *userProfileService) RemoveRole(userID string, roleID string) error {
+	// Verify user exists
+	_, err := s.repo.FindByID(userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrUserProfileNotFound
+		}
+		return err
+	}
+
+	return s.repo.RemoveRole(userID, roleID)
+}
+
+// GetUserRoles returns all roles assigned to a user
+func (s *userProfileService) GetUserRoles(userID string) ([]domain.UserRoleResponse, error) {
+	roles, err := s.repo.GetUserRoles(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	responses := make([]domain.UserRoleResponse, len(roles))
+	for i, r := range roles {
+		responses[i] = *r.ToResponse()
+	}
+	return responses, nil
+}
+
+// AssignPosition assigns a position to a user
+func (s *userProfileService) AssignPosition(userID string, req *domain.AssignPositionToUserRequest, appointedBy *string) (*domain.UserPositionResponse, error) {
+	// Verify user exists
+	_, err := s.repo.FindByID(userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserProfileNotFound
+		}
+		return nil, err
+	}
+
+	userPosition, err := s.repo.AssignPosition(userID, req, appointedBy)
+	if err != nil {
+		return nil, err
+	}
+
+	return userPosition.ToResponse(), nil
+}
+
+// RemovePosition removes a position from a user
+func (s *userProfileService) RemovePosition(userID string, positionID string) error {
+	// Verify user exists
+	_, err := s.repo.FindByID(userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrUserProfileNotFound
+		}
+		return err
+	}
+
+	return s.repo.RemovePosition(userID, positionID)
+}
+
+// GetUserPositions returns all positions assigned to a user
+func (s *userProfileService) GetUserPositions(userID string) ([]domain.UserPositionResponse, error) {
+	positions, err := s.repo.GetUserPositions(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	responses := make([]domain.UserPositionResponse, len(positions))
+	for i, p := range positions {
+		responses[i] = *p.ToResponse()
+	}
+	return responses, nil
+}
+
+// GrantPermission grants a permission directly to a user
+func (s *userProfileService) GrantPermission(userID string, req *domain.AssignPermissionToUserRequest, grantedBy string) error {
+	// Verify user exists
+	_, err := s.repo.FindByID(userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrUserProfileNotFound
+		}
+		return err
+	}
+
+	return s.repo.GrantPermission(userID, req, grantedBy)
+}
+
+// RevokePermission revokes a permission from a user
+func (s *userProfileService) RevokePermission(userID string, permissionID string) error {
+	// Verify user exists
+	_, err := s.repo.FindByID(userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrUserProfileNotFound
+		}
+		return err
+	}
+
+	return s.repo.RevokePermission(userID, permissionID)
+}
+
+// GetUserDirectPermissions returns all direct permissions assigned to a user
+func (s *userProfileService) GetUserDirectPermissions(userID string) ([]domain.UserPermission, error) {
+	return s.repo.GetUserDirectPermissions(userID)
 }

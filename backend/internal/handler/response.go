@@ -1,30 +1,20 @@
 package handler
 
 import (
+	"backend/internal/response"
+
 	"github.com/gin-gonic/gin"
 )
 
-// Response represents a standard API response
-type Response struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
-}
+// Response represents a standard API response (aliased from response package)
+type Response = response.Response
 
-// SuccessResponse sends a success response
+// SuccessResponse sends a success response (wrapper for backward compatibility)
 func SuccessResponse(c *gin.Context, status int, message string, data interface{}) {
-	c.JSON(status, Response{
-		Success: true,
-		Message: message,
-		Data:    data,
-	})
+	response.Success(c, status, message, data)
 }
 
-// ErrorResponse sends an error response
+// ErrorResponse sends an error response (wrapper for backward compatibility)
 func ErrorResponse(c *gin.Context, status int, err string) {
-	c.JSON(status, Response{
-		Success: false,
-		Error:   err,
-	})
+	response.Error(c, status, err)
 }
