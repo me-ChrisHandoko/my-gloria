@@ -8,13 +8,17 @@ import (
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
+	"github.com/clerk/clerk-sdk-go/v2/user"
 	"github.com/gin-gonic/gin"
 )
 
 // UserProfileLookup is an interface for looking up user profiles
 // This allows the middleware to be decoupled from the service layer
 type UserProfileLookup interface {
-	GetByClerkUserID(clerkUserID string) (*UserProfileInfo, error)
+	// GetOrCreateByClerkUserID looks up a user profile by Clerk user ID.
+	// If not found, it attempts to auto-register by matching email with data_karyawan.
+	// Returns the user profile info or an error if user cannot be found or registered.
+	GetOrCreateByClerkUserID(clerkUserID string, email string) (*UserProfileInfo, error)
 }
 
 // UserProfileInfo contains the minimal user profile info needed for auth context
@@ -33,6 +37,7 @@ type ClerkAuthConfig struct {
 }
 
 // ClerkAuth returns a middleware that validates Clerk session tokens
+// It also handles auto-registration for new users by matching their email with data_karyawan
 func ClerkAuth(lookup UserProfileLookup) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
@@ -61,10 +66,29 @@ func ClerkAuth(lookup UserProfileLookup) gin.HandlerFunc {
 			return
 		}
 
-		// Look up the user profile by Clerk user ID
-		userInfo, err := lookup.GetByClerkUserID(clerkUserID)
+		// Fetch user details from Clerk to get email for auto-registration
+		clerkUser, err := user.Get(c.Request.Context(), clerkUserID)
 		if err != nil {
-			response.Error(c, http.StatusUnauthorized, "user not found")
+			response.Error(c, http.StatusUnauthorized, "failed to fetch user details")
+			c.Abort()
+			return
+		}
+
+		// Get primary email from Clerk user
+		var email string
+		if clerkUser.PrimaryEmailAddressID != nil {
+			for _, emailAddr := range clerkUser.EmailAddresses {
+				if emailAddr.ID == *clerkUser.PrimaryEmailAddressID {
+					email = emailAddr.EmailAddress
+					break
+				}
+			}
+		}
+
+		// Look up or create user profile by Clerk user ID and email
+		userInfo, err := lookup.GetOrCreateByClerkUserID(clerkUserID, email)
+		if err != nil {
+			response.Error(c, http.StatusUnauthorized, err.Error())
 			c.Abort()
 			return
 		}
@@ -92,6 +116,7 @@ func ClerkAuth(lookup UserProfileLookup) gin.HandlerFunc {
 }
 
 // ClerkAuthOptional returns a middleware that validates Clerk session tokens but allows unauthenticated requests
+// It also handles auto-registration for new users by matching their email with data_karyawan
 func ClerkAuthOptional(lookup UserProfileLookup) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
@@ -119,8 +144,26 @@ func ClerkAuthOptional(lookup UserProfileLookup) gin.HandlerFunc {
 			return
 		}
 
-		// Look up the user profile by Clerk user ID
-		userInfo, err := lookup.GetByClerkUserID(clerkUserID)
+		// Fetch user details from Clerk to get email for auto-registration
+		clerkUser, err := user.Get(c.Request.Context(), clerkUserID)
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		// Get primary email from Clerk user
+		var email string
+		if clerkUser.PrimaryEmailAddressID != nil {
+			for _, emailAddr := range clerkUser.EmailAddresses {
+				if emailAddr.ID == *clerkUser.PrimaryEmailAddressID {
+					email = emailAddr.EmailAddress
+					break
+				}
+			}
+		}
+
+		// Look up or create user profile by Clerk user ID and email
+		userInfo, err := lookup.GetOrCreateByClerkUserID(clerkUserID, email)
 		if err != nil {
 			c.Next()
 			return

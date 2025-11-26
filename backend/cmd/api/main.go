@@ -113,6 +113,8 @@ func main() {
 	departmentRepo := repository.NewDepartmentRepository(db)
 	positionRepo := repository.NewPositionRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
+	moduleRepo := repository.NewModuleRepository(db)
+	employeeRepo := repository.NewEmployeeRepository(db)
 
 	// Initialize services
 	userProfileService := service.NewUserProfileService(userProfileRepo)
@@ -120,13 +122,24 @@ func main() {
 	// AuthService now depends on ApiKeyService for key validation (reduces code duplication)
 	// Also uses permissionRepo for hierarchy-based permission loading
 	authService := service.NewAuthService(apiKeyService, userProfileRepo, permissionRepo, jwtConfig)
-	authLookupAdapter := service.NewAuthLookupAdapter(userProfileRepo)
+	authLookupAdapter := service.NewAuthLookupAdapter(userProfileRepo, employeeRepo)
 	permissionService := service.NewPermissionService(permissionRepo)
 	roleService := service.NewRoleService(roleRepo, permissionRepo)
 	schoolService := service.NewSchoolService(schoolRepo)
 	departmentService := service.NewDepartmentService(departmentRepo)
 	positionService := service.NewPositionService(positionRepo)
 	auditService := service.NewAuditService(auditRepo)
+	moduleService := service.NewModuleService(moduleRepo)
+	employeeService := service.NewEmployeeService(employeeRepo)
+	dashboardService := service.NewDashboardService(
+		employeeRepo,
+		schoolRepo,
+		departmentRepo,
+		positionRepo,
+		roleRepo,
+		userProfileRepo,
+		moduleRepo,
+	)
 
 	// Set permission checker for middleware (enables DB-based permission checks)
 	middleware.SetPermissionChecker(permissionService)
@@ -141,6 +154,9 @@ func main() {
 	positionHandler := handler.NewPositionHandler(positionService, auditService)
 	apiKeyHandler := handler.NewApiKeyHandler(apiKeyService, auditService)
 	auditHandler := handler.NewAuditHandler(auditService)
+	moduleHandler := handler.NewModuleHandler(moduleService, auditService)
+	employeeHandler := handler.NewEmployeeHandler(employeeService)
+	dashboardHandler := handler.NewDashboardHandler(dashboardService)
 
 	// Setup router
 	router := gin.Default()
@@ -316,6 +332,54 @@ func main() {
 			auditLogs.GET("/module/:module", middleware.RequirePermission("audit:read"), auditHandler.GetByModule)
 			auditLogs.GET("/entity/:entityType/:entityId", middleware.RequirePermission("audit:read"), auditHandler.GetByEntity)
 			auditLogs.GET("/:id", middleware.RequirePermission("audit:read"), auditHandler.GetByID)
+		}
+
+		// Module routes
+		modules := web.Group("/modules")
+		{
+			modules.GET("", moduleHandler.GetAll)
+			modules.GET("/active", moduleHandler.GetActive)
+			modules.GET("/tree", moduleHandler.GetTree)
+			modules.GET("/categories", moduleHandler.GetCategories)
+			modules.GET("/code/:code", moduleHandler.GetByCode)
+			modules.GET("/category/:category", moduleHandler.GetByCategory)
+			modules.GET("/parent/:parentId", moduleHandler.GetByParentID)
+			modules.GET("/me", moduleHandler.GetMyModules)
+			modules.GET("/:id", moduleHandler.GetByID)
+			modules.POST("", middleware.RequirePermission("module:create"), moduleHandler.Create)
+			modules.PUT("/:id", middleware.RequirePermission("module:update"), moduleHandler.Update)
+			modules.DELETE("/:id", middleware.RequirePermission("module:delete"), moduleHandler.Delete)
+
+			// Role module access
+			modules.GET("/role/:roleId/access", middleware.RequirePermission("module:read"), moduleHandler.GetRoleModuleAccess)
+			modules.POST("/role/:roleId/access", middleware.RequirePermission("module:assign"), moduleHandler.AssignRoleModuleAccess)
+			modules.DELETE("/role/:roleId/access/:moduleId", middleware.RequirePermission("module:assign"), moduleHandler.RemoveRoleModuleAccess)
+
+			// User module access
+			modules.GET("/user/:userId/access", middleware.RequirePermission("module:read"), moduleHandler.GetUserModuleAccess)
+			modules.POST("/user/:userId/access", middleware.RequirePermission("module:assign"), moduleHandler.AssignUserModuleAccess)
+			modules.DELETE("/user/:userId/access/:moduleId", middleware.RequirePermission("module:assign"), moduleHandler.RemoveUserModuleAccess)
+		}
+
+		// Employee routes (master data from gloria_master schema)
+		employees := web.Group("/employees")
+		{
+			employees.GET("", employeeHandler.GetAll)
+			employees.GET("/active", employeeHandler.GetActive)
+			employees.GET("/search", employeeHandler.Search)
+			employees.GET("/statistics", employeeHandler.GetStatistics)
+			employees.GET("/department/:department", employeeHandler.GetByDepartment)
+			employees.GET("/location/:location", employeeHandler.GetByLocation)
+			employees.GET("/:nip", employeeHandler.GetByNIP)
+		}
+
+		// Dashboard routes
+		dashboard := web.Group("/dashboard")
+		{
+			dashboard.GET("/statistics", dashboardHandler.GetStatistics)
+			dashboard.GET("/statistics/employees", dashboardHandler.GetEmployeeStatistics)
+			dashboard.GET("/statistics/organization", dashboardHandler.GetOrganizationStatistics)
+			dashboard.GET("/statistics/system", dashboardHandler.GetSystemStatistics)
 		}
 	}
 

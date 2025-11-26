@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"backend/internal/domain"
+	"backend/internal/middleware"
 	"backend/internal/repository"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -39,6 +41,9 @@ type AuditService interface {
 	LogDelete(actorID string, actorProfileID *string, module, entityType, entityID string, entityDisplay *string, oldValues interface{}, metadata map[string]interface{}, ipAddress, userAgent *string) error
 	LogAction(actorID string, actorProfileID *string, action domain.AuditAction, module, entityType, entityID string, entityDisplay *string, metadata map[string]interface{}, ipAddress, userAgent *string) error
 	LogAuthEvent(actorID string, actorProfileID *string, action domain.AuditAction, entityType, entityID string, metadata map[string]interface{}, ipAddress, userAgent *string) error
+
+	// Context-aware logging (extracts user info from gin context)
+	LogFromContext(c interface{}, action domain.AuditAction, module, entityType, entityID, entityDisplay string, oldValues, newValues interface{})
 }
 
 // AuditEntry represents a structured audit log entry for creation
@@ -353,4 +358,60 @@ func structToMap(v interface{}) map[string]interface{} {
 
 	json.Unmarshal(bytes, &result)
 	return result
+}
+
+// LogFromContext logs an audit entry extracting user info from gin context
+// This is a convenience method for handlers to easily log audit events
+func (s *auditService) LogFromContext(c interface{}, action domain.AuditAction, module, entityType, entityID, entityDisplay string, oldValues, newValues interface{}) {
+	ginCtx, ok := c.(*gin.Context)
+	if !ok {
+		return
+	}
+
+	// Get user info from auth context
+	userID := middleware.GetCurrentUserID(ginCtx)
+	if userID == "" {
+		userID = "anonymous"
+	}
+
+	// Get IP and User Agent
+	ipAddress := ginCtx.ClientIP()
+	userAgent := ginCtx.GetHeader("User-Agent")
+
+	// Determine category based on action
+	var category *domain.AuditCategory
+	switch action {
+	case domain.AuditActionCreate, domain.AuditActionUpdate, domain.AuditActionDelete:
+		cat := domain.AuditCategoryDataChange
+		category = &cat
+	case domain.AuditActionAssign, domain.AuditActionGrant, domain.AuditActionRevoke:
+		cat := domain.AuditCategoryPermission
+		category = &cat
+	case domain.AuditActionLogin, domain.AuditActionLogout:
+		cat := domain.AuditCategorySecurity
+		category = &cat
+	}
+
+	var entityDisplayPtr *string
+	if entityDisplay != "" {
+		entityDisplayPtr = &entityDisplay
+	}
+
+	entry := &AuditEntry{
+		ActorID:       userID,
+		ActorProfileID: &userID,
+		Action:        action,
+		Module:        module,
+		EntityType:    entityType,
+		EntityID:      entityID,
+		EntityDisplay: entityDisplayPtr,
+		OldValues:     oldValues,
+		NewValues:     newValues,
+		IPAddress:     &ipAddress,
+		UserAgent:     &userAgent,
+		Category:      category,
+	}
+
+	// Log asynchronously to not block the response
+	go s.Log(entry)
 }

@@ -184,6 +184,28 @@ type AssignModuleAccessToUserRequest struct {
 	EffectiveUntil *time.Time     `json:"effective_until,omitempty"`
 }
 
+// RoleModuleAccessResponse represents module access response for roles
+type RoleModuleAccessResponse struct {
+	ID          string              `json:"id"`
+	ModuleID    string              `json:"module_id"`
+	Module      *ModuleListResponse `json:"module,omitempty"`
+	PositionID  *string             `json:"position_id,omitempty"`
+	Permissions datatypes.JSON      `json:"permissions"`
+	IsActive    bool                `json:"is_active"`
+}
+
+// UserModuleAccessResponse represents module access response for users
+type UserModuleAccessResponse struct {
+	ID             string              `json:"id"`
+	ModuleID       string              `json:"module_id"`
+	Module         *ModuleListResponse `json:"module,omitempty"`
+	Permissions    datatypes.JSON      `json:"permissions"`
+	Reason         *string             `json:"reason,omitempty"`
+	IsActive       bool                `json:"is_active"`
+	EffectiveFrom  time.Time           `json:"effective_from"`
+	EffectiveUntil *time.Time          `json:"effective_until,omitempty"`
+}
+
 // ToResponse converts Module to ModuleResponse
 func (m *Module) ToResponse() *ModuleResponse {
 	resp := &ModuleResponse{
