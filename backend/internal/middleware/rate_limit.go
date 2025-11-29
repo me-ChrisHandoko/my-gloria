@@ -132,6 +132,9 @@ func RateLimit(requestsPerHour int) gin.HandlerFunc {
 
 		// Check rate limit
 		if !rl.Allow(key) {
+			// Increment rejected counter
+			IncrementRejected()
+
 			// Set rate limit headers
 			c.Header("X-RateLimit-Limit", strconv.Itoa(requestsPerHour))
 			c.Header("X-RateLimit-Remaining", "0")
@@ -142,6 +145,9 @@ func RateLimit(requestsPerHour int) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+
+		// Increment allowed counter
+		IncrementAllowed()
 
 		c.Next()
 	}
@@ -197,6 +203,8 @@ func RateLimitStrict(requestsPerMinute int) gin.HandlerFunc {
 		key := "strict:" + c.ClientIP()
 
 		if !rl.Allow(key) {
+			IncrementRejected()
+
 			c.Header("X-RateLimit-Limit", strconv.Itoa(requestsPerMinute))
 			c.Header("X-RateLimit-Remaining", "0")
 			c.Header("Retry-After", "60")
@@ -205,6 +213,8 @@ func RateLimitStrict(requestsPerMinute int) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+
+		IncrementAllowed()
 
 		c.Next()
 	}

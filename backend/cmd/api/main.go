@@ -157,6 +157,7 @@ func main() {
 	employeeHandler := handler.NewEmployeeHandler(employeeService)
 	dashboardHandler := handler.NewDashboardHandler(dashboardService)
 	meHandler := handler.NewMeHandler(meService)
+	monitoringHandler := handler.NewMonitoringHandler()
 
 	// Setup router
 	router := gin.Default()
@@ -206,8 +207,9 @@ func main() {
 	if cfg.ClerkSecretKey != "" {
 		web.Use(middleware.ClerkAuth(authLookupAdapter))
 	}
+	web.Use(middleware.RateLimit(cfg.RateLimitDefault)) // Rate limiting for web endpoints
 	{
-		// User Profile routes
+		// User Profile routes (sensitive data - stricter rate limit for modifications)
 		userProfiles := web.Group("/user-profiles")
 		{
 			userProfiles.GET("", userProfileHandler.GetAll)
@@ -215,9 +217,11 @@ func main() {
 			userProfiles.GET("/:id/full", userProfileHandler.GetWithFullDetails)
 			userProfiles.GET("/clerk/:clerkUserId", userProfileHandler.GetByClerkUserID)
 			userProfiles.GET("/nip/:nip", userProfileHandler.GetByNIP)
-			userProfiles.POST("", middleware.RequirePermission("user:create"), userProfileHandler.Create)
-			userProfiles.PUT("/:id", middleware.RequirePermission("user:update"), userProfileHandler.Update)
-			userProfiles.DELETE("/:id", middleware.RequirePermission("user:delete"), userProfileHandler.Delete)
+
+			// Create/Update/Delete with stricter rate limit (200 req/hour)
+			userProfiles.POST("", middleware.RateLimitSensitive(), middleware.RequirePermission("user:create"), userProfileHandler.Create)
+			userProfiles.PUT("/:id", middleware.RateLimitSensitive(), middleware.RequirePermission("user:update"), userProfileHandler.Update)
+			userProfiles.DELETE("/:id", middleware.RateLimitSensitive(), middleware.RequirePermission("user:delete"), userProfileHandler.Delete)
 
 			// Role management for users
 			userProfiles.GET("/:id/roles", userProfileHandler.GetUserRoles)
@@ -370,14 +374,25 @@ func main() {
 			employees.GET("/:nip", employeeHandler.GetByNIP)
 		}
 
-		// Dashboard routes
+		// Dashboard routes (expensive queries - lower rate limit)
 		dashboard := web.Group("/dashboard")
+		dashboard.Use(middleware.RateLimitCritical()) // 100 req/hour for expensive aggregations
 		{
 			dashboard.GET("/statistics", dashboardHandler.GetStatistics)
 			dashboard.GET("/statistics/employees", dashboardHandler.GetEmployeeStatistics)
 			dashboard.GET("/statistics/organization", dashboardHandler.GetOrganizationStatistics)
 			dashboard.GET("/statistics/system", dashboardHandler.GetSystemStatistics)
 		}
+	}
+
+	// ==========================================
+	// Monitoring routes (internal use, optional auth)
+	// ==========================================
+	monitoring := api.Group("/monitoring")
+	{
+		monitoring.GET("/health", monitoringHandler.GetSystemHealth)
+		monitoring.GET("/metrics/rate-limit", monitoringHandler.GetRateLimitMetrics)
+		monitoring.GET("/metrics/cache", monitoringHandler.GetAuthCacheStats)
 	}
 
 	// ==========================================

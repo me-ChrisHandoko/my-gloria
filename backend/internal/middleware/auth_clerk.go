@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"backend/internal/response"
 
@@ -36,6 +37,28 @@ type ClerkAuthConfig struct {
 	SecretKey string
 }
 
+// Global cache for auth context (5 minute TTL)
+var authCache = NewCache(5*time.Minute, 2*time.Minute)
+
+// InvalidateAuthCache invalidates the cache for a specific user
+// Should be called when user permissions, roles, or profile changes
+func InvalidateAuthCache(clerkUserID string) {
+	if clerkUserID != "" {
+		authCache.Delete("auth:" + clerkUserID)
+	}
+}
+
+// ClearAuthCache clears all cached auth data
+// Useful for bulk updates or testing
+func ClearAuthCache() {
+	authCache.Clear()
+}
+
+// GetAuthCacheStats returns cache statistics
+func GetAuthCacheStats() map[string]int {
+	return authCache.GetStats()
+}
+
 // ClerkAuth returns a middleware that validates Clerk session tokens
 // It also handles auto-registration for new users by matching their email with data_karyawan
 func ClerkAuth(lookup UserProfileLookup) gin.HandlerFunc {
@@ -66,31 +89,44 @@ func ClerkAuth(lookup UserProfileLookup) gin.HandlerFunc {
 			return
 		}
 
-		// Fetch user details from Clerk to get email for auto-registration
-		clerkUser, err := user.Get(c.Request.Context(), clerkUserID)
-		if err != nil {
-			response.Error(c, http.StatusUnauthorized, "failed to fetch user details")
-			c.Abort()
-			return
-		}
+		// Check cache first
+		cacheKey := "auth:" + clerkUserID
+		var userInfo *UserProfileInfo
 
-		// Get primary email from Clerk user
-		var email string
-		if clerkUser.PrimaryEmailAddressID != nil {
-			for _, emailAddr := range clerkUser.EmailAddresses {
-				if emailAddr.ID == *clerkUser.PrimaryEmailAddressID {
-					email = emailAddr.EmailAddress
-					break
+		if cached, found := authCache.Get(cacheKey); found {
+			// Cache hit - use cached user info
+			userInfo = cached.(*UserProfileInfo)
+		} else {
+			// Cache miss - fetch from database
+			// Fetch user details from Clerk to get email for auto-registration
+			clerkUser, err := user.Get(c.Request.Context(), clerkUserID)
+			if err != nil {
+				response.Error(c, http.StatusUnauthorized, "failed to fetch user details")
+				c.Abort()
+				return
+			}
+
+			// Get primary email from Clerk user
+			var email string
+			if clerkUser.PrimaryEmailAddressID != nil {
+				for _, emailAddr := range clerkUser.EmailAddresses {
+					if emailAddr.ID == *clerkUser.PrimaryEmailAddressID {
+						email = emailAddr.EmailAddress
+						break
+					}
 				}
 			}
-		}
 
-		// Look up or create user profile by Clerk user ID and email
-		userInfo, err := lookup.GetOrCreateByClerkUserID(clerkUserID, email)
-		if err != nil {
-			response.Error(c, http.StatusUnauthorized, err.Error())
-			c.Abort()
-			return
+			// Look up or create user profile by Clerk user ID and email
+			userInfo, err = lookup.GetOrCreateByClerkUserID(clerkUserID, email)
+			if err != nil {
+				response.Error(c, http.StatusUnauthorized, err.Error())
+				c.Abort()
+				return
+			}
+
+			// Store in cache
+			authCache.Set(cacheKey, userInfo)
 		}
 
 		// Check if user is active

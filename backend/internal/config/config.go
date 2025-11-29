@@ -64,7 +64,7 @@ func Load() *Config {
 		JWTExpiryHours: getEnvInt("JWT_EXPIRY_HOURS", 1),
 
 		// Rate Limiting
-		RateLimitDefault: getEnvInt("RATE_LIMIT_DEFAULT", 1000),
+		RateLimitDefault: getEnvInt("RATE_LIMIT_DEFAULT", 500),
 		RateLimitStrict:  getEnvInt("RATE_LIMIT_STRICT", 10),
 
 		// CORS - defaults allow localhost for development
