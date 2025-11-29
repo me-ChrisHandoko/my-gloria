@@ -24,6 +24,8 @@ type ModuleRepository interface {
 	FindAll(page, limit int, search string) ([]domain.Module, int64, error)
 	Update(module *domain.Module) error
 	Delete(id string, deletedBy string, reason string) error
+	Count() (int64, error)
+	CountActive() (int64, error)
 
 	// Queries
 	FindActive() ([]domain.Module, error)
@@ -150,6 +152,24 @@ func (r *moduleRepository) Delete(id string, deletedBy string, reason string) er
 		"deleted_by":    deletedBy,
 		"delete_reason": reason,
 	}).Delete(&domain.Module{}).Error
+}
+
+// Count returns the total number of modules
+func (r *moduleRepository) Count() (int64, error) {
+	var count int64
+	if err := r.db.Model(&domain.Module{}).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// CountActive returns the number of active modules
+func (r *moduleRepository) CountActive() (int64, error) {
+	var count int64
+	if err := r.db.Model(&domain.Module{}).Where("is_active = ?", true).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 // FindActive finds all active modules

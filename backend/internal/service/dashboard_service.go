@@ -96,55 +96,51 @@ func (s *dashboardService) GetEmployeeStatistics() (*repository.EmployeeStatisti
 }
 
 // GetOrganizationStatistics returns organization statistics
+// Uses efficient Count() methods instead of fetching all records
 func (s *dashboardService) GetOrganizationStatistics() (*OrganizationStatistics, error) {
 	stats := &OrganizationStatistics{}
 
-	// Get school count
-	schools, err := s.schoolRepo.FindAll()
-	if err == nil {
-		stats.TotalSchools = int64(len(schools))
+	// Get school count using efficient Count method
+	if count, err := s.schoolRepo.Count(); err == nil {
+		stats.TotalSchools = count
 	}
 
-	// Get department count
-	departments, err := s.deptRepo.FindAll()
-	if err == nil {
-		stats.TotalDepartments = int64(len(departments))
+	// Get department count using efficient Count method
+	if count, err := s.deptRepo.Count(); err == nil {
+		stats.TotalDepartments = count
 	}
 
-	// Get position count
-	positions, err := s.positionRepo.FindAll()
-	if err == nil {
-		stats.TotalPositions = int64(len(positions))
+	// Get position count using efficient Count method
+	if count, err := s.positionRepo.Count(); err == nil {
+		stats.TotalPositions = count
 	}
 
-	// Get role count
-	roles, err := s.roleRepo.FindAll()
-	if err == nil {
-		stats.TotalRoles = int64(len(roles))
+	// Get role count using efficient Count method
+	if count, err := s.roleRepo.Count(); err == nil {
+		stats.TotalRoles = count
 	}
 
-	// Get user count
-	users, err := s.userRepo.FindAll()
-	if err == nil {
-		stats.TotalUsers = int64(len(users))
+	// Get user count using efficient Count method
+	if count, err := s.userRepo.Count(); err == nil {
+		stats.TotalUsers = count
 	}
 
 	return stats, nil
 }
 
 // GetSystemStatistics returns system statistics
+// Uses efficient Count() methods instead of fetching all records
 func (s *dashboardService) GetSystemStatistics() (*SystemStatistics, error) {
 	stats := &SystemStatistics{}
 
-	// Get module counts
-	_, total, err := s.moduleRepo.FindAll(1, 1, "")
-	if err == nil {
-		stats.TotalModules = total
+	// Get total module count using efficient Count method
+	if count, err := s.moduleRepo.Count(); err == nil {
+		stats.TotalModules = count
 	}
 
-	activeModules, err := s.moduleRepo.FindActive()
-	if err == nil {
-		stats.ActiveModules = int64(len(activeModules))
+	// Get active module count using efficient CountActive method
+	if count, err := s.moduleRepo.CountActive(); err == nil {
+		stats.ActiveModules = count
 	}
 
 	return stats, nil

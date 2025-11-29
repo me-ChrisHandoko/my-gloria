@@ -18,6 +18,7 @@ type RoleRepository interface {
 	Create(role *domain.Role) error
 	Update(role *domain.Role) error
 	Delete(id string) error
+	Count() (int64, error)
 
 	// Role permissions
 	GetRolePermissions(roleID string) ([]domain.RolePermission, error)
@@ -113,6 +114,14 @@ func (r *roleRepository) Update(role *domain.Role) error {
 
 func (r *roleRepository) Delete(id string) error {
 	return r.db.Delete(&domain.Role{}, "id = ?", id).Error
+}
+
+func (r *roleRepository) Count() (int64, error) {
+	var count int64
+	if err := r.db.Model(&domain.Role{}).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (r *roleRepository) GetRolePermissions(roleID string) ([]domain.RolePermission, error) {

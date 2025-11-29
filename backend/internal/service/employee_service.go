@@ -14,6 +14,7 @@ var (
 // EmployeeService defines the interface for employee business operations
 type EmployeeService interface {
 	GetByNIP(nip string) (*domain.DataKaryawanResponse, error)
+	GetByEmail(email string) (*domain.DataKaryawanResponse, error)
 	GetAll(page, limit int, search string) ([]domain.DataKaryawanListResponse, int64, error)
 	GetActive(page, limit int, search string) ([]domain.DataKaryawanListResponse, int64, error)
 	GetByDepartment(bagianKerja string, page, limit int) ([]domain.DataKaryawanListResponse, int64, error)
@@ -35,6 +36,18 @@ func NewEmployeeService(employeeRepo repository.EmployeeRepository) EmployeeServ
 // GetByNIP gets an employee by NIP
 func (s *employeeService) GetByNIP(nip string) (*domain.DataKaryawanResponse, error) {
 	employee, err := s.employeeRepo.FindByNIP(nip)
+	if err != nil {
+		if errors.Is(err, repository.ErrEmployeeNotFound) {
+			return nil, ErrEmployeeNotFound
+		}
+		return nil, err
+	}
+	return employee.ToResponse(), nil
+}
+
+// GetByEmail gets an active employee by email (case-insensitive)
+func (s *employeeService) GetByEmail(email string) (*domain.DataKaryawanResponse, error) {
+	employee, err := s.employeeRepo.FindByEmail(email)
 	if err != nil {
 		if errors.Is(err, repository.ErrEmployeeNotFound) {
 			return nil, ErrEmployeeNotFound

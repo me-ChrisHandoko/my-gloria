@@ -96,13 +96,11 @@ func main() {
 		RefreshHours: 168, // 7 days
 	}
 
-	// Validate JWT configuration for security
+	// Validate JWT configuration for security - CRITICAL: fail if not properly configured
 	if err := jwtConfig.ValidateConfig(); err != nil {
-		log.Printf("WARNING: JWT configuration issue: %v", err)
-		log.Println("External API authentication (JWT) will not work properly!")
-	} else {
-		log.Println("JWT authentication configured successfully")
+		log.Fatalf("FATAL: JWT configuration error: %v\nPlease set JWT_SECRET_KEY environment variable with a secure 32+ character key", err)
 	}
+	log.Println("JWT authentication configured successfully")
 
 	// Initialize repositories
 	userProfileRepo := repository.NewUserProfileRepository(db)
@@ -140,6 +138,7 @@ func main() {
 		userProfileRepo,
 		moduleRepo,
 	)
+	meService := service.NewMeService(userProfileRepo, permissionRepo, moduleRepo, employeeRepo)
 
 	// Set permission checker for middleware (enables DB-based permission checks)
 	middleware.SetPermissionChecker(permissionService)
@@ -157,6 +156,7 @@ func main() {
 	moduleHandler := handler.NewModuleHandler(moduleService, auditService)
 	employeeHandler := handler.NewEmployeeHandler(employeeService)
 	dashboardHandler := handler.NewDashboardHandler(dashboardService)
+	meHandler := handler.NewMeHandler(meService)
 
 	// Setup router
 	router := gin.Default()
@@ -172,6 +172,20 @@ func main() {
 
 	// API routes
 	api := router.Group("/api/v1")
+
+	// ==========================================
+	// Current User routes (/api/v1/me) - Clerk authentication
+	// This is the primary endpoint for frontend to get user context
+	// ==========================================
+	if cfg.ClerkSecretKey != "" {
+		me := api.Group("/me")
+		me.Use(middleware.ClerkAuth(authLookupAdapter))
+		{
+			me.GET("", meHandler.GetMe)
+			me.GET("/permissions", meHandler.GetMyPermissions)
+			me.GET("/modules", meHandler.GetMyModules)
+		}
+	}
 
 	// ==========================================
 	// Public routes (no auth required)
@@ -193,24 +207,6 @@ func main() {
 		web.Use(middleware.ClerkAuth(authLookupAdapter))
 	}
 	{
-		// Current user endpoint
-		web.GET("/me", func(c *gin.Context) {
-			authCtx := middleware.GetAuthContext(c)
-			if authCtx == nil {
-				handler.ErrorResponse(c, 401, "not authenticated")
-				return
-			}
-
-			// Get full user profile
-			profile, err := userProfileService.GetWithFullDetails(authCtx.UserID)
-			if err != nil {
-				handler.ErrorResponse(c, 404, "user not found")
-				return
-			}
-
-			handler.SuccessResponse(c, 200, "", profile)
-		})
-
 		// User Profile routes
 		userProfiles := web.Group("/user-profiles")
 		{
@@ -363,6 +359,7 @@ func main() {
 
 		// Employee routes (master data from gloria_master schema)
 		employees := web.Group("/employees")
+		employees.Use(middleware.RateLimit(cfg.RateLimitDefault))
 		{
 			employees.GET("", employeeHandler.GetAll)
 			employees.GET("/active", employeeHandler.GetActive)
@@ -385,138 +382,23 @@ func main() {
 
 	// ==========================================
 	// External API routes (JWT authentication)
+	// For external web applications integration
 	// ==========================================
 	external := api.Group("/external")
 	external.Use(middleware.JWTAuth(jwtConfig))
 	external.Use(middleware.RateLimit(cfg.RateLimitDefault))
 	{
-		// Employee endpoints (read-only for external systems)
-		external.GET("/employees", middleware.RequirePermission("employee:read"), func(c *gin.Context) {
-			profiles, err := userProfileService.GetAll()
-			if err != nil {
-				handler.ErrorResponse(c, 500, err.Error())
-				return
-			}
-			handler.SuccessResponse(c, 200, "", profiles)
-		})
-
-		external.GET("/employees/:nip", middleware.RequirePermission("employee:read"), func(c *gin.Context) {
-			nip := c.Param("nip")
-			profile, err := userProfileService.GetByNIP(nip)
-			if err != nil {
-				handler.ErrorResponse(c, 404, "employee not found")
-				return
-			}
-			handler.SuccessResponse(c, 200, "", profile)
-		})
-
-		// School endpoints (read-only for external systems)
-		external.GET("/schools", middleware.RequirePermission("school:read"), func(c *gin.Context) {
-			schools, err := schoolService.GetAll()
-			if err != nil {
-				handler.ErrorResponse(c, 500, err.Error())
-				return
-			}
-			handler.SuccessResponse(c, 200, "", schools)
-		})
-
-		external.GET("/schools/:id", middleware.RequirePermission("school:read"), func(c *gin.Context) {
-			id := c.Param("id")
-			school, err := schoolService.GetByID(id)
-			if err != nil {
-				handler.ErrorResponse(c, 404, "school not found")
-				return
-			}
-			handler.SuccessResponse(c, 200, "", school)
-		})
-
-		// Department endpoints (read-only for external systems)
-		external.GET("/departments", middleware.RequirePermission("department:read"), func(c *gin.Context) {
-			schoolID := c.Query("school_id")
-			var departments interface{}
-			var err error
-			if schoolID != "" {
-				departments, err = departmentService.GetBySchoolID(schoolID)
-			} else {
-				departments, err = departmentService.GetAll()
-			}
-			if err != nil {
-				handler.ErrorResponse(c, 500, err.Error())
-				return
-			}
-			handler.SuccessResponse(c, 200, "", departments)
-		})
-
-		external.GET("/departments/:id", middleware.RequirePermission("department:read"), func(c *gin.Context) {
-			id := c.Param("id")
-			department, err := departmentService.GetByID(id)
-			if err != nil {
-				handler.ErrorResponse(c, 404, "department not found")
-				return
-			}
-			handler.SuccessResponse(c, 200, "", department)
-		})
-
-		// Position endpoints (read-only for external systems)
-		external.GET("/positions", middleware.RequirePermission("position:read"), func(c *gin.Context) {
-			schoolID := c.Query("school_id")
-			departmentID := c.Query("department_id")
-			var positions interface{}
-			var err error
-			if departmentID != "" {
-				positions, err = positionService.GetByDepartmentID(departmentID)
-			} else if schoolID != "" {
-				positions, err = positionService.GetBySchoolID(schoolID)
-			} else {
-				positions, err = positionService.GetAll()
-			}
-			if err != nil {
-				handler.ErrorResponse(c, 500, err.Error())
-				return
-			}
-			handler.SuccessResponse(c, 200, "", positions)
-		})
-
-		external.GET("/positions/:id", middleware.RequirePermission("position:read"), func(c *gin.Context) {
-			id := c.Param("id")
-			position, err := positionService.GetByID(id)
-			if err != nil {
-				handler.ErrorResponse(c, 404, "position not found")
-				return
-			}
-			handler.SuccessResponse(c, 200, "", position)
-		})
-	}
-
-	// ==========================================
-	// Legacy routes (for backward compatibility)
-	// READ operations without auth, WRITE operations protected
-	// ==========================================
-	legacy := api.Group("/user-profiles")
-	{
-		// Public read operations (backward compatible)
-		legacy.GET("", userProfileHandler.GetAll)
-		legacy.GET("/:id", userProfileHandler.GetByID)
-		legacy.GET("/:id/full", userProfileHandler.GetWithFullDetails)
-		legacy.GET("/clerk/:clerkUserId", userProfileHandler.GetByClerkUserID)
-		legacy.GET("/nip/:nip", userProfileHandler.GetByNIP)
-		// WRITE operations require Clerk auth for security
-		if cfg.ClerkSecretKey != "" {
-			legacyProtected := legacy.Group("")
-			legacyProtected.Use(middleware.ClerkAuth(authLookupAdapter))
-			legacyProtected.POST("", middleware.RequirePermission("user:create"), userProfileHandler.Create)
-			legacyProtected.PUT("/:id", middleware.RequirePermission("user:update"), userProfileHandler.Update)
-			legacyProtected.DELETE("/:id", middleware.RequirePermission("user:delete"), userProfileHandler.Delete)
-		}
+		// Employee email lookup endpoint (for external system email verification)
+		external.GET("/employees/email/:email", middleware.RequirePermission("employee:read"), employeeHandler.GetByEmail)
 	}
 
 	// Start server
 	log.Printf("Server starting on port %s", cfg.ServerPort)
 	log.Printf("Routes configured:")
+	log.Printf("  - Me:       /api/v1/me/* (Clerk auth) - Current user context")
 	log.Printf("  - Public:   /api/v1/public/*")
 	log.Printf("  - Web:      /api/v1/web/* (Clerk auth)")
 	log.Printf("  - External: /api/v1/external/* (JWT auth)")
-	log.Printf("  - Legacy:   /api/v1/user-profiles/* (no auth)")
 
 	if err := router.Run(":" + cfg.ServerPort); err != nil {
 		log.Fatal("Failed to start server:", err)

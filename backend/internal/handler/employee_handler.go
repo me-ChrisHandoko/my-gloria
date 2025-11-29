@@ -62,6 +62,27 @@ func (h *EmployeeHandler) GetByNIP(c *gin.Context) {
 	SuccessResponse(c, http.StatusOK, "", employee)
 }
 
+// GetByEmail retrieves an active employee by email (case-insensitive)
+func (h *EmployeeHandler) GetByEmail(c *gin.Context) {
+	email := c.Param("email")
+	if email == "" {
+		ErrorResponse(c, http.StatusBadRequest, "email parameter is required")
+		return
+	}
+
+	employee, err := h.employeeService.GetByEmail(email)
+	if err != nil {
+		if errors.Is(err, service.ErrEmployeeNotFound) {
+			ErrorResponse(c, http.StatusNotFound, "active employee not found with this email")
+			return
+		}
+		ErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	SuccessResponse(c, http.StatusOK, "", employee)
+}
+
 // GetByDepartment retrieves employees by department
 func (h *EmployeeHandler) GetByDepartment(c *gin.Context) {
 	bagianKerja := c.Param("department")

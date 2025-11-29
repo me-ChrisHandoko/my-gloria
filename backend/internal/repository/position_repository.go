@@ -20,6 +20,7 @@ type PositionRepository interface {
 	Create(position *domain.Position) error
 	Update(position *domain.Position) error
 	Delete(id string) error
+	Count() (int64, error)
 
 	// Hierarchy management
 	CreateHierarchy(hierarchy *domain.PositionHierarchy) error
@@ -140,6 +141,14 @@ func (r *positionRepository) Update(position *domain.Position) error {
 
 func (r *positionRepository) Delete(id string) error {
 	return r.db.Delete(&domain.Position{}, "id = ?", id).Error
+}
+
+func (r *positionRepository) Count() (int64, error) {
+	var count int64
+	if err := r.db.Model(&domain.Position{}).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (r *positionRepository) CreateHierarchy(hierarchy *domain.PositionHierarchy) error {

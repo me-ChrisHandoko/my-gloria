@@ -22,6 +22,7 @@ type DepartmentRepository interface {
 	Update(department *domain.Department) error
 	Delete(id string) error
 	GetAllAsMap() (map[string]*domain.Department, error)
+	Count() (int64, error)
 }
 
 type departmentRepository struct {
@@ -151,4 +152,12 @@ func (r *departmentRepository) GetAllAsMap() (map[string]*domain.Department, err
 		result[departments[i].ID] = &departments[i]
 	}
 	return result, nil
+}
+
+func (r *departmentRepository) Count() (int64, error) {
+	var count int64
+	if err := r.db.Model(&domain.Department{}).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
 }

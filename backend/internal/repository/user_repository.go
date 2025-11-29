@@ -22,6 +22,7 @@ type UserProfileRepository interface {
 	FindWithRoles(id string) (*domain.UserProfile, error)
 	FindWithPositions(id string) (*domain.UserProfile, error)
 	FindWithFullDetails(id string) (*domain.UserProfile, error)
+	Count() (int64, error)
 
 	// Role management
 	AssignRole(userID string, req *domain.AssignRoleToUserRequest, assignedBy *string) (*domain.UserRole, error)
@@ -177,6 +178,15 @@ func (r *userProfileRepository) FindWithFullDetails(id string) (*domain.UserProf
 		return nil, err
 	}
 	return &profile, nil
+}
+
+// Count returns the total number of user profiles
+func (r *userProfileRepository) Count() (int64, error) {
+	var count int64
+	if err := r.db.Model(&domain.UserProfile{}).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 // AssignRole assigns a role to a user

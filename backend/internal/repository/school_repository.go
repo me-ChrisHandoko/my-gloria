@@ -17,6 +17,7 @@ type SchoolRepository interface {
 	Create(school *domain.School) error
 	Update(school *domain.School) error
 	Delete(id string) error
+	Count() (int64, error)
 }
 
 type schoolRepository struct {
@@ -101,4 +102,12 @@ func (r *schoolRepository) Update(school *domain.School) error {
 
 func (r *schoolRepository) Delete(id string) error {
 	return r.db.Delete(&domain.School{}, "id = ?", id).Error
+}
+
+func (r *schoolRepository) Count() (int64, error) {
+	var count int64
+	if err := r.db.Model(&domain.School{}).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
 }
