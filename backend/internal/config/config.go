@@ -12,13 +12,16 @@ type Config struct {
 	ServerPort string
 
 	// Database
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPassword string
-	DBName     string
-	DBSSLMode  string
-	DBTimezone string
+	DBHost            string
+	DBPort            string
+	DBUser            string
+	DBPassword        string
+	DBName            string
+	DBSSLMode         string
+	DBTimezone        string
+	DBMaxOpenConns    int // Maximum number of open connections to the database
+	DBMaxIdleConns    int // Maximum number of idle connections in the pool
+	DBConnMaxLifetime int // Maximum lifetime of a connection in seconds
 
 	// Migration
 	RunMigrations bool // Controls whether to run AutoMigrate on startup
@@ -51,9 +54,12 @@ func Load() *Config {
 		DBUser:        getEnv("DB_USER", "postgres"),
 		DBPassword:    getEnv("DB_PASSWORD", "mydevelopment"),
 		DBName:        getEnv("DB_NAME", "new_gloria_db"),
-		DBSSLMode:     getEnv("DB_SSLMODE", "disable"),
-		DBTimezone:    getEnv("DB_TIMEZONE", "Asia/Jakarta"),
-		RunMigrations: getEnvBool("RUN_MIGRATIONS", true), // Default true for development
+		DBSSLMode:         getEnv("DB_SSLMODE", "disable"),
+		DBTimezone:        getEnv("DB_TIMEZONE", "Asia/Jakarta"),
+		DBMaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 35),    // Optimal for 8-core: (cores*2)+headroom
+		DBMaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 30),    // ~50% of MaxOpenConns
+		DBConnMaxLifetime: getEnvInt("DB_CONN_MAX_LIFETIME", 300), // 5 minutes in seconds
+		RunMigrations:     getEnvBool("RUN_MIGRATIONS", true),     // Default true for development
 
 		// Clerk
 		ClerkSecretKey: getEnv("CLERK_SECRET_KEY", ""),

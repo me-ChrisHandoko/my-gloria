@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -30,6 +31,26 @@ func InitDB(cfg *Config) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
+
+	// Configure connection pool for optimal performance
+	// This prevents connection exhaustion under high load (1000+ concurrent users)
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+
+	// SetMaxOpenConns sets the maximum number of open connections to the database.
+	// For 8-core server, optimal is (cores * 2) + headroom = ~35 connections
+	// This prevents "too many connections" errors during burst traffic
+	sqlDB.SetMaxOpenConns(cfg.DBMaxOpenConns)
+
+	// SetMaxIdleConns sets the maximum number of connections in the idle connection pool.
+	// Keep ~50% of MaxOpenConns idle for quick connection reuse
+	sqlDB.SetMaxIdleConns(cfg.DBMaxIdleConns)
+
+	// SetConnMaxLifetime sets the maximum amount of time a connection may be reused.
+	// Recycling connections prevents stale connection issues and memory leaks
+	sqlDB.SetConnMaxLifetime(time.Duration(cfg.DBConnMaxLifetime) * time.Second)
 
 	return db, nil
 }
