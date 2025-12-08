@@ -13,7 +13,12 @@ npm run lint     # Run ESLint
 
 ## Tech Stack
 
-- **Next.js 16** with App Router
+- **Next.js 16** with App Router (production-ready, requires v16.0.7+ for security patches)
+  - **Turbopack** (stable) - default bundler with 10x faster Fast Refresh, 2-5x faster builds
+  - **Cache Components** - explicit opt-in caching with `use cache` directive
+  - **React Compiler** (stable) - automatic component memoization, no manual useMemo/useCallback needed
+  - **proxy.ts** - use for network boundary (Node.js runtime), replaces middleware.ts
+  - **React 19.2** integration - View Transitions, useEffectEvent, Activity components
 - **React 19**
 - **TypeScript** (strict mode)
 - **Tailwind CSS 4** with shadcn/ui theming (sidebar-07 layout)
