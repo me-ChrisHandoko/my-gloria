@@ -29,6 +29,14 @@ func SetPermissionChecker(checker PermissionChecker) {
 // It first checks the auth context (for stateless JWT), then falls back to DB lookup
 func RequirePermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// ============================================================
+		// 🔧 DEV BYPASS RBAC - Uncomment 2 baris di bawah untuk disable
+		// ⚠️  JANGAN COMMIT KE PRODUCTION!
+		// ============================================================
+		// c.Next()
+		// return
+		// ============================================================
+
 		authCtx := GetAuthContext(c)
 		if authCtx == nil {
 			response.Error(c, http.StatusUnauthorized, "unauthorized")
@@ -58,6 +66,10 @@ func RequirePermission(permission string) gin.HandlerFunc {
 // RequireAnyPermission returns a middleware that checks if user has any of the specified permissions
 func RequireAnyPermission(permissions ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 🔧 DEV BYPASS RBAC - Uncomment untuk disable | ⚠️ JANGAN COMMIT!
+		// c.Next()
+		// return
+
 		authCtx := GetAuthContext(c)
 		if authCtx == nil {
 			response.Error(c, http.StatusUnauthorized, "unauthorized")
@@ -89,6 +101,10 @@ func RequireAnyPermission(permissions ...string) gin.HandlerFunc {
 // RequireAllPermissions returns a middleware that checks if user has all of the specified permissions
 func RequireAllPermissions(permissions ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 🔧 DEV BYPASS RBAC - Uncomment untuk disable | ⚠️ JANGAN COMMIT!
+		// c.Next()
+		// return
+
 		authCtx := GetAuthContext(c)
 		if authCtx == nil {
 			response.Error(c, http.StatusUnauthorized, "unauthorized")
@@ -126,6 +142,10 @@ func RequireAllPermissions(permissions ...string) gin.HandlerFunc {
 // RequireRole returns a middleware that checks if user has a specific role
 func RequireRole(role string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 🔧 DEV BYPASS RBAC - Uncomment untuk disable | ⚠️ JANGAN COMMIT!
+		// c.Next()
+		// return
+
 		authCtx := GetAuthContext(c)
 		if authCtx == nil {
 			response.Error(c, http.StatusUnauthorized, "unauthorized")
@@ -148,6 +168,10 @@ func RequireRole(role string) gin.HandlerFunc {
 // RequireAnyRole returns a middleware that checks if user has any of the specified roles
 func RequireAnyRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 🔧 DEV BYPASS RBAC - Uncomment untuk disable | ⚠️ JANGAN COMMIT!
+		// c.Next()
+		// return
+
 		authCtx := GetAuthContext(c)
 		if authCtx == nil {
 			response.Error(c, http.StatusUnauthorized, "unauthorized")
