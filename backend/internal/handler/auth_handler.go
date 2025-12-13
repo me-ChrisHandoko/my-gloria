@@ -6,6 +6,7 @@ import (
 
 	"backend/internal/domain"
 	"backend/internal/middleware"
+	"backend/internal/repository"
 	"backend/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -18,15 +19,17 @@ type ExchangeTokenRequest struct {
 
 // AuthHandler handles authentication-related HTTP requests
 type AuthHandler struct {
-	authService  service.AuthService
-	auditService service.AuditService
+	authService      service.AuthService
+	auditService     service.AuditService
+	employeeRepo     repository.EmployeeRepository
 }
 
 // NewAuthHandler creates a new auth handler instance
-func NewAuthHandler(authService service.AuthService, auditService service.AuditService) *AuthHandler {
+func NewAuthHandler(authService service.AuthService, auditService service.AuditService, employeeRepo repository.EmployeeRepository) *AuthHandler {
 	return &AuthHandler{
 		authService:  authService,
 		auditService: auditService,
+		employeeRepo: employeeRepo,
 	}
 }
 
@@ -181,5 +184,44 @@ func (h *AuthHandler) ValidateToken(c *gin.Context) {
 		"nip":         authCtx.NIP,
 		"auth_type":   authCtx.Type,
 		"permissions": authCtx.Permissions,
+	})
+}
+
+// ValidateEmail checks if an email is registered as an active employee
+// @Summary Validate Email
+// @Description Check if an email is registered as an active employee in the system
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param email query string true "Email address to validate"
+// @Success 200 {object} Response{data=map[string]bool}
+// @Failure 400 {object} Response
+// @Failure 403 {object} Response
+// @Failure 404 {object} Response
+// @Router /public/auth/validate-email [get]
+func (h *AuthHandler) ValidateEmail(c *gin.Context) {
+	email := c.Query("email")
+	if email == "" {
+		ErrorResponse(c, http.StatusBadRequest, "email parameter is required")
+		return
+	}
+
+	// Check if email exists in employee database and is active
+	// Note: FindByEmail already filters by status_aktif = "Aktif"
+	employee, err := h.employeeRepo.FindByEmail(email)
+	if err != nil {
+		if errors.Is(err, repository.ErrEmployeeNotFound) {
+			// Email doesn't exist OR status is not "Aktif"
+			ErrorResponse(c, http.StatusNotFound, "email tidak terdaftar sebagai karyawan aktif. Silakan hubungi HR jika Anda yakin email Anda terdaftar.")
+			return
+		}
+		ErrorResponse(c, http.StatusInternalServerError, "failed to validate email")
+		return
+	}
+
+	// Email found and employee is active
+	// ✅ SECURITY FIX: Don't expose NIP and nama to prevent information disclosure
+	SuccessResponse(c, http.StatusOK, "email is valid", gin.H{
+		"valid": true,
 	})
 }

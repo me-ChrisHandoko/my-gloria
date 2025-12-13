@@ -1,0 +1,150 @@
+import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query';
+
+// Global token holder - set by useAuthQuery wrapper
+let currentToken: string | null = null;
+
+export const setApiToken = (token: string | null) => {
+  console.log('🔑 setApiToken:', token ? `${token.substring(0, 20)}...` : 'NULL');
+  currentToken = token;
+};
+
+// Base query with Clerk token injection
+const baseQuery = fetchBaseQuery({
+  baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080/api/v1',
+  prepareHeaders: async (headers) => {
+    console.log('🔑 prepareHeaders: currentToken =', currentToken ? `${currentToken.substring(0, 20)}...` : 'NULL');
+
+    if (currentToken) {
+      headers.set('Authorization', `Bearer ${currentToken}`);
+      console.log('✅ prepareHeaders: Authorization header added');
+    } else {
+      console.log('❌ prepareHeaders: No token available');
+    }
+
+    headers.set('Content-Type', 'application/json');
+    return headers;
+  },
+});
+
+// Enhanced base query with automatic token refresh on 401
+const baseQueryWithReauth: BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args, api, extraOptions) => {
+  let result = await baseQuery(args, api, extraOptions);
+
+  // If we get 401, the token might be expired
+  // The wrapper hook will handle retry with fresh token
+  if (result.error && result.error.status === 401) {
+    // Return error - wrapper hook will handle refresh and retry
+    return result;
+  }
+
+  return result;
+};
+
+export const apiSlice = createApi({
+  reducerPath: 'api',
+  baseQuery: baseQueryWithReauth,
+  tagTypes: ['User', 'CurrentUser', 'Permissions', 'Modules', 'Roles'],
+  endpoints: (builder) => ({
+    // Current user context
+    getCurrentUser: builder.query<CurrentUserContext, void>({
+      query: () => '/me',
+      providesTags: ['CurrentUser'],
+    }),
+
+    // Permissions
+    getMyPermissions: builder.query<string[], void>({
+      query: () => '/me/permissions',
+      providesTags: ['Permissions'],
+    }),
+
+    // Modules
+    getMyModules: builder.query<Module[], void>({
+      query: () => '/me/modules',
+      providesTags: ['Modules'],
+    }),
+
+    // User profiles
+    getUsers: builder.query<UserProfile[], void>({
+      query: () => '/web/user-profiles',
+      providesTags: ['User'],
+    }),
+
+    getUserById: builder.query<UserProfile, string>({
+      query: (id) => `/web/user-profiles/${id}`,
+      providesTags: (result, error, id) => [{ type: 'User', id }],
+    }),
+
+    // Roles
+    getRoles: builder.query<Role[], void>({
+      query: () => '/web/roles',
+      providesTags: ['Roles'],
+    }),
+  }),
+});
+
+export const {
+  useGetCurrentUserQuery,
+  useGetMyPermissionsQuery,
+  useGetMyModulesQuery,
+  useGetUsersQuery,
+  useGetUserByIdQuery,
+  useGetRolesQuery,
+} = apiSlice;
+
+// Types (will be imported from types/auth.ts later)
+interface CurrentUserContext {
+  user: UserProfile;
+  employee: Employee | null;
+  roles: Role[];
+  permissions: string[];
+  modules: Module[];
+}
+
+interface UserProfile {
+  id: string;
+  clerk_user_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  display_name: string;
+  avatar_url?: string;
+  phone?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Employee {
+  nip: string;
+  nama: string;
+  email: string;
+  department: string;
+  position: string;
+  location: string;
+  status: string;
+}
+
+interface Role {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  is_active: boolean;
+  parent_id?: string;
+}
+
+interface Module {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  route?: string;
+  parent_id?: string;
+  is_active: boolean;
+}

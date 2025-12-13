@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"strings"
 
 	"backend/internal/domain"
 
@@ -16,6 +17,7 @@ var (
 type EmployeeRepository interface {
 	FindByNIP(nip string) (*domain.DataKaryawan, error)
 	FindByEmail(email string) (*domain.DataKaryawan, error)
+	FindByEmails(emails []string) (*domain.DataKaryawan, string, error)
 	FindAll(page, limit int, search string) ([]domain.DataKaryawan, int64, error)
 	FindActive(page, limit int, search string) ([]domain.DataKaryawan, int64, error)
 	FindByDepartment(bagianKerja string, page, limit int) ([]domain.DataKaryawan, int64, error)
@@ -58,13 +60,45 @@ func (r *employeeRepository) FindByNIP(nip string) (*domain.DataKaryawan, error)
 // FindByEmail finds an active employee by email (case-insensitive)
 func (r *employeeRepository) FindByEmail(email string) (*domain.DataKaryawan, error) {
 	var employee domain.DataKaryawan
-	if err := r.db.Where("LOWER(email) = LOWER(?) AND status_aktif = ?", email, "AKTIF").First(&employee).Error; err != nil {
+	if err := r.db.Where("LOWER(email) = LOWER(?) AND status_aktif = ?", email, "Aktif").First(&employee).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrEmployeeNotFound
 		}
 		return nil, err
 	}
 	return &employee, nil
+}
+
+// FindByEmails finds an active employee by any of the provided emails (case-insensitive)
+// Returns employee, matched email, and error
+// This is more efficient than looping FindByEmail as it uses a single WHERE IN query
+func (r *employeeRepository) FindByEmails(emails []string) (*domain.DataKaryawan, string, error) {
+	if len(emails) == 0 {
+		return nil, "", ErrEmployeeNotFound
+	}
+
+	// Convert all emails to lowercase for case-insensitive comparison
+	lowerEmails := make([]string, len(emails))
+	for i, email := range emails {
+		lowerEmails[i] = strings.ToLower(email)
+	}
+
+	// Single query with WHERE IN - efficient even with 100 emails
+	var employee domain.DataKaryawan
+	if err := r.db.Where("LOWER(email) IN ? AND status_aktif = ?", lowerEmails, "Aktif").First(&employee).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "", ErrEmployeeNotFound
+		}
+		return nil, "", err
+	}
+
+	// Return the employee and the matched email (from database)
+	matchedEmail := ""
+	if employee.Email != nil {
+		matchedEmail = *employee.Email
+	}
+
+	return &employee, matchedEmail, nil
 }
 
 // FindAll finds all employees with pagination and search
@@ -96,7 +130,7 @@ func (r *employeeRepository) FindActive(page, limit int, search string) ([]domai
 	var employees []domain.DataKaryawan
 	var total int64
 
-	query := r.db.Model(&domain.DataKaryawan{}).Where("status_aktif = ?", "AKTIF")
+	query := r.db.Model(&domain.DataKaryawan{}).Where("status_aktif = ?", "Aktif")
 
 	if search != "" {
 		searchPattern := "%" + search + "%"
@@ -182,7 +216,7 @@ func (r *employeeRepository) GetStatistics() (*EmployeeStatistics, error) {
 	}
 
 	// Active employees
-	if err := r.db.Model(&domain.DataKaryawan{}).Where("status_aktif = ?", "AKTIF").Count(&stats.ActiveEmployees).Error; err != nil {
+	if err := r.db.Model(&domain.DataKaryawan{}).Where("status_aktif = ?", "Aktif").Count(&stats.ActiveEmployees).Error; err != nil {
 		return nil, err
 	}
 

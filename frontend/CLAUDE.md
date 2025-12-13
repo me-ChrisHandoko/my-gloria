@@ -13,12 +13,12 @@ npm run lint     # Run ESLint
 
 ## Tech Stack
 
-- **Next.js 16** with App Router (production-ready, requires v16.0.7+ for security patches)
-  - **Turbopack** (stable) - default bundler with 10x faster Fast Refresh, 2-5x faster builds
-  - **Cache Components** - explicit opt-in caching with `use cache` directive
-  - **React Compiler** (stable) - automatic component memoization, no manual useMemo/useCallback needed
-  - **proxy.ts** - use for network boundary (Node.js runtime), replaces middleware.ts
-  - **React 19.2** integration - View Transitions, useEffectEvent, Activity components
+- **Next.js 16** with App Router (production-ready, v16.0.7 installed)
+  - ✅ **Turbopack** (stable) - enabled via `--turbo` flag, provides 10x faster Fast Refresh, 2-5x faster builds
+  - ✅ **React Compiler** (stable) - enabled in next.config.ts, automatic component memoization active
+  - ⚠️ **Cache Components** - available but not yet implemented (use `use cache` directive for opt-in caching)
+  - ℹ️ **proxy.ts** - not needed (Clerk handles authentication, no custom middleware requirements)
+  - ⚠️ **React 19.2** integration - React 19.2.0 installed, but advanced hooks (useEffectEvent, View Transitions, Activity components) not yet utilized
 - **React 19**
 - **TypeScript** (strict mode)
 - **Tailwind CSS 4** with shadcn/ui theming (sidebar-07 layout)

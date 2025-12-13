@@ -1,9 +1,12 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 // Config holds all application configuration
@@ -27,7 +30,8 @@ type Config struct {
 	RunMigrations bool // Controls whether to run AutoMigrate on startup
 
 	// Authentication - Clerk
-	ClerkSecretKey string
+	ClerkSecretKey      string
+	ClerkPublishableKey string
 
 	// Authentication - JWT
 	JWTSecretKey   string
@@ -47,6 +51,27 @@ type Config struct {
 
 // Load loads configuration from environment variables with defaults
 func Load() *Config {
+	// Load .env file (ignore error if file doesn't exist - production uses OS env vars)
+	if err := godotenv.Load(); err != nil {
+		log.Println("Warning: .env file not found, using OS environment variables")
+	}
+
+	// IMPORTANT: Clerk Go SDK reads from OS environment variables
+	// Ensure both Clerk keys are available after loading .env
+	clerkSecret := os.Getenv("CLERK_SECRET_KEY")
+	clerkPublishable := os.Getenv("CLERK_PUBLISHABLE_KEY")
+
+	if clerkSecret != "" && clerkPublishable != "" {
+		os.Setenv("CLERK_SECRET_KEY", clerkSecret)
+		os.Setenv("CLERK_PUBLISHABLE_KEY", clerkPublishable)
+		log.Printf("✓ Clerk SDK initialized (secret: %s..., publishable: %s...)",
+			clerkSecret[:10], clerkPublishable[:10])
+	} else {
+		log.Println("⚠ Warning: CLERK_SECRET_KEY or CLERK_PUBLISHABLE_KEY not found")
+		log.Printf("  - Secret key: %v", clerkSecret != "")
+		log.Printf("  - Publishable key: %v", clerkPublishable != "")
+	}
+
 	return &Config{
 		ServerPort:    getEnv("SERVER_PORT", "8080"),
 		DBHost:        getEnv("DB_HOST", "localhost"),
@@ -62,7 +87,8 @@ func Load() *Config {
 		RunMigrations:     getEnvBool("RUN_MIGRATIONS", true),     // Default true for development
 
 		// Clerk
-		ClerkSecretKey: getEnv("CLERK_SECRET_KEY", ""),
+		ClerkSecretKey:      getEnv("CLERK_SECRET_KEY", ""),
+		ClerkPublishableKey: getEnv("CLERK_PUBLISHABLE_KEY", ""),
 
 		// JWT
 		JWTSecretKey:   getEnv("JWT_SECRET_KEY", "your-256-bit-secret-key-change-in-production"),
@@ -76,7 +102,7 @@ func Load() *Config {
 		// CORS - defaults allow localhost for development
 		CORSAllowedOrigins: getEnvSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://localhost:5173"}),
 		CORSAllowedMethods: getEnvSlice("CORS_ALLOWED_METHODS", []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}),
-		CORSAllowedHeaders: getEnvSlice("CORS_ALLOWED_HEADERS", []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"}),
+		CORSAllowedHeaders: getEnvSlice("CORS_ALLOWED_HEADERS", []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "X-Login-Email"}),
 		CORSMaxAge:         getEnvInt("CORS_MAX_AGE", 86400),
 	}
 }

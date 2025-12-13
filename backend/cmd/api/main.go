@@ -1,7 +1,13 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"backend/internal/config"
 	"backend/internal/database"
@@ -145,7 +151,7 @@ func main() {
 
 	// Initialize handlers
 	userProfileHandler := handler.NewUserProfileHandler(userProfileService)
-	authHandler := handler.NewAuthHandler(authService, auditService)
+	authHandler := handler.NewAuthHandler(authService, auditService, employeeRepo)
 	permissionHandler := handler.NewPermissionHandler(permissionService)
 	roleHandler := handler.NewRoleHandler(roleService, auditService)
 	schoolHandler := handler.NewSchoolHandler(schoolService, auditService)
@@ -164,6 +170,7 @@ func main() {
 
 	// Global middleware
 	router.Use(middleware.CORS(cfg))
+	router.Use(middleware.SecurityHeaders()) // ✅ Security headers for all responses
 	router.Use(middleware.Logger())
 
 	// Health check
@@ -198,6 +205,8 @@ func main() {
 		public.POST("/auth/token", authHandler.ExchangeToken)
 		// Token refresh endpoint
 		public.POST("/auth/refresh", authHandler.RefreshToken)
+		// Email validation endpoint (check if email is registered as employee)
+		public.GET("/auth/validate-email", authHandler.ValidateEmail)
 	}
 
 	// ==========================================
@@ -407,15 +416,67 @@ func main() {
 		external.GET("/employees/email/:email", middleware.RequirePermission("employee:read"), employeeHandler.GetByEmail)
 	}
 
-	// Start server
-	log.Printf("Server starting on port %s", cfg.ServerPort)
-	log.Printf("Routes configured:")
-	log.Printf("  - Me:       /api/v1/me/* (Clerk auth) - Current user context")
-	log.Printf("  - Public:   /api/v1/public/*")
-	log.Printf("  - Web:      /api/v1/web/* (Clerk auth)")
-	log.Printf("  - External: /api/v1/external/* (JWT auth)")
+	// =====================================================
+	// Initialize HR Status Listener for real-time cache invalidation
+	// =====================================================
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	if err := router.Run(":" + cfg.ServerPort); err != nil {
-		log.Fatal("Failed to start server:", err)
+	// Build PostgreSQL connection string for listener
+	connString := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBSSLMode,
+	)
+
+	hrListener := middleware.NewHRStatusListener(db, connString)
+	if err := hrListener.Start(ctx); err != nil {
+		log.Printf("⚠️  [Startup] Failed to start HR listener: %v", err)
+		log.Println("   └─ Continuing without real-time sync (will use 30s cache TTL)")
+	} else {
+		log.Println("✅ [Startup] HR status listener initialized successfully")
+		log.Println("   └─ Real-time cache invalidation enabled (instant user logout)")
 	}
+
+	// Setup graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start server in goroutine
+	go func() {
+		log.Printf("🚀 Server starting on port %s", cfg.ServerPort)
+		log.Printf("📋 Routes configured:")
+		log.Printf("  - Me:       /api/v1/me/* (Clerk auth) - Current user context")
+		log.Printf("  - Public:   /api/v1/public/*")
+		log.Printf("  - Web:      /api/v1/web/* (Clerk auth)")
+		log.Printf("  - External: /api/v1/external/* (JWT auth)")
+		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		log.Println("✅ Server ready to accept requests")
+		log.Println("🔔 HR status changes will trigger instant cache invalidation")
+		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+		if err := router.Run(":" + cfg.ServerPort); err != nil {
+			log.Fatal("Failed to start server:", err)
+		}
+	}()
+
+	// Wait for interrupt signal for graceful shutdown
+	<-quit
+	log.Println("")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("🛑 Shutdown signal received - graceful shutdown initiated")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// Stop HR listener
+	log.Println("🛑 Stopping HR status listener...")
+	hrListener.Stop()
+	log.Println("✅ HR status listener stopped")
+
+	// Cancel context
+	cancel()
+
+	// Give connections time to close
+	time.Sleep(2 * time.Second)
+
+	log.Println("✅ Server shutdown complete")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 }
