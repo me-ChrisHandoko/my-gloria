@@ -208,7 +208,7 @@ func (h *AuthHandler) ValidateEmail(c *gin.Context) {
 
 	// Check if email exists in employee database and is active
 	// Note: FindByEmail already filters by status_aktif = "Aktif"
-	employee, err := h.employeeRepo.FindByEmail(email)
+	_, err := h.employeeRepo.FindByEmail(email)
 	if err != nil {
 		if errors.Is(err, repository.ErrEmployeeNotFound) {
 			// Email doesn't exist OR status is not "Aktif"

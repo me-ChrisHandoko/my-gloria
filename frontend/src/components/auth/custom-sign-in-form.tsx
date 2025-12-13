@@ -52,8 +52,8 @@ export function CustomSignInForm() {
       if (!checkResponse.ok) {
         console.error('❌ [CustomAuth] Email validation failed:', checkResponse.status);
         const errorData = await checkResponse.json().catch(() => ({}));
-        const errorMessage = errorData?.error || 'Email tidak terdaftar sebagai karyawan';
-        setError(errorMessage + '. Silakan hubungi admin HR.');
+        const errorMessage = errorData?.error || 'Email tidak terdaftar sebagai karyawan. Silakan hubungi admin HR.';
+        setError(errorMessage);
         setIsLoading(false);
         return;
       }
@@ -336,8 +336,8 @@ export function CustomSignInForm() {
       if (!checkResponse.ok) {
         console.error('❌ [OAuth] Email validation failed:', checkResponse.status);
         const errorData = await checkResponse.json().catch(() => ({}));
-        const errorMessage = errorData?.error || 'Email tidak terdaftar sebagai karyawan';
-        setError(errorMessage + '. Silakan hubungi admin HR.');
+        const errorMessage = errorData?.error || 'Email tidak terdaftar sebagai karyawan. Silakan hubungi admin HR.';
+        setError(errorMessage);
         setIsLoading(false);
         return;
       }

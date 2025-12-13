@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useClerk } from '@clerk/nextjs';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { setApiToken } from '@/store/api/apiSlice';
 import { redirectOnce } from '@/lib/redirect-guard';
@@ -15,8 +15,26 @@ import { redirectOnce } from '@/lib/redirect-guard';
  * Features:
  * - Automatic token injection into API calls
  * - Token refresh on 401 errors
- * - Retry mechanism for failed requests
+ * - Retry mechanism for failed requests (max 3 attempts)
  * - Token caching and revalidation
+ * - **LAYER 2 DEFENSE**: Auto-logout after max retries on 401
+ *
+ * Security: Defense-in-Depth Architecture
+ * ----------------------------------------
+ * This hook implements Layer 2 of the authentication security system:
+ *
+ * Layer 1 (Primary): middleware.ts
+ *   - Server-side token validation BEFORE page render
+ *   - Blocks access if token invalid
+ *
+ * Layer 2 (Fallback): THIS HOOK
+ *   - Client-side validation during API calls
+ *   - Auto-logout after 3 failed 401 retries
+ *   - Catches edge cases where middleware didn't block access
+ *
+ * Layer 3 (Defensive): auth-initializer.tsx
+ *   - Blocks rendering on persistent errors
+ *   - Last line of defense
  *
  * Usage: const result = useAuthQuery(useGetCurrentUserQuery);
  *
@@ -30,11 +48,13 @@ export function useAuthQuery<T>(
   options?: any
 ) {
   const { getToken, isLoaded } = useAuth();
+  const { signOut } = useClerk();
   const [token, setToken] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const lastRefreshTime = useRef<number>(0);
   const retryCount = useRef<number>(0);
   const lastErrorMessage = useRef<string>('');
+  const isLoggingOut = useRef<boolean>(false);
 
   // Refresh token with debouncing to prevent multiple simultaneous refreshes
   const refreshToken = useCallback(async () => {
@@ -143,9 +163,39 @@ export function useAuthQuery<T>(
           return;
         }
 
-        // Don't retry if we've exceeded max attempts
+        // Don't retry if we've exceeded max attempts - FORCE LOGOUT
         if (retryCount.current >= 3) {
-          console.log('⛔ Max retry attempts reached - stopping retry');
+          console.log('⛔ Max retry attempts reached - forcing logout');
+
+          // Prevent multiple simultaneous logout attempts
+          if (isLoggingOut.current) {
+            console.log('⏳ Logout already in progress');
+            return;
+          }
+
+          isLoggingOut.current = true;
+
+          // LAYER 2 DEFENSE: Force logout from Clerk
+          // This is a fallback in case middleware didn't catch the invalid token
+          console.log('🚪 [Layer 2] Forcing Clerk sign-out due to persistent 401 errors');
+
+          // Use async IIFE to handle promise
+          (async () => {
+            try {
+              // Redirect to sign-out page with reason
+              redirectOnce('/sign-out?reason=authentication_failed');
+
+              // Force Clerk logout (this will clear all Clerk session data)
+              await signOut();
+            } catch (error) {
+              console.error('❌ Logout failed:', error);
+              // Even if logout fails, still redirect
+              window.location.href = '/sign-in?reason=auth_error';
+            } finally {
+              isLoggingOut.current = false;
+            }
+          })();
+
           return;
         }
 
