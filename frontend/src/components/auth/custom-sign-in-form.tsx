@@ -1,7 +1,7 @@
 'use client';
 
 import { useSignIn, useSignUp } from '@clerk/nextjs';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -32,6 +32,9 @@ export function CustomSignInForm() {
 
   // Prevent double-submission during verification
   const isVerifyingRef = useRef(false);
+
+  // Track last auto-verified code to prevent infinite loop on wrong OTP
+  const lastAutoVerifiedCodeRef = useRef('');
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,9 +140,8 @@ export function CustomSignInForm() {
     }
   };
 
-  const handleVerifyCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  // Extracted verification logic for reuse (auto-verify + manual button)
+  const performVerification = useCallback(async () => {
     if (!isLoaded || !signIn || !signUp) {
       return;
     }
@@ -306,7 +308,36 @@ export function CustomSignInForm() {
       isVerifyingRef.current = false;
       setIsLoading(false);
     }
+  }, [isLoaded, signIn, signUp, isSignUpMode, otpCode, email, setActiveSignUp, setActive, router]);
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await performVerification();
   };
+
+  // Auto-verify when 6 digits are entered (with 300ms debounce)
+  useEffect(() => {
+    // Only auto-verify if this code hasn't been attempted yet (prevents infinite loop)
+    if (
+      otpCode.length === 6 &&
+      isCodeSent &&
+      !isLoading &&
+      otpCode !== lastAutoVerifiedCodeRef.current
+    ) {
+      console.log('🔄 [CustomAuth] Auto-verifying OTP after 300ms delay...');
+
+      // Mark this code as attempted
+      lastAutoVerifiedCodeRef.current = otpCode;
+
+      // Debounce 300ms to give user time to correct mistakes
+      const timer = setTimeout(() => {
+        performVerification();
+      }, 300);
+
+      // Cleanup timer if component unmounts or otpCode changes
+      return () => clearTimeout(timer);
+    }
+  }, [otpCode, isCodeSent, isLoading, performVerification]);
 
   const handleOAuthSignIn = async (provider: 'oauth_google' | 'oauth_microsoft') => {
     if (!isLoaded) return;
@@ -547,6 +578,8 @@ export function CustomSignInForm() {
                   setIsSignUpMode(false);
                   setOtpCode('');
                   setError(null);
+                  // Reset auto-verify tracker
+                  lastAutoVerifiedCodeRef.current = '';
                 }}
                 disabled={isLoading}
                 className="w-full text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 py-1.5 transition-colors"
