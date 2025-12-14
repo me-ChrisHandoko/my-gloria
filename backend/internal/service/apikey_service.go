@@ -163,7 +163,7 @@ func (s *apiKeyService) Create(userID string, req *domain.CreateApiKeyRequest) (
 		UsageCount:    0,
 	}
 
-	if req.AllowedIPs != nil && len(req.AllowedIPs) > 0 {
+	if len(req.AllowedIPs) > 0 {
 		apiKey.AllowedIPs = pq.StringArray(req.AllowedIPs)
 	}
 
