@@ -24,6 +24,7 @@ export function CustomSignInForm() {
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   // OAuth email validation states
   const [showOAuthEmailPrompt, setShowOAuthEmailPrompt] = useState(false);
@@ -177,6 +178,9 @@ export function CustomSignInForm() {
 
           console.log('✅ [CustomAuth] Sign-up successful, new account created!');
 
+          // Set redirecting state to keep UI disabled during navigation
+          setIsRedirecting(true);
+
           // Redirect to home
           router.push('/');
         } else if (result.status === 'missing_requirements') {
@@ -222,6 +226,10 @@ export function CustomSignInForm() {
               console.log('✅ [CustomAuth] Session created after update, activating...');
               await setActiveSignUp({ session: signUp.createdSessionId });
               console.log('✅ [CustomAuth] Session activated successfully!');
+
+              // Set redirecting state to keep UI disabled during navigation
+              setIsRedirecting(true);
+
               router.push('/');
               return;
             }
@@ -260,6 +268,9 @@ export function CustomSignInForm() {
 
           console.log('✅ [CustomAuth] Sign-in successful!');
 
+          // Set redirecting state to keep UI disabled during navigation
+          setIsRedirecting(true);
+
           // Redirect to home
           router.push('/');
         } else {
@@ -280,6 +291,10 @@ export function CustomSignInForm() {
           try {
             await setActiveSignUp({ session: signUp.createdSessionId });
             console.log('✅ [CustomAuth] Session activated successfully!');
+
+            // Set redirecting state to keep UI disabled during navigation
+            setIsRedirecting(true);
+
             router.push('/');
             return;
           } catch (sessionErr) {
@@ -292,6 +307,10 @@ export function CustomSignInForm() {
           try {
             await setActive({ session: signIn.createdSessionId });
             console.log('✅ [CustomAuth] Session activated successfully!');
+
+            // Set redirecting state to keep UI disabled during navigation
+            setIsRedirecting(true);
+
             router.push('/');
             return;
           } catch (sessionErr) {
@@ -557,13 +576,13 @@ export function CustomSignInForm() {
 
             <button
               type="submit"
-              disabled={isLoading || !email || (isCodeSent && !otpCode)}
+              disabled={isLoading || isRedirecting || !email || (isCodeSent && !otpCode)}
               className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 px-4 py-2.5 rounded-md font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow"
             >
-              {isLoading ? (
+              {isLoading || isRedirecting ? (
                 <span className="flex items-center justify-center gap-2">
                   <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent" />
-                  {isCodeSent ? 'Verifying...' : 'Sending code...'}
+                  {isRedirecting ? 'Redirecting...' : isCodeSent ? 'Verifying...' : 'Sending code...'}
                 </span>
               ) : (
                 isCodeSent ? 'Verify Code' : 'Send Verification Code'
@@ -581,7 +600,7 @@ export function CustomSignInForm() {
                   // Reset auto-verify tracker
                   lastAutoVerifiedCodeRef.current = '';
                 }}
-                disabled={isLoading}
+                disabled={isLoading || isRedirecting}
                 className="w-full text-sm text-muted-foreground hover:text-foreground disabled:opacity-50 py-1.5 transition-colors"
               >
                 Use a different email

@@ -212,7 +212,7 @@ func (h *AuthHandler) ValidateEmail(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, repository.ErrEmployeeNotFound) {
 			// Email doesn't exist OR status is not "Aktif"
-			ErrorResponse(c, http.StatusNotFound, "email tidak terdaftar sebagai karyawan aktif. Silakan hubungi HR jika Anda yakin email Anda terdaftar.")
+			ErrorResponse(c, http.StatusNotFound, "Email tidak terdaftar sebagai karyawan aktif. Silakan hubungi HR jika Anda yakin email Anda terdaftar.")
 			return
 		}
 		ErrorResponse(c, http.StatusInternalServerError, "failed to validate email")

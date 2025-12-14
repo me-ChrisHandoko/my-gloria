@@ -14,7 +14,7 @@ import (
 
 var (
 	// ErrEmployeeNotRegistered indicates that the email is not found in data_karyawan
-	ErrEmployeeNotRegistered = errors.New("email tidak terdaftar sebagai karyawan")
+	ErrEmployeeNotRegistered = errors.New("Email tidak terdaftar sebagai karyawan")
 	// ErrEmailRequired indicates that email is required for auto-registration
 	ErrEmailRequired = errors.New("email diperlukan untuk registrasi otomatis")
 )
