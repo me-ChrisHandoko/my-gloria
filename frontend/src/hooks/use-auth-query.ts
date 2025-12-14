@@ -6,6 +6,16 @@ import { setApiToken } from '@/store/api/apiSlice';
 import { redirectOnce } from '@/lib/redirect-guard';
 
 /**
+ * Global logout guard flag (module-level, shared across all hook instances)
+ *
+ * This prevents multiple components from triggering duplicate logout attempts
+ * when they all detect errors simultaneously.
+ *
+ * Pattern: Same as redirectOnce() guard in redirect-guard.ts
+ */
+let isLoggingOut = false;
+
+/**
  * Wrapper hook that injects Clerk token into RTK Query with automatic refresh
  *
  * This hook solves the architectural impossibility of using React hooks
@@ -18,6 +28,7 @@ import { redirectOnce } from '@/lib/redirect-guard';
  * - Retry mechanism for failed requests (max 3 attempts)
  * - Token caching and revalidation
  * - **LAYER 2 DEFENSE**: Auto-logout after max retries on 401
+ * - **LAYER 2 DEFENSE**: Auto-logout on FETCH_ERROR (network/backend crashes)
  *
  * Security: Defense-in-Depth Architecture
  * ----------------------------------------
@@ -30,11 +41,19 @@ import { redirectOnce } from '@/lib/redirect-guard';
  * Layer 2 (Fallback): THIS HOOK
  *   - Client-side validation during API calls
  *   - Auto-logout after 3 failed 401 retries
+ *   - Auto-logout on FETCH_ERROR (prevents access when backend crashes)
+ *   - Auto-logout on 403 inactive user
  *   - Catches edge cases where middleware didn't block access
  *
  * Layer 3 (Defensive): auth-initializer.tsx
  *   - Blocks rendering on persistent errors
  *   - Last line of defense
+ *
+ * FETCH_ERROR Handling:
+ * - Detects network errors or backend crashes
+ * - Forces immediate logout (no retry)
+ * - Prevents unauthorized access when backend fails to respond
+ * - Applies fail-secure principle (deny access on error)
  *
  * Usage: const result = useAuthQuery(useGetCurrentUserQuery);
  *
@@ -54,7 +73,6 @@ export function useAuthQuery<T>(
   const lastRefreshTime = useRef<number>(0);
   const retryCount = useRef<number>(0);
   const lastErrorMessage = useRef<string>('');
-  const isLoggingOut = useRef<boolean>(false);
 
   // Refresh token with debouncing to prevent multiple simultaneous refreshes
   const refreshToken = useCallback(async () => {
@@ -106,8 +124,38 @@ export function useAuthQuery<T>(
 
   // Auto-refresh token on 401 error with intelligent retry logic
   // Auto-logout on 403 "user account is inactive" error
+  // Auto-logout on FETCH_ERROR (network/backend crash)
   useEffect(() => {
     if (result.isError && result.error && 'status' in result.error) {
+      // ⚠️ NEW: Handle FETCH_ERROR - Network errors or backend crashes
+      // This prevents unauthorized access when backend fails to respond properly
+      if (result.error.status === 'FETCH_ERROR') {
+        console.log('🚨 [Layer 2] FETCH_ERROR detected during API call');
+        console.log('🚨 This indicates:');
+        console.log('   - Backend server crash or unhandled exception');
+        console.log('   - Network connectivity failure');
+        console.log('   - Connection timeout or reset');
+        console.log('🚨 Security: Forcing logout to prevent unauthorized access');
+
+        // Prevent multiple simultaneous logout attempts
+        // Using module-level flag shared across ALL hook instances
+        if (isLoggingOut) {
+          console.log('⏳ [Layer 2] Logout already in progress - skipping duplicate');
+          return;
+        }
+
+        isLoggingOut = true;
+
+        // Redirect to sign-out page
+        // Note: We don't call signOut() here to avoid duplicate calls
+        // The /sign-out page will handle the actual Clerk signOut
+        console.log('🔄 [Layer 2] Redirecting to /sign-out (signOut will be handled by sign-out page)');
+        redirectOnce('/sign-out?reason=network_error');
+
+        // Exit immediately - no retry for network errors
+        return;
+      }
+
       // Handle 403 Forbidden - User account is inactive (HR deactivation)
       if (result.error.status === 403) {
         const errorData = (result.error as any).data;
@@ -168,33 +216,23 @@ export function useAuthQuery<T>(
           console.log('⛔ Max retry attempts reached - forcing logout');
 
           // Prevent multiple simultaneous logout attempts
-          if (isLoggingOut.current) {
-            console.log('⏳ Logout already in progress');
+          // Using module-level flag shared across ALL hook instances
+          if (isLoggingOut) {
+            console.log('⏳ [Layer 2] Logout already in progress - skipping duplicate');
             return;
           }
 
-          isLoggingOut.current = true;
+          isLoggingOut = true;
 
           // LAYER 2 DEFENSE: Force logout from Clerk
           // This is a fallback in case middleware didn't catch the invalid token
           console.log('🚪 [Layer 2] Forcing Clerk sign-out due to persistent 401 errors');
 
-          // Use async IIFE to handle promise
-          (async () => {
-            try {
-              // Redirect to sign-out page with reason
-              redirectOnce('/sign-out?reason=authentication_failed');
-
-              // Force Clerk logout (this will clear all Clerk session data)
-              await signOut();
-            } catch (error) {
-              console.error('❌ Logout failed:', error);
-              // Even if logout fails, still redirect
-              window.location.href = '/sign-in?reason=auth_error';
-            } finally {
-              isLoggingOut.current = false;
-            }
-          })();
+          // Redirect to sign-out page
+          // Note: We don't call signOut() here to avoid duplicate calls
+          // The /sign-out page will handle the actual Clerk signOut
+          console.log('🔄 [Layer 2] Redirecting to /sign-out (signOut will be handled by sign-out page)');
+          redirectOnce('/sign-out?reason=authentication_failed');
 
           return;
         }

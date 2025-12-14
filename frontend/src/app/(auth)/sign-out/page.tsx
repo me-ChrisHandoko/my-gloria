@@ -2,7 +2,7 @@
 
 import { useAuth, useClerk } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, LogOut } from 'lucide-react';
@@ -19,6 +19,12 @@ export default function SignOutPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isSigningOut, setIsSigningOut] = useState(false);
+
+  /**
+   * Guard flag to prevent duplicate execution when isSignedIn changes
+   * Pattern: Same as module-level isLoggingOut in use-auth-query.ts
+   */
+  const hasProcessedRef = useRef(false);
 
   const reason = searchParams.get('reason');
 
@@ -57,6 +63,21 @@ export default function SignOutPage() {
 
   // Auto sign-out when component mounts if user is signed in
   useEffect(() => {
+    // Prevent duplicate execution when isSignedIn changes from true → false
+    // This fixes the 2x loop issue where useEffect runs twice:
+    // 1. First run: isSignedIn=true → signOut() → setTimeout #1
+    // 2. signOut completes → isSignedIn=false → useEffect reruns → setTimeout #2
+    if (hasProcessedRef.current) {
+      console.log('⏳ [SignOut] Sign-out already processing - skipping duplicate');
+      return;
+    }
+
+    hasProcessedRef.current = true;
+    console.log('🔄 [SignOut] Starting sign-out process', {
+      isSignedIn,
+      reason,
+    });
+
     if (isSignedIn && !isSigningOut) {
       setIsSigningOut(true);
 
@@ -80,6 +101,7 @@ export default function SignOutPage() {
         });
     } else if (!isSignedIn) {
       // User is already signed out, redirect to sign-in
+      console.log('ℹ️ [SignOut] User already signed out, redirecting to sign-in');
       setTimeout(() => {
         router.push('/sign-in');
       }, 2000);
