@@ -1,0 +1,120 @@
+# Development Environment Configuration
+
+app:
+  name: "my-gloria-backend"
+  env: "development"
+  port: 8080
+  host: "0.0.0.0"
+  debug: true
+  version: "1.0.0"
+
+database:
+  host: "localhost"
+  port: 3479
+  user: "postgres"
+  password: "testing123"
+  name: "gloria_v2"
+  sslmode: "disable"
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: "5m"
+  log_level: "info"
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+  ttl: 3600
+  pool_size: 10
+
+jwt:
+  secret: "dev-secret-change-in-production"
+  access_token_expiry: "15m"
+  refresh_token_expiry: "168h"
+  issuer: "my-gloria-backend"
+  audience: "my-gloria-frontend"
+
+security:
+  # Argon2id parameters (balanced for dev environment)
+  argon2_memory: 65536        # 64 MiB (lower for dev)
+  argon2_iterations: 3        # Number of iterations
+  argon2_parallelism: 2       # Number of threads
+  argon2_salt_length: 16      # Salt length in bytes
+  argon2_key_length: 32       # Output key length in bytes
+  max_login_attempts: 5
+  account_lockout_duration: "15m"
+  password_min_length: 8
+  password_reset_token_expiry: "1h"
+  email_verification_token_expiry: "24h"
+
+rate_limit:
+  enabled: true
+  requests_per_second: 100  # Higher for dev
+  burst: 200
+
+cors:
+  allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:5173"
+  allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "PATCH"
+    - "DELETE"
+    - "OPTIONS"
+  allowed_headers:
+    - "Authorization"
+    - "Content-Type"
+    - "X-Request-ID"
+  exposed_headers:
+    - "X-Request-ID"
+    - "X-Total-Count"
+  allow_credentials: true
+  max_age: 3600
+
+email:
+  enabled: false  # Disable for local dev
+  from: "noreply@mygloria.com"
+  from_name: "My Gloria Dev"
+  smtp:
+    host: "localhost"
+    port: 1025  # MailHog port
+    username: ""
+    password: ""
+    use_tls: false
+
+logging:
+  level: "debug"
+  format: "text"  # text for dev readability
+  output: "stdout"
+  file_path: "./logs/app.log"
+  max_size: 100
+  max_backups: 3
+  max_age: 28
+  compress: false
+
+metrics:
+  enabled: true
+  port: 9090
+  path: "/metrics"
+
+tracing:
+  enabled: false
+  endpoint: "http://localhost:14268/api/traces"
+  sample_rate: 1.0  # Sample all in dev
+
+features:
+  email_verification: false
+  two_factor_auth: false
+  api_rate_limiting: true
+  audit_logging: true
+
+swagger:
+  enabled: true
+  host: "localhost:8080"
+  base_path: "/api/v1"
+  title: "My Gloria API"
+  description: "School Management System API"
+  version: "1.0.0"

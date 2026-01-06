@@ -1,0 +1,105 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage/
+*.coverprofile
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Environment files (NEVER commit these!)
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Build artifacts
+*.tar.gz
+*.zip
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Storage files (uploaded files, etc.)
+storage/
+uploads/
+
+# Docker volumes
+docker-volumes/
+
+# OS specific
+Thumbs.db
+.DS_Store
+
+# Air live reload
+tmp/
+
+# Swagger generated files
+docs/swagger/
+
+# Migration temporary files
+*.sql~
+
+# Debug files
+__debug_bin
+debug
+
+# Certificate files (keep examples, ignore real certs)
+*.pem
+*.key
+*.crt
+!example.pem
+!example.key
+!example.crt
+
+# Backup files
+*.bak
+*.backup
+
+# Node modules (if frontend is in same repo)
+node_modules/
+
+# Build output
+build/
+out/
+
+# Test cache
+.testcache/
+
+# Local development tools
+.air.toml
