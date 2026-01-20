@@ -1,7 +1,8 @@
 // lib/store/services/authApi.ts
 import { createApi, fetchBaseQuery, BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
-import type { RootState } from '../store';
-import { setAccessToken, logout } from '../features/authSlice';
+import { logout } from '../features/authSlice';
+import { getCSRFToken } from '@/lib/utils/csrf';
+import { Mutex } from '@/lib/utils/mutex';
 import {
   LoginRequest,
   RegisterRequest,
@@ -12,19 +13,27 @@ import {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
-// Base query with automatic token attachment
+// Mutex to ensure only one token refresh happens at a time
+const refreshMutex = new Mutex();
+
+// Base query with httpOnly cookie support (secure, XSS-safe) and CSRF protection
 const baseQuery = fetchBaseQuery({
   baseUrl: API_BASE_URL,
-  prepareHeaders: (headers, { getState }) => {
-    const token = (getState() as RootState).auth.accessToken;
-    if (token) {
-      headers.set('authorization', `Bearer ${token}`);
+  credentials: 'include', // CRITICAL: Send httpOnly cookies with every request
+  prepareHeaders: (headers, { endpoint }) => {
+    // Inject CSRF token for state-changing requests (POST, PUT, PATCH, DELETE)
+    // CSRF token is readable from cookie (NOT httpOnly) so JavaScript can access it
+    const csrfToken = getCSRFToken();
+    if (csrfToken) {
+      headers.set('X-CSRF-Token', csrfToken);
     }
+
     return headers;
   },
 });
 
 // Base query with automatic token refresh on 401
+// Uses mutex to ensure only one refresh happens at a time
 const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
   args,
   api,
@@ -32,31 +41,27 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 ) => {
   let result = await baseQuery(args, api, extraOptions);
 
-  // Handle 401 Unauthorized - try to refresh token
+  // Handle 401 Unauthorized - try to refresh token automatically
   if (result.error && result.error.status === 401) {
-    const refreshToken = (api.getState() as RootState).auth.refreshToken;
-
     // Check if we're on a public route (login/register)
     const isPublicRoute = typeof window !== 'undefined' &&
       (window.location.pathname === '/login' || window.location.pathname === '/register');
 
-    if (refreshToken) {
-      // Try to refresh the token
+    // Use mutex to ensure only one token refresh happens at a time
+    // This prevents multiple concurrent 401s from triggering multiple refresh requests
+    await refreshMutex.runExclusive(async () => {
+      // Try to refresh the token (refresh_token cookie sent automatically)
       const refreshResult = await baseQuery(
         {
           url: '/auth/refresh',
           method: 'POST',
-          body: { refresh_token: refreshToken },
         },
         api,
         extraOptions
       );
 
       if (refreshResult.data) {
-        // Store the new access token
-        const data = refreshResult.data as { access_token: string };
-        api.dispatch(setAccessToken(data.access_token));
-
+        // Token refreshed successfully (new access_token cookie set by server)
         // Retry the original request with new token
         result = await baseQuery(args, api, extraOptions);
       } else {
@@ -66,16 +71,7 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
           window.location.href = '/login';
         }
       }
-    } else {
-      // No refresh token - logout user (but don't redirect if already on public route)
-      if (!isPublicRoute) {
-        api.dispatch(logout());
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
-      }
-      // If already on public route, just return the error without redirect
-    }
+    });
   }
 
   return result;
@@ -105,15 +101,11 @@ export const authApi = createApi({
       }),
     }),
 
-    // Refresh token mutation
-    refreshToken: builder.mutation<
-      { access_token: string; token_type: string; expires_in: number },
-      string
-    >({
-      query: (refreshToken) => ({
+    // Refresh token mutation (refresh_token sent via httpOnly cookie)
+    refreshToken: builder.mutation<{ message: string }, void>({
+      query: () => ({
         url: '/auth/refresh',
         method: 'POST',
-        body: { refresh_token: refreshToken },
       }),
     }),
 
@@ -132,12 +124,11 @@ export const authApi = createApi({
       }),
     }),
 
-    // Logout mutation
-    logout: builder.mutation<{ message: string }, string>({
-      query: (refreshToken) => ({
+    // Logout mutation (refresh_token sent via httpOnly cookie)
+    logout: builder.mutation<{ message: string }, void>({
+      query: () => ({
         url: '/auth/logout',
         method: 'POST',
-        body: { refresh_token: refreshToken },
       }),
     }),
   }),

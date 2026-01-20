@@ -40,11 +40,12 @@ type CreateDepartmentRequest struct {
 }
 
 // UpdateDepartmentRequest represents the request body for updating a department
+// Note: SchoolID and ParentID allow empty string to clear the field (backend converts "" to null)
 type UpdateDepartmentRequest struct {
 	Code        *string `json:"code,omitempty" binding:"omitempty,min=2,max=50"`
 	Name        *string `json:"name,omitempty" binding:"omitempty,min=2,max=255"`
-	SchoolID    *string `json:"school_id,omitempty" binding:"omitempty,len=36"`
-	ParentID    *string `json:"parent_id,omitempty" binding:"omitempty,len=36"`
+	SchoolID    *string `json:"school_id,omitempty"` // Validation in service layer - allows "" to clear
+	ParentID    *string `json:"parent_id,omitempty"` // Validation in service layer - allows "" to clear
 	Description *string `json:"description,omitempty"`
 	IsActive    *bool   `json:"is_active,omitempty"`
 }
@@ -68,12 +69,13 @@ type DepartmentResponse struct {
 
 // DepartmentListResponse represents the response for listing departments
 type DepartmentListResponse struct {
-	ID       string  `json:"id"`
-	Code     string  `json:"code"`
-	Name     string  `json:"name"`
-	SchoolID *string `json:"school_id,omitempty"`
-	ParentID *string `json:"parent_id,omitempty"`
-	IsActive bool    `json:"is_active"`
+	ID         string  `json:"id"`
+	Code       string  `json:"code"`
+	Name       string  `json:"name"`
+	SchoolID   *string `json:"school_id,omitempty"`
+	ParentID   *string `json:"parent_id,omitempty"`
+	ParentName *string `json:"parent_name,omitempty"`
+	IsActive   bool    `json:"is_active"`
 }
 
 // DepartmentTreeResponse represents a department in a tree structure
@@ -115,7 +117,7 @@ func (d *Department) ToResponse() *DepartmentResponse {
 
 // ToListResponse converts Department to DepartmentListResponse
 func (d *Department) ToListResponse() *DepartmentListResponse {
-	return &DepartmentListResponse{
+	resp := &DepartmentListResponse{
 		ID:       d.ID,
 		Code:     d.Code,
 		Name:     d.Name,
@@ -123,6 +125,13 @@ func (d *Department) ToListResponse() *DepartmentListResponse {
 		ParentID: d.ParentID,
 		IsActive: d.IsActive,
 	}
+
+	// Include parent name if Parent relation is loaded
+	if d.Parent != nil {
+		resp.ParentName = &d.Parent.Name
+	}
+
+	return resp
 }
 
 // ToTreeResponse converts Department to DepartmentTreeResponse

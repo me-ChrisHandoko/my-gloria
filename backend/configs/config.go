@@ -8,7 +8,12 @@ import (
 type Config struct {
 	Database DatabaseConfig
 	JWT      JWTConfig
+	CSRF     CSRFConfig
 	Server   ServerConfig
+}
+
+type CSRFConfig struct {
+	Secret string
 }
 
 type DatabaseConfig struct {
@@ -43,6 +48,9 @@ func LoadConfig() *Config {
 		JWT: JWTConfig{
 			Secret:      getEnv("JWT_SECRET", ""),
 			ExpireHours: 24,
+		},
+		CSRF: CSRFConfig{
+			Secret: getEnv("CSRF_SECRET", ""),
 		},
 		Server: ServerConfig{
 			Port: getEnv("PORT", "8080"),
@@ -85,6 +93,11 @@ func validateConfig(cfg *Config) {
 		missing = append(missing, "JWT_SECRET")
 	}
 
+	// CSRF secret is required
+	if cfg.CSRF.Secret == "" {
+		missing = append(missing, "CSRF_SECRET")
+	}
+
 	if len(missing) > 0 {
 		log.Fatalf("Missing required environment variables: %v\nPlease check your .env file", missing)
 	}
@@ -92,6 +105,11 @@ func validateConfig(cfg *Config) {
 	// Validate JWT secret strength
 	if len(cfg.JWT.Secret) < 32 {
 		log.Fatal("JWT_SECRET must be at least 32 characters long for security")
+	}
+
+	// Validate CSRF secret strength
+	if len(cfg.CSRF.Secret) < 32 {
+		log.Fatal("CSRF_SECRET must be at least 32 characters long for security")
 	}
 }
 

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import Alert from '@/components/ui/Alert';
+import { Alert } from '@/components/ui/alert';
 import { Eye, EyeOff } from 'lucide-react';
 
 function ResetPasswordForm() {

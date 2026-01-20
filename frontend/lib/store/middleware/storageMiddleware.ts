@@ -2,27 +2,36 @@
 import { Middleware } from '@reduxjs/toolkit';
 
 /**
- * Middleware to sync auth state to sessionStorage
- * Automatically saves on any auth state change
+ * Auth state middleware
+ *
+ * NOTE: With httpOnly cookies implementation, we DO NOT store tokens in sessionStorage
+ * or any JavaScript-accessible storage. This prevents XSS token theft.
+ *
+ * Tokens are:
+ * - Stored in httpOnly cookies by backend (JavaScript cannot access)
+ * - Automatically sent with requests via credentials: 'include'
+ * - Rotated transparently by backend
+ *
+ * We only persist user info (non-sensitive) for UI state management.
  */
 export const storageMiddleware: Middleware = (store) => (next) => (action: any) => {
   const result = next(action);
 
-  // Save auth state to sessionStorage on auth actions
+  // Save only user info to sessionStorage on auth actions (NO TOKENS)
   if (action.type?.startsWith('auth/')) {
     const authState = store.getState().auth;
 
-    if (authState.isAuthenticated && authState.accessToken && authState.refreshToken) {
+    if (authState.isAuthenticated && authState.user) {
+      // SECURITY: Only store non-sensitive user info, NEVER tokens
       sessionStorage.setItem(
-        'gloria_auth',
+        'gloria_user',
         JSON.stringify({
-          accessToken: authState.accessToken,
-          refreshToken: authState.refreshToken,
           user: authState.user,
+          isAuthenticated: authState.isAuthenticated,
         })
       );
     } else {
-      sessionStorage.removeItem('gloria_auth');
+      sessionStorage.removeItem('gloria_user');
     }
   }
 

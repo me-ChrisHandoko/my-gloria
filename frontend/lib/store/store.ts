@@ -2,16 +2,43 @@
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './features/authSlice';
 import { authApi } from './services/authApi';
+import { karyawanApi } from './services/employeesApi';
+import { usersApi } from './services/usersApi';
+import { rolesApi } from './services/rolesApi';
+import { organizationApi } from './services/organizationApi';
+import { modulesApi } from './services/modulesApi';
+import { permissionsApi } from './services/permissionsApi';
+import { delegationsApi } from './services/delegationsApi';
+import { workflowsApi } from './services/workflowsApi';
+import { auditApi } from './services/auditApi';
 import { storageMiddleware } from './middleware/storageMiddleware';
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
     [authApi.reducerPath]: authApi.reducer,
+    [karyawanApi.reducerPath]: karyawanApi.reducer,
+    [usersApi.reducerPath]: usersApi.reducer,
+    [rolesApi.reducerPath]: rolesApi.reducer,
+    [organizationApi.reducerPath]: organizationApi.reducer,
+    [modulesApi.reducerPath]: modulesApi.reducer,
+    [permissionsApi.reducerPath]: permissionsApi.reducer,
+    [delegationsApi.reducerPath]: delegationsApi.reducer,
+    [workflowsApi.reducerPath]: workflowsApi.reducer,
+    [auditApi.reducerPath]: auditApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()
       .concat(authApi.middleware)
+      .concat(karyawanApi.middleware)
+      .concat(usersApi.middleware)
+      .concat(rolesApi.middleware)
+      .concat(organizationApi.middleware)
+      .concat(modulesApi.middleware)
+      .concat(permissionsApi.middleware)
+      .concat(delegationsApi.middleware)
+      .concat(workflowsApi.middleware)
+      .concat(auditApi.middleware)
       .concat(storageMiddleware),
   // Don't preload state to avoid hydration mismatch
   // State will be loaded by storageMiddleware after client mount

@@ -78,7 +78,7 @@ type CreateRoleRequest struct {
 	Code           string  `json:"code" binding:"required,min=2,max=50"`
 	Name           string  `json:"name" binding:"required,min=2,max=255"`
 	Description    *string `json:"description,omitempty"`
-	HierarchyLevel int     `json:"hierarchy_level" binding:"required,min=0"`
+	HierarchyLevel int     `json:"hierarchy_level" binding:"required,min=1,max=10"`
 	IsSystemRole   *bool   `json:"is_system_role,omitempty"`
 }
 
@@ -87,7 +87,7 @@ type UpdateRoleRequest struct {
 	Code           *string `json:"code,omitempty" binding:"omitempty,min=2,max=50"`
 	Name           *string `json:"name,omitempty" binding:"omitempty,min=2,max=255"`
 	Description    *string `json:"description,omitempty"`
-	HierarchyLevel *int    `json:"hierarchy_level,omitempty" binding:"omitempty,min=0"`
+	HierarchyLevel *int    `json:"hierarchy_level,omitempty" binding:"omitempty,min=1,max=10"`
 	IsActive       *bool   `json:"is_active,omitempty"`
 }
 

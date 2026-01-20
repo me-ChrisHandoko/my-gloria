@@ -34,7 +34,7 @@ func (School) TableName() string {
 type CreateSchoolRequest struct {
 	Code      string  `json:"code" binding:"required,min=2,max=50"`
 	Name      string  `json:"name" binding:"required,min=2,max=255"`
-	Lokasi    *string `json:"lokasi,omitempty" binding:"omitempty,max=100"`
+	Lokasi    string  `json:"lokasi" binding:"required,oneof=Barat Timur"`
 	Address   *string `json:"address,omitempty"`
 	Phone     *string `json:"phone,omitempty" binding:"omitempty,max=20"`
 	Email     *string `json:"email,omitempty" binding:"omitempty,email,max=100"`
@@ -45,7 +45,7 @@ type CreateSchoolRequest struct {
 type UpdateSchoolRequest struct {
 	Code      *string `json:"code,omitempty" binding:"omitempty,min=2,max=50"`
 	Name      *string `json:"name,omitempty" binding:"omitempty,min=2,max=255"`
-	Lokasi    *string `json:"lokasi,omitempty" binding:"omitempty,max=100"`
+	Lokasi    *string `json:"lokasi,omitempty" binding:"omitempty,oneof=Barat Timur"`
 	Address   *string `json:"address,omitempty"`
 	Phone     *string `json:"phone,omitempty" binding:"omitempty,max=20"`
 	Email     *string `json:"email,omitempty" binding:"omitempty,email,max=100"`

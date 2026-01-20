@@ -51,7 +51,6 @@ export function NavUser({
   const { isMobile } = useSidebar()
   const router = useRouter()
   const dispatch = useAppDispatch()
-  const { refreshToken } = useAppSelector((state) => state.auth)
   const [logout] = useLogoutMutation()
   const { setTheme } = useTheme()
 
@@ -67,11 +66,11 @@ export function NavUser({
 
   const handleLogout = async () => {
     try {
-      if (refreshToken) {
-        await logout(refreshToken).unwrap()
-      }
+      // Call backend logout (refresh_token sent via httpOnly cookie)
+      await logout().unwrap()
     } catch (error) {
       // Ignore errors - logout locally anyway
+      console.error('Logout failed:', error)
     } finally {
       dispatch(logoutAction())
       router.push("/login")

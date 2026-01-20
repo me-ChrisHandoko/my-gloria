@@ -27,8 +27,8 @@ type AuditLog struct {
 	Category       *AuditCategory  `json:"category,omitempty" gorm:"type:varchar(30)"`
 
 	// Relations
-	ActorProfile      *User `json:"actor_profile,omitempty" gorm:"foreignKey:ActorProfileID"`
-	TargetUserProfile *User `json:"target_user_profile,omitempty" gorm:"foreignKey:TargetUserID"`
+	Actor      *User `json:"actor,omitempty" gorm:"foreignKey:ActorProfileID"`
+	TargetUser *User `json:"target_user,omitempty" gorm:"foreignKey:TargetUserID"`
 }
 
 // TableName specifies the table name for AuditLog
@@ -110,20 +110,20 @@ func (a *AuditLog) ToResponse() *AuditLogResponse {
 		Category:       a.Category,
 	}
 
-	if a.ActorProfile != nil {
-		if a.ActorProfile.Username != nil {
-			resp.ActorName = a.ActorProfile.Username
+	if a.Actor != nil {
+		if a.Actor.Username != nil {
+			resp.ActorName = a.Actor.Username
 		} else {
-			email := a.ActorProfile.Email
+			email := a.Actor.Email
 			resp.ActorName = &email
 		}
 	}
 
-	if a.TargetUserProfile != nil {
-		if a.TargetUserProfile.Username != nil {
-			resp.TargetUserName = a.TargetUserProfile.Username
+	if a.TargetUser != nil {
+		if a.TargetUser.Username != nil {
+			resp.TargetUserName = a.TargetUser.Username
 		} else {
-			email := a.TargetUserProfile.Email
+			email := a.TargetUser.Email
 			resp.TargetUserName = &email
 		}
 	}
@@ -145,11 +145,11 @@ func (a *AuditLog) ToListResponse() *AuditLogListResponse {
 		Category:      a.Category,
 	}
 
-	if a.ActorProfile != nil {
-		if a.ActorProfile.Username != nil {
-			resp.ActorName = a.ActorProfile.Username
+	if a.Actor != nil {
+		if a.Actor.Username != nil {
+			resp.ActorName = a.Actor.Username
 		} else {
-			email := a.ActorProfile.Email
+			email := a.Actor.Email
 			resp.ActorName = &email
 		}
 	}

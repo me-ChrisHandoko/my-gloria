@@ -3,12 +3,15 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"backend/internal/auth"
 	"backend/internal/database"
 	"backend/internal/email"
+	"backend/internal/helpers"
 	"backend/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -47,14 +50,6 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Check username uniqueness if provided
-	if req.Username != nil {
-		if err := db.Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "username already exists"})
-			return
-		}
-	}
-
 	// Hash password
 	hashedPassword, err := auth.HashPassword(req.Password)
 	if err != nil {
@@ -62,11 +57,17 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	// Extract username from email (part before @)
+	username := req.Email
+	if atIndex := strings.Index(req.Email, "@"); atIndex > 0 {
+		username = req.Email[:atIndex]
+	}
+
 	// Create user
 	user := models.User{
 		ID:            uuid.New().String(),
 		Email:         req.Email,
-		Username:      req.Username,
+		Username:      &username,
 		PasswordHash:  hashedPassword,
 		EmailVerified: false,
 		IsActive:      true,
@@ -95,7 +96,7 @@ func Register(c *gin.Context) {
 	userAgent := c.Request.UserAgent()
 	rt := models.RefreshToken{
 		ID:            uuid.New().String(),
-		UserProfileID: user.ID,
+		UserID: user.ID,
 		TokenHash:     refreshHash,
 		ExpiresAt:     time.Now().Add(auth.RefreshTokenExpiry),
 		IPAddress:     &ipAddress,
@@ -107,19 +108,43 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// Preload DataKaryawan for user
-	if err := db.Preload("DataKaryawan").First(&user, "id = ?", user.ID).Error; err != nil {
+	// Preload DataKaryawan for user (only active employees)
+	if err := db.Preload("DataKaryawan", "status_aktif = ?", "Aktif").First(&user, "id = ?", user.ID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load user data"})
 		return
 	}
 
-	// Return auth response
-	c.JSON(http.StatusCreated, models.AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    int64(auth.AccessTokenExpiry.Seconds()),
-		User:         user.ToUserInfo(),
+	// Generate CSRF token for this user session
+	csrfToken, err := auth.GenerateCSRFToken(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate CSRF token"})
+		return
+	}
+
+	// Set httpOnly cookies (tokens ONLY in cookies, NOT in response body)
+	isProduction := gin.Mode() == gin.ReleaseMode
+	helpers.SetAuthCookies(c, accessToken, refreshToken, isProduction)
+	helpers.SetCSRFCookie(c, csrfToken, isProduction)
+
+	// Send welcome email (async - don't block response)
+	go func() {
+		emailSender := email.NewEmailSender()
+		// Get display name from employee data or use username
+		displayName := username
+		if employee.Nama != nil && *employee.Nama != "" {
+			displayName = *employee.Nama
+		}
+		if err := emailSender.SendWelcomeEmail(req.Email, displayName); err != nil {
+			log.Printf("[WELCOME_EMAIL_ERROR] Failed to send welcome email to %s: %v", req.Email, err)
+		} else {
+			log.Printf("[WELCOME_EMAIL] Successfully sent welcome email to %s", req.Email)
+		}
+	}()
+
+	// Return success with user info only (NO TOKENS in body for security)
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Registration successful",
+		"user":    user.ToUserInfo(),
 	})
 }
 
@@ -198,6 +223,20 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// Check employee status in data_karyawan table
+	var employee models.DataKaryawan
+	if err := db.Where("email = ?", user.Email).First(&employee).Error; err == nil {
+		// Employee record exists, check if active
+		if !employee.IsActiveEmployee() {
+			logAttempt(false, "employee_inactive")
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Akun karyawan Anda sudah tidak aktif. Silakan hubungi administrator.",
+			})
+			return
+		}
+	}
+	// If employee record not found, continue (allow non-employee users to login)
+
 	// Reset failed attempts on successful login
 	user.FailedLoginAttempts = 0
 	user.LockedUntil = nil
@@ -221,7 +260,7 @@ func Login(c *gin.Context) {
 	// Store refresh token
 	rt := models.RefreshToken{
 		ID:            uuid.New().String(),
-		UserProfileID: user.ID,
+		UserID: user.ID,
 		TokenHash:     refreshHash,
 		ExpiresAt:     time.Now().Add(auth.RefreshTokenExpiry),
 		IPAddress:     &ipAddress,
@@ -239,8 +278,8 @@ func Login(c *gin.Context) {
 	// Debug: Log user email before preload
 	println("DEBUG: Loading DataKaryawan for user email:", user.Email)
 
-	// Preload DataKaryawan for user
-	if err := db.Preload("DataKaryawan").First(&user, "id = ?", user.ID).Error; err != nil {
+	// Preload DataKaryawan for user (only active employees)
+	if err := db.Preload("DataKaryawan", "status_aktif = ?", "Aktif").First(&user, "id = ?", user.ID).Error; err != nil {
 		println("DEBUG: Failed to preload user:", err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load user data"})
 		return
@@ -258,21 +297,31 @@ func Login(c *gin.Context) {
 		println("DEBUG: DataKaryawan is nil - no matching email in data_karyawan table")
 	}
 
-	// Return auth response
-	c.JSON(http.StatusOK, models.AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    int64(auth.AccessTokenExpiry.Seconds()),
-		User:         user.ToUserInfo(),
+	// Generate CSRF token for this user session
+	csrfToken, err := auth.GenerateCSRFToken(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate CSRF token"})
+		return
+	}
+
+	// Set httpOnly cookies (tokens ONLY in cookies, NOT in response body)
+	isProduction := gin.Mode() == gin.ReleaseMode
+	helpers.SetAuthCookies(c, accessToken, refreshToken, isProduction)
+	helpers.SetCSRFCookie(c, csrfToken, isProduction)
+
+	// Return success with user info only (NO TOKENS in body for security)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Login successful",
+		"user":    user.ToUserInfo(),
 	})
 }
 
-// RefreshToken handles token refresh
+// RefreshToken handles token refresh with rotation (security best practice)
 func RefreshToken(c *gin.Context) {
-	var req models.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// Get refresh token from httpOnly cookie (secure)
+	refreshTokenFromCookie, err := c.Cookie("gloria_refresh_token")
+	if err != nil || refreshTokenFromCookie == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token required"})
 		return
 	}
 
@@ -281,59 +330,127 @@ func RefreshToken(c *gin.Context) {
 	// Find refresh token (need to check hash)
 	var refreshTokens []models.RefreshToken
 	if err := db.Where("expires_at > ?", time.Now()).
-		Preload("UserProfile").
+		Preload("User").
 		Find(&refreshTokens).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrTokenInvalid})
 		return
 	}
 
-	var rt *models.RefreshToken
+	var oldRT *models.RefreshToken
 	for i := range refreshTokens {
-		if auth.VerifyPassword(req.RefreshToken, refreshTokens[i].TokenHash) {
-			rt = &refreshTokens[i]
+		if auth.VerifyPassword(refreshTokenFromCookie, refreshTokens[i].TokenHash) {
+			oldRT = &refreshTokens[i]
 			break
 		}
 	}
 
-	if rt == nil {
+	if oldRT == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrTokenInvalid})
 		return
 	}
 
-	// Check if revoked
-	if rt.RevokedAt != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrTokenRevoked})
+	// Check if already revoked (potential token reuse attack)
+	if oldRT.RevokedAt != nil {
+		// WARNING: Refresh token reuse detected - possible stolen token
+		// Best practice: Revoke ALL tokens for this user
+		db.Model(&models.RefreshToken{}).
+			Where("user_id = ?", oldRT.User.ID).
+			Update("revoked_at", time.Now())
+
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "token reuse detected - all sessions revoked for security"})
 		return
 	}
 
 	// Check expiry
-	if time.Now().After(rt.ExpiresAt) {
+	if time.Now().After(oldRT.ExpiresAt) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrTokenExpired})
 		return
 	}
 
 	// Check user is active
-	if !rt.UserProfile.IsActive {
+	if !oldRT.User.IsActive {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrAccountInactive})
 		return
 	}
 
+	// TOKEN ROTATION: Start transaction for atomic operation
+	tx := db.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start transaction"})
+		return
+	}
+
+	// Revoke old refresh token (prevent reuse)
+	now := time.Now()
+	oldRT.RevokedAt = &now
+	oldRT.LastUsedAt = &now
+	if err := tx.Save(oldRT).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke old token"})
+		return
+	}
+
 	// Generate new access token
-	accessToken, err := auth.GenerateAccessToken(rt.UserProfile.ID, rt.UserProfile.Email)
+	accessToken, err := auth.GenerateAccessToken(oldRT.User.ID, oldRT.User.Email)
 	if err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate access token"})
 		return
 	}
 
-	// Update last used
-	now := time.Now()
-	rt.LastUsedAt = &now
-	db.Save(rt)
+	// Generate new refresh token (rotation)
+	newRefreshToken, newRefreshHash, err := auth.GenerateRefreshToken()
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate new refresh token"})
+		return
+	}
 
+	// Store new refresh token
+	ipAddress := c.ClientIP()
+	userAgent := c.Request.UserAgent()
+	newRT := models.RefreshToken{
+		ID:            uuid.New().String(),
+		UserID: oldRT.User.ID,
+		TokenHash:     newRefreshHash,
+		ExpiresAt:     time.Now().Add(auth.RefreshTokenExpiry),
+		IPAddress:     &ipAddress,
+		UserAgent:     &userAgent,
+	}
+
+	if err := tx.Create(&newRT).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store new refresh token"})
+		return
+	}
+
+	// Rotate CSRF token (security best practice)
+	csrfToken, err := auth.GenerateCSRFToken(oldRT.User.ID)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate CSRF token"})
+		return
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit transaction"})
+		return
+	}
+
+	// Update cookies with new tokens (secure - httpOnly)
+	isProduction := gin.Mode() == gin.ReleaseMode
+	helpers.UpdateAccessTokenCookie(c, accessToken, isProduction)
+	helpers.SetAuthCookies(c, accessToken, newRefreshToken, isProduction) // Update both tokens
+	helpers.SetCSRFCookie(c, csrfToken, isProduction)
+
+	// Log successful token rotation for audit
+	log.Printf("[TOKEN_ROTATION] User: %s | Old Token: %s | New Token: %s | IP: %s",
+		oldRT.User.Email, oldRT.ID, newRT.ID, ipAddress)
+
+	// Return success only (NO TOKEN in body for security)
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": accessToken,
-		"token_type":   "Bearer",
-		"expires_in":   int64(auth.AccessTokenExpiry.Seconds()),
+		"message": "Token refreshed successfully",
 	})
 }
 
@@ -385,7 +502,7 @@ func ChangePassword(c *gin.Context) {
 
 	// Revoke all refresh tokens (force re-login)
 	if err := db.Model(&models.RefreshToken{}).
-		Where("user_profile_id = ?", userID).
+		Where("user_id = ?", userID).
 		Update("revoked_at", time.Now()).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "password changed successfully, but failed to revoke tokens",
@@ -411,7 +528,7 @@ func GetMe(c *gin.Context) {
 	var user models.User
 	if err := db.Preload("UserRoles.Role").
 		Preload("UserPositions.Position").
-		Preload("DataKaryawan").
+		Preload("DataKaryawan", "status_aktif = ?", "Aktif").
 		First(&user, "id = ?", userID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
@@ -422,9 +539,12 @@ func GetMe(c *gin.Context) {
 
 // Logout revokes refresh token
 func Logout(c *gin.Context) {
-	var req models.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// Get refresh token from httpOnly cookie (secure)
+	refreshTokenFromCookie, err := c.Cookie("gloria_refresh_token")
+	if err != nil || refreshTokenFromCookie == "" {
+		// Even if no cookie, still clear cookies for logout
+		helpers.ClearAuthCookies(c)
+		c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
 		return
 	}
 
@@ -433,22 +553,30 @@ func Logout(c *gin.Context) {
 	// Find and revoke refresh token
 	var refreshTokens []models.RefreshToken
 	if err := db.Find(&refreshTokens).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to find tokens"})
+		// Clear cookies even if DB query fails
+		helpers.ClearAuthCookies(c)
+		c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
 		return
 	}
 
 	for i := range refreshTokens {
-		if auth.VerifyPassword(req.RefreshToken, refreshTokens[i].TokenHash) {
+		if auth.VerifyPassword(refreshTokenFromCookie, refreshTokens[i].TokenHash) {
 			now := time.Now()
 			refreshTokens[i].RevokedAt = &now
 			db.Save(&refreshTokens[i])
+
+			// Clear httpOnly cookies
+			helpers.ClearAuthCookies(c)
 
 			c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
 			return
 		}
 	}
 
-	c.JSON(http.StatusBadRequest, gin.H{"error": "invalid refresh token"})
+	// Even if token not found in DB, still clear cookies (client-side logout)
+	helpers.ClearAuthCookies(c)
+
+	c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
 }
 
 // ForgotPasswordRequest represents the request body for forgot password

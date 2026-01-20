@@ -69,7 +69,7 @@ func (RoleModuleAccess) TableName() string {
 // UserModuleAccess represents module access permissions for individual users
 type UserModuleAccess struct {
 	ID             string         `json:"id" gorm:"type:varchar(36);primaryKey"`
-	UserProfileID  string         `json:"user_profile_id" gorm:"column:user_profile_id;type:varchar(36);not null"`
+	UserID         string         `json:"user_id" gorm:"column:user_id;type:varchar(36);not null"`
 	ModuleID       string         `json:"module_id" gorm:"column:module_id;type:varchar(36);not null"`
 	Permissions    datatypes.JSON `json:"permissions" gorm:"type:jsonb;not null"`
 	GrantedBy      string         `json:"granted_by" gorm:"column:granted_by;type:varchar(36);not null"`
@@ -82,8 +82,8 @@ type UserModuleAccess struct {
 	EffectiveUntil *time.Time     `json:"effective_until,omitempty" gorm:"column:effective_until"`
 
 	// Relations
-	UserProfile *User `json:"user_profile,omitempty" gorm:"foreignKey:UserProfileID;constraint:OnDelete:CASCADE"`
-	Module      *Module      `json:"module,omitempty" gorm:"foreignKey:ModuleID;constraint:OnDelete:CASCADE"`
+	User   *User   `json:"user,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
+	Module *Module `json:"module,omitempty" gorm:"foreignKey:ModuleID;constraint:OnDelete:CASCADE"`
 }
 
 // TableName specifies the table name for UserModuleAccess

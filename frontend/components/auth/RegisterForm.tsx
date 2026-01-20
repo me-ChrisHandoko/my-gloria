@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Check, X, Info } from 'lucide-react';
 import { toast } from 'sonner';
+import { useMutex } from '@/lib/hooks/useMutex';
 
 export default function RegisterForm() {
   const router = useRouter();
@@ -21,6 +22,9 @@ export default function RegisterForm() {
   const [showPasswordInfo, setShowPasswordInfo] = useState(false);
 
   const [register, { isLoading }] = useRegisterMutation();
+
+  // Mutex to prevent concurrent registration attempts
+  const { runExclusive, isLocked } = useMutex();
 
   // Password validation checks
   const passwordChecks = {
@@ -35,34 +39,37 @@ export default function RegisterForm() {
     e.preventDefault();
     e.stopPropagation();
 
+    // Prevent concurrent submissions using mutex
+    if (isLocked) {
+      console.warn('Registration already in progress');
+      return;
+    }
+
     // Validate password match
     if (password !== confirmPassword) {
       toast.error('Password and Confirm Password do not match');
       return;
     }
 
-    try {
-      const result = await register({
-        email,
-        password,
-      }).unwrap();
+    await runExclusive(async () => {
+      try {
+        const result = await register({
+          email,
+          password,
+        }).unwrap();
 
-      // Store credentials in Redux
-      dispatch(
-        setCredentials({
-          user: result.user,
-          accessToken: result.access_token,
-          refreshToken: result.refresh_token,
-        })
-      );
+        // Store credentials in Redux
+        // Store user info in Redux (tokens handled by httpOnly cookies)
+        dispatch(setCredentials({ user: result.user }));
 
-      toast.success('Registration successful!');
-      // Redirect to dashboard
-      router.push('/dashboard');
-    } catch (err: any) {
-      const errorMessage = err?.data?.error || err?.message || 'Registration failed';
-      toast.error(errorMessage);
-    }
+        toast.success('Registration successful!');
+        // Redirect to dashboard
+        router.push('/dashboard');
+      } catch (err: any) {
+        const errorMessage = err?.data?.error || err?.message || 'Registration failed';
+        toast.error(errorMessage);
+      }
+    });
   };
 
   return (
@@ -203,10 +210,10 @@ export default function RegisterForm() {
       <Button
         type="button"
         onClick={handleButtonClick}
-        disabled={isLoading || !passwordChecks.minLength || !passwordChecks.maxLength || !passwordChecks.passwordsMatch}
+        disabled={isLoading || isLocked || !passwordChecks.minLength || !passwordChecks.maxLength || !passwordChecks.passwordsMatch}
         className="w-full"
       >
-        {isLoading ? 'Creating Account...' : 'Create Account'}
+        {isLoading || isLocked ? 'Creating Account...' : 'Create Account'}
       </Button>
 
       <p className="text-center text-sm text-muted-foreground">

@@ -13,25 +13,26 @@ import (
 // AuthRequired is a middleware that validates JWT token
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get Authorization header
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(401, gin.H{"error": "authorization header required"})
-			c.Abort()
-			return
+		var token string
+
+		// Primary: Try to get token from httpOnly cookie (secure, XSS-safe)
+		cookieToken, err := c.Cookie("gloria_access_token")
+		if err == nil && cookieToken != "" {
+			token = cookieToken
+		} else {
+			// Fallback: Check Authorization header (for API clients that can't use cookies)
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" {
+				parts := strings.Split(authHeader, " ")
+				if len(parts) == 2 && parts[0] == "Bearer" {
+					token = parts[1]
+				}
+			}
 		}
 
-		// Check Bearer prefix
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(401, gin.H{"error": "invalid authorization header format"})
-			c.Abort()
-			return
-		}
-
-		token := parts[1]
+		// If no token found in either cookie or header
 		if token == "" {
-			c.JSON(401, gin.H{"error": "token is required"})
+			c.JSON(401, gin.H{"error": "authentication required"})
 			c.Abort()
 			return
 		}

@@ -113,7 +113,7 @@ func (d *DataKaryawan) IsActiveEmployee() bool {
 }
 
 // SplitName splits the full name into firstname and lastname
-// Takes first word as firstname and last word as lastname (skips middle names)
+// Takes first word as firstname and last word as lastname (excludes middle names)
 // If single part, uses it as firstname with empty lastname
 func (d *DataKaryawan) SplitName() (firstname string, lastname string) {
 	if d.Nama == nil || *d.Nama == "" {
@@ -143,7 +143,7 @@ func (d *DataKaryawan) SplitName() (firstname string, lastname string) {
 	} else if len(parts) == 1 {
 		return parts[0], ""
 	} else {
-		// First word as firstname, last word as lastname (skip middle names)
+		// First word as firstname, last word as lastname (excludes middle names)
 		firstname = parts[0]
 		lastname = parts[len(parts)-1]
 		return firstname, lastname

@@ -55,7 +55,6 @@ func AutoMigrate() error {
 		&models.School{},
 		&models.Department{},
 		&models.Position{},
-		&models.PositionHierarchy{},
 		&models.DataKaryawan{},
 
 		// Permission system
@@ -77,6 +76,8 @@ func AutoMigrate() error {
 		&models.SystemConfiguration{},
 		&models.Workflow{},
 		&models.BulkOperationProgress{},
+		&models.WorkflowRule{},
+		&models.WorkflowRuleStep{},
 	)
 
 	if err != nil {

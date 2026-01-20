@@ -9,6 +9,7 @@ import (
 	"backend/internal/database"
 	"backend/internal/handlers"
 	"backend/internal/middleware"
+	"backend/internal/services"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -43,6 +44,10 @@ func main() {
 	log.Println("Initializing JWT authentication...")
 	auth.InitJWT(cfg.JWT.Secret)
 
+	// Initialize CSRF protection
+	log.Println("Initializing CSRF protection...")
+	auth.InitCSRFSecret(cfg.CSRF.Secret)
+
 	// Setup router
 	router := setupRouter()
 
@@ -64,12 +69,33 @@ func setupRouter() *gin.Engine {
 	// Apply security headers middleware to all routes
 	router.Use(middleware.SecurityHeaders())
 
+	// Initialize services
+	db := database.GetDB()
+	schoolService := services.NewSchoolService(db)
+	positionService := services.NewPositionService(db)
+	departmentService := services.NewDepartmentService(db)
+	karyawanService := services.NewKaryawanService(db)
+	workflowRuleService := services.NewWorkflowRuleService(db)
+	roleService := services.NewRoleService(db)
+	permissionService := services.NewPermissionService(db)
+	moduleService := services.NewModuleService(db)
+
+	// Initialize handlers
+	schoolHandler := handlers.NewSchoolHandler(schoolService)
+	positionHandler := handlers.NewPositionHandler(positionService)
+	departmentHandler := handlers.NewDepartmentHandler(departmentService)
+	karyawanHandler := handlers.NewKaryawanHandler(karyawanService)
+	workflowRuleHandler := handlers.NewWorkflowRuleHandler(workflowRuleService)
+	roleHandler := handlers.NewRoleHandler(roleService)
+	permissionHandler := handlers.NewPermissionHandler(permissionService)
+	moduleHandler := handlers.NewModuleHandler(moduleService)
+
 	// Configure CORS
 	// In development: Allow localhost origins for testing
 	// In production: Should be configured with specific frontend origin via environment variable
 	corsConfig := cors.Config{
 		AllowOrigins: []string{
-			"http://localhost:3000",  // React default
+			"http://localhost:3000",  // Next.js default
 			"http://localhost:5173",  // Vite default
 			"http://localhost:8080",  // Alternative dev server
 		},
@@ -79,16 +105,18 @@ func setupRouter() *gin.Engine {
 			"PUT",
 			"DELETE",
 			"OPTIONS",
+			"PATCH",
 		},
 		AllowHeaders: []string{
 			"Authorization",
 			"Content-Type",
 			"Accept",
+			"X-CSRF-Token", // CSRF protection header
 		},
 		ExposeHeaders: []string{
 			"Content-Length",
 		},
-		AllowCredentials: false, // JWT in header doesn't need credentials
+		AllowCredentials: true, // Enable credentials for cookie-based auth and CSRF protection
 		MaxAge:           12 * time.Hour,
 	}
 
@@ -119,9 +147,10 @@ func setupRouter() *gin.Engine {
 			authPublic.POST("/reset-password", handlers.ResetPassword)
 		}
 
-		// Protected routes (requires JWT token)
+		// Protected routes (requires JWT token from Bearer header OR httpOnly cookies)
 		protected := v1.Group("/")
-		protected.Use(middleware.AuthRequired())
+		protected.Use(middleware.AuthRequiredHybrid()) // Hybrid SSR support - checks auth first
+		protected.Use(middleware.CSRFProtection())     // CSRF protection for state-changing requests
 		{
 			// Auth routes (protected)
 			authProtected := protected.Group("/auth")
@@ -139,34 +168,93 @@ func setupRouter() *gin.Engine {
 				users.DELETE("/:id", handlers.DeleteUser)
 			}
 
-			// Student routes
-			students := protected.Group("/students")
+			// School routes
+			schools := protected.Group("/schools")
 			{
-				students.POST("", handlers.CreateStudent)
-				students.GET("", handlers.GetStudents)
-				students.GET("/:id", handlers.GetStudent)
-				students.PUT("/:id", handlers.UpdateStudent)
-				students.DELETE("/:id", handlers.DeleteStudent)
+				schools.POST("", schoolHandler.CreateSchool)
+				schools.GET("", schoolHandler.GetSchools)
+				schools.GET("/available-codes", schoolHandler.GetAvailableSchoolCodes)
+				schools.GET("/:id", schoolHandler.GetSchoolByID)
+				schools.PUT("/:id", schoolHandler.UpdateSchool)
+				schools.DELETE("/:id", schoolHandler.DeleteSchool)
 			}
 
-			// Teacher routes
-			teachers := protected.Group("/teachers")
+			// Department routes
+			departments := protected.Group("/departments")
 			{
-				teachers.POST("", handlers.CreateTeacher)
-				teachers.GET("", handlers.GetTeachers)
-				teachers.GET("/:id", handlers.GetTeacher)
-				teachers.PUT("/:id", handlers.UpdateTeacher)
-				teachers.DELETE("/:id", handlers.DeleteTeacher)
+				departments.POST("", departmentHandler.CreateDepartment)
+				departments.GET("", departmentHandler.GetDepartments)
+				departments.GET("/tree", departmentHandler.GetDepartmentTree)
+				departments.GET("/available-codes", departmentHandler.GetAvailableDepartmentCodes)
+				departments.GET("/:id", departmentHandler.GetDepartmentByID)
+				departments.PUT("/:id", departmentHandler.UpdateDepartment)
+				departments.DELETE("/:id", departmentHandler.DeleteDepartment)
 			}
 
-			// Class routes
-			classes := protected.Group("/classes")
+			// Position routes
+			positions := protected.Group("/positions")
 			{
-				classes.POST("", handlers.CreateClass)
-				classes.GET("", handlers.GetClasses)
-				classes.GET("/:id", handlers.GetClass)
-				classes.PUT("/:id", handlers.UpdateClass)
-				classes.DELETE("/:id", handlers.DeleteClass)
+				positions.POST("", positionHandler.CreatePosition)
+				positions.GET("", positionHandler.GetPositions)
+				positions.GET("/:id", positionHandler.GetPositionByID)
+				positions.PUT("/:id", positionHandler.UpdatePosition)
+				positions.DELETE("/:id", positionHandler.DeletePosition)
+			}
+
+			// Employee routes
+			employees := protected.Group("/employees")
+			{
+				employees.GET("/filter-options", karyawanHandler.GetFilterOptions)
+				employees.GET("", karyawanHandler.GetKaryawans)
+				employees.GET("/:nip", karyawanHandler.GetKaryawanByNIP)
+			}
+
+			// Workflow Rules routes
+			workflowRules := protected.Group("/workflow-rules")
+			{
+				workflowRules.POST("", workflowRuleHandler.CreateWorkflowRule)
+				workflowRules.POST("/bulk", workflowRuleHandler.BulkCreateWorkflowRules)
+				workflowRules.GET("", workflowRuleHandler.GetWorkflowRules)
+				workflowRules.GET("/types", workflowRuleHandler.GetWorkflowTypes)
+				workflowRules.GET("/lookup", workflowRuleHandler.GetWorkflowRuleByPositionAndType)
+				workflowRules.GET("/:id", workflowRuleHandler.GetWorkflowRuleByID)
+				workflowRules.PUT("/:id", workflowRuleHandler.UpdateWorkflowRule)
+				workflowRules.DELETE("/:id", workflowRuleHandler.DeleteWorkflowRule)
+			}
+
+			// Role routes
+			roles := protected.Group("/roles")
+			{
+				roles.POST("", roleHandler.CreateRole)
+				roles.GET("", roleHandler.GetRoles)
+				roles.GET("/:id", roleHandler.GetRoleByID)
+				roles.GET("/:id/permissions", roleHandler.GetRoleWithPermissions)
+				roles.PUT("/:id", roleHandler.UpdateRole)
+				roles.DELETE("/:id", roleHandler.DeleteRole)
+				roles.POST("/:id/permissions", roleHandler.AssignPermissionToRole)
+				roles.DELETE("/:id/permissions/:permission_id", roleHandler.RevokePermissionFromRole)
+			}
+
+			// Permission routes
+			permissions := protected.Group("/permissions")
+			{
+				permissions.POST("", permissionHandler.CreatePermission)
+				permissions.GET("", permissionHandler.GetPermissions)
+				permissions.GET("/groups", permissionHandler.GetPermissionGroups)
+				permissions.GET("/:id", permissionHandler.GetPermissionByID)
+				permissions.PUT("/:id", permissionHandler.UpdatePermission)
+				permissions.DELETE("/:id", permissionHandler.DeletePermission)
+			}
+
+			// Module routes
+			modules := protected.Group("/modules")
+			{
+				modules.POST("", moduleHandler.CreateModule)
+				modules.GET("", moduleHandler.GetModules)
+				modules.GET("/tree", moduleHandler.GetModuleTree)
+				modules.GET("/:id", moduleHandler.GetModuleByID)
+				modules.PUT("/:id", moduleHandler.UpdateModule)
+				modules.DELETE("/:id", moduleHandler.DeleteModule)
 			}
 		}
 	}

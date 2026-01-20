@@ -2,18 +2,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useLoginMutation } from '@/lib/store/services/authApi';
 import { useAppDispatch } from '@/lib/store/hooks';
 import { setCredentials } from '@/lib/store/features/authSlice';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Alert } from '@/components/ui/alert';
 import { Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
+import { useMutex } from '@/lib/hooks/useMutex';
 
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,9 +25,16 @@ export default function LoginForm() {
   const [attemptCount, setAttemptCount] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
   const [remainingTime, setRemainingTime] = useState<number>(0);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   // RTK Query mutation hook (auto-generated)
   const [login, { isLoading }] = useLoginMutation();
+
+  // Mutex to prevent concurrent login attempts
+  const { runExclusive, isLocked } = useMutex();
+
+  // Get return URL from query params (for post-login redirect)
+  const returnUrl = searchParams.get('returnUrl') || '/dashboard';
 
   // Countdown timer for locked accounts
   useEffect(() => {
@@ -80,41 +90,59 @@ export default function LoginForm() {
     e.preventDefault();
     e.stopPropagation();
 
-    setErrorMessage('');
-    setAttemptCount(prev => prev + 1);
+    // Prevent concurrent submissions using mutex
+    if (isLocked) {
+      console.warn('Login already in progress');
+      return;
+    }
 
-    try {
-      const result = await login({ email, password }).unwrap();
+    await runExclusive(async () => {
+      setErrorMessage('');
+      setAttemptCount(prev => prev + 1);
 
-      dispatch(
-        setCredentials({
-          user: result.user,
-          accessToken: result.access_token,
-          refreshToken: result.refresh_token,
-        })
-      );
+      try {
+        const result = await login({ email, password }).unwrap();
 
-      toast.success('Login successful!');
-      router.push('/dashboard');
-    } catch (err: any) {
-      // Handle error and show message to user
-      if (err && 'data' in err && err.data) {
-        const errorData = err.data as any;
-        const errorMsg = errorData.error || 'Login failed. Please check your credentials.';
+        // Store user info in Redux (tokens handled by httpOnly cookies)
+        dispatch(
+          setCredentials({
+            user: result.user,
+          })
+        );
 
-        // Check if account is locked and has locked_until timestamp
-        if (errorData.locked_until) {
-          setLockedUntil(errorData.locked_until);
-          setErrorMessage(errorMsg);
+        toast.success('Login successful!');
+
+        // Set redirecting state to maintain button spinner during navigation
+        setIsRedirecting(true);
+
+        // Redirect with error handling
+        try {
+          router.push(returnUrl);
+        } catch (navError) {
+          console.error('Navigation error:', navError);
+          setIsRedirecting(false);
+          toast.error('Navigation failed. Please try again.');
+        }
+      } catch (err: any) {
+        // Handle error and show message to user
+        if (err && 'data' in err && err.data) {
+          const errorData = err.data as any;
+          const errorMsg = errorData.error || 'Login failed. Please check your credentials.';
+
+          // Check if account is locked and has locked_until timestamp
+          if (errorData.locked_until) {
+            setLockedUntil(errorData.locked_until);
+            setErrorMessage(errorMsg);
+          } else {
+            setLockedUntil(null);
+            toast.error(errorMsg);
+          }
         } else {
           setLockedUntil(null);
-          toast.error(errorMsg);
+          toast.error('Network error. Please check your connection and try again.');
         }
-      } else {
-        setLockedUntil(null);
-        toast.error('Network error. Please check your connection and try again.');
       }
-    }
+    });
   };
 
   return (
@@ -209,13 +237,13 @@ export default function LoginForm() {
 
       <Button
         type="submit"
-        disabled={isLoading || !email || !password}
+        disabled={isLoading || isLocked || isRedirecting || !email || !password}
         className="w-full"
       >
-        {isLoading ? (
+        {isLoading || isRedirecting ? (
           <span className="flex items-center gap-2">
             <span className="animate-spin">⏳</span>
-            Signing in...
+            {isLoading ? 'Signing in...' : 'Redirecting...'}
           </span>
         ) : (
           'Sign In'

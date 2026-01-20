@@ -2,7 +2,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
+import { useAppDispatch } from '@/lib/store/hooks';
 import { useLogoutMutation } from '@/lib/store/services/authApi';
 import { logout as logoutAction } from '@/lib/store/features/authSlice';
 import { Button } from '@/components/ui/button';
@@ -10,20 +10,19 @@ import { Button } from '@/components/ui/button';
 export default function LogoutButton() {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const { refreshToken } = useAppSelector((state) => state.auth);
   const [logout, { isLoading }] = useLogoutMutation();
 
   const handleLogout = async () => {
     try {
-      if (refreshToken) {
-        // Call backend logout (best effort)
-        await logout(refreshToken).unwrap();
-      }
+      // Call backend logout (refresh_token sent via httpOnly cookie)
+      await logout().unwrap();
     } catch (error) {
       // Ignore errors - logout locally anyway
     } finally {
-      // Always clear local state
+      // Clear local state (Redux)
       dispatch(logoutAction());
+
+      // Navigate to login
       router.push('/login');
     }
   };

@@ -19,6 +19,61 @@ func NewEmailSender() *EmailSender {
 	}
 }
 
+// SendWelcomeEmail sends a welcome email after successful registration
+func (s *EmailSender) SendWelcomeEmail(toEmail, name string) error {
+	// In development, override recipient email
+	recipient := toEmail
+	if IsDevelopment() {
+		recipient = GetDevelopmentEmail()
+	}
+
+	subject := "Selamat Datang di Gloria School"
+	body := s.buildWelcomeEmailBody(toEmail, name)
+
+	return s.sendEmail(recipient, subject, body)
+}
+
+// buildWelcomeEmailBody creates the HTML email body for welcome email
+func (s *EmailSender) buildWelcomeEmailBody(originalEmail, name string) string {
+	devNote := ""
+	if IsDevelopment() {
+		devNote = fmt.Sprintf(`
+		<div style="background-color: #FEF3C7; border: 1px solid #F59E0B; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+			<strong>Development Mode:</strong> This email was intended for <strong>%s</strong> but sent to development inbox.
+		</div>
+		`, originalEmail)
+	}
+
+	loginURL := "http://localhost:3000/login"
+
+	return fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>Selamat Datang</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+	%s
+	<div style="background-color: #f4f4f4; padding: 20px; border-radius: 5px;">
+		<h2 style="color: #2563EB;">Selamat Datang di Gloria School! 🎉</h2>
+		<p>Halo <strong>%s</strong>,</p>
+		<p>Akun Anda telah berhasil dibuat. Anda sekarang dapat mengakses sistem Gloria School menggunakan email dan password yang telah Anda daftarkan.</p>
+		<div style="text-align: center; margin: 30px 0;">
+			<a href="%s" style="background-color: #2563EB; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Masuk ke Sistem</a>
+		</div>
+		<p style="font-size: 14px; color: #666;">Jika Anda mengalami kesulitan, silakan hubungi administrator.</p>
+		<hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+		<p style="font-size: 12px; color: #999;">
+			Gloria School<br>
+			Email: support@gloriaschool.org
+		</p>
+	</div>
+</body>
+</html>
+	`, devNote, name, loginURL)
+}
+
 // SendPasswordResetEmail sends a password reset email
 func (s *EmailSender) SendPasswordResetEmail(toEmail, resetToken string) error {
 	// In development, override recipient email

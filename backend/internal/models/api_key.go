@@ -29,7 +29,7 @@ type ApiKey struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 
 	// Relations
-	UserProfile *User `json:"user_profile,omitempty" gorm:"foreignKey:UserID"`
+	User *User `json:"user,omitempty" gorm:"foreignKey:UserID"`
 }
 
 // TableName specifies the table name for ApiKey
