@@ -2,7 +2,7 @@
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './features/authSlice';
 import { authApi } from './services/authApi';
-import { karyawanApi } from './services/employeesApi';
+import { karyawanApi } from './services/karyawanApi';
 import { usersApi } from './services/usersApi';
 import { rolesApi } from './services/rolesApi';
 import { organizationApi } from './services/organizationApi';
