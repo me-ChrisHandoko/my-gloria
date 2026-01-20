@@ -7,8 +7,8 @@ import * as z from "zod";
 import { ArrowLeft, Save } from "lucide-react";
 import { toast } from "sonner";
 
-import { useCreateKaryawanMutation } from "@/lib/store/services/employeesApi";
-import type { CreateKaryawanRequest } from "@/lib/types/employees";
+import { useCreateKaryawanMutation } from "@/lib/store/services/karyawanApi";
+import type { CreateKaryawanRequest } from "@/lib/types/karyawan";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

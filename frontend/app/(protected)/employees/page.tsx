@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { ColumnDef } from "@tanstack/react-table";
 import { MoreHorizontal, Eye, Edit, Trash2, Plus } from "lucide-react";
 
-import { useGetKaryawansQuery } from "@/lib/store/services/employeesApi";
-import { DataKaryawanListItem } from "@/lib/types/employees";
+import { useGetKaryawansQuery } from "@/lib/store/services/karyawanApi";
+import { DataKaryawanListItem } from "@/lib/types/karyawan";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import {

@@ -1,4 +1,4 @@
-// lib/store/services/employeesApi.ts
+// lib/store/services/karyawanApi.ts
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { getCSRFToken } from '@/lib/utils/csrf';
 import {
@@ -8,7 +8,7 @@ import {
   UpdateKaryawanRequest,
   KaryawanFilter,
   PaginatedResponse,
-} from '@/lib/types/employees';
+} from '@/lib/types/karyawan';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 

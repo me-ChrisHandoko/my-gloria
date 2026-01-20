@@ -2,7 +2,7 @@
 'use client';
 
 import { useGetCurrentUserQuery } from '@/lib/store/services/authApi';
-import { useGetKaryawansQuery } from '@/lib/store/services/employeesApi';
+import { useGetKaryawansQuery } from '@/lib/store/services/karyawanApi';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
