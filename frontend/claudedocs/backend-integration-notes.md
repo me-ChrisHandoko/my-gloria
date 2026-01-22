@@ -33,7 +33,6 @@
     "id": "uuid",
     "email": "user@example.com",
     "username": "username",
-    "email_verified": true,
     "is_active": true,
     "data_karyawan": {
       "nip": "12345678",
@@ -55,7 +54,6 @@ Same structure as login response.
   "id": "uuid",
   "email": "user@example.com",
   "username": "username",
-  "email_verified": true,
   "is_active": true,
   "data_karyawan": {
     "nip": "12345678",
@@ -82,7 +80,7 @@ Same structure as login response.
 ### Current Behavior
 
 - ✅ Frontend code is ready to receive and display `data_karyawan`
-- ✅ Frontend type definitions updated to match backend snake_case (`email_verified`, `is_active`)
+- ✅ Frontend type definitions updated to match backend snake_case (`is_active`)
 - ⚠️ **Backend currently NOT sending `data_karyawan`** (verified from console logs)
 - 🔄 Sidebar currently shows email as fallback because `data_karyawan` is missing
 
@@ -91,7 +89,6 @@ Same structure as login response.
 {
   "id": "48948766-857c-4b7c-b473-e84f99e7e2d4",
   "email": "christian_handoko@gloriaschool.org",
-  "email_verified": false,
   "is_active": true
   // ❌ data_karyawan is MISSING
 }
@@ -102,7 +99,6 @@ Same structure as login response.
 {
   "id": "48948766-857c-4b7c-b473-e84f99e7e2d4",
   "email": "christian_handoko@gloriaschool.org",
-  "email_verified": false,
   "is_active": true,
   "data_karyawan": {
     "nip": "12345678",

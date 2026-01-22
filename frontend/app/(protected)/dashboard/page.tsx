@@ -132,14 +132,6 @@ export default function DashboardPage() {
                 </Badge>
               </div>
             </div>
-            <div className="space-y-2">
-              <div className="text-sm text-muted-foreground">Email Verified</div>
-              <div>
-                <Badge variant={user?.email_verified ? 'success' : 'warning'}>
-                  {user?.email_verified ? 'Verified' : 'Not Verified'}
-                </Badge>
-              </div>
-            </div>
           </div>
 
           {user?.data_karyawan && (

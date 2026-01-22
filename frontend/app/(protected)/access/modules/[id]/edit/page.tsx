@@ -137,7 +137,7 @@ export default function EditModulePage({ params }: PageProps) {
 
       await updateModule({ id, data: cleanedData }).unwrap();
       toast.success("Module berhasil diperbarui");
-      router.push(`/akses/modules/${id}`);
+      router.push(`/access/modules/${id}`);
     } catch (error: unknown) {
       const apiError = error as { data?: { message?: string; error?: string } };
       toast.error(apiError?.data?.error || apiError?.data?.message || "Gagal memperbarui module");

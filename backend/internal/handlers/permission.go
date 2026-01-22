@@ -237,3 +237,75 @@ func (h *PermissionHandler) GetPermissionGroups(c *gin.Context) {
 		"data": groups,
 	})
 }
+
+// GetPermissionScopes handles getting all available permission scopes
+// @Summary Get all permission scopes
+// @Tags permissions
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /permissions/scopes [get]
+func (h *PermissionHandler) GetPermissionScopes(c *gin.Context) {
+	// Get all valid scopes from enum
+	scopes := models.AllPermissionScopes()
+
+	// Build response with scope value and label
+	type ScopeOption struct {
+		Value string `json:"value"`
+		Label string `json:"label"`
+	}
+
+	options := make([]ScopeOption, len(scopes))
+	for i, scope := range scopes {
+		var label string
+		switch scope {
+		case models.PermissionScopeOwn:
+			label = "Own (Data sendiri)"
+		case models.PermissionScopeDepartment:
+			label = "Department"
+		case models.PermissionScopeSchool:
+			label = "School"
+		case models.PermissionScopeAll:
+			label = "All (Semua data)"
+		}
+
+		options[i] = ScopeOption{
+			Value: string(scope),
+			Label: label,
+		}
+	}
+
+	// HTTP: Format response
+	c.JSON(http.StatusOK, gin.H{
+		"data": options,
+	})
+}
+
+// GetPermissionActions handles getting all available permission actions
+// @Summary Get all permission actions
+// @Tags permissions
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /permissions/actions [get]
+func (h *PermissionHandler) GetPermissionActions(c *gin.Context) {
+	// Get all valid actions from enum
+	actions := models.AllPermissionActions()
+
+	// Build response with action value and label
+	type ActionOption struct {
+		Value string `json:"value"`
+		Label string `json:"label"`
+	}
+
+	options := make([]ActionOption, len(actions))
+	for i, action := range actions {
+		options[i] = ActionOption{
+			Value: string(action),
+			Label: string(action),
+		}
+	}
+
+	// HTTP: Format response
+	c.JSON(http.StatusOK, gin.H{
+		"data": options,
+	})
+}

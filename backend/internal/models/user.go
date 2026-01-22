@@ -11,14 +11,12 @@ type User struct {
 	ID string `json:"id" gorm:"type:varchar(36);primaryKey"`
 
 	// Authentication fields
-	Email                    string     `json:"email" gorm:"column:email;type:varchar(255);uniqueIndex;not null"`
-	Username                 *string    `json:"username,omitempty" gorm:"column:username;type:varchar(50);uniqueIndex"`
-	PasswordHash             string     `json:"-" gorm:"column:password_hash;type:varchar(255);not null"`
-	EmailVerified            bool       `json:"email_verified" gorm:"column:email_verified;default:false"`
-	EmailVerificationToken   *string    `json:"-" gorm:"column:email_verification_token;type:varchar(255)"`
-	PasswordResetToken       *string    `json:"-" gorm:"column:password_reset_token;type:varchar(255)"`
-	PasswordResetExpiresAt   *time.Time `json:"-" gorm:"column:password_reset_expires_at"`
-	LastPasswordChange       *time.Time `json:"last_password_change,omitempty" gorm:"column:last_password_change"`
+	Email                  string     `json:"email" gorm:"column:email;type:varchar(255);uniqueIndex;not null"`
+	Username               *string    `json:"username,omitempty" gorm:"column:username;type:varchar(50);uniqueIndex"`
+	PasswordHash           string     `json:"-" gorm:"column:password_hash;type:varchar(255);not null"`
+	PasswordResetToken     *string    `json:"-" gorm:"column:password_reset_token;type:varchar(255)"`
+	PasswordResetExpiresAt *time.Time `json:"-" gorm:"column:password_reset_expires_at"`
+	LastPasswordChange     *time.Time `json:"last_password_change,omitempty" gorm:"column:last_password_change"`
 
 	// Security fields
 	FailedLoginAttempts int        `json:"-" gorm:"column:failed_login_attempts;default:0"`
@@ -140,29 +138,27 @@ type UpdateUserRequest struct {
 
 // UserResponse represents the response body for user data
 type UserResponse struct {
-	ID            string                 `json:"id"`
-	Email         string                 `json:"email"`
-	Username      *string                `json:"username,omitempty"`
-	IsActive      bool                   `json:"is_active"`
-	EmailVerified bool                   `json:"email_verified"`
-	LastActive    *time.Time             `json:"last_active,omitempty"`
-	Preferences   *datatypes.JSON        `json:"preferences,omitempty"`
-	CreatedAt     time.Time              `json:"created_at"`
-	UpdatedAt     time.Time              `json:"updated_at"`
-	CreatedBy     *string                `json:"created_by,omitempty"`
-	Roles         []RoleListResponse     `json:"roles,omitempty"`
-	Positions     []UserPositionResponse `json:"positions,omitempty"`
+	ID          string                 `json:"id"`
+	Email       string                 `json:"email"`
+	Username    *string                `json:"username,omitempty"`
+	IsActive    bool                   `json:"is_active"`
+	LastActive  *time.Time             `json:"last_active,omitempty"`
+	Preferences *datatypes.JSON        `json:"preferences,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
+	UpdatedAt   time.Time              `json:"updated_at"`
+	CreatedBy   *string                `json:"created_by,omitempty"`
+	Roles       []RoleListResponse     `json:"roles,omitempty"`
+	Positions   []UserPositionResponse `json:"positions,omitempty"`
 }
 
 // UserListResponse represents the response for listing users
 type UserListResponse struct {
-	ID            string     `json:"id"`
-	Email         string     `json:"email"`
-	Username      *string    `json:"username,omitempty"`
-	Name          *string    `json:"name,omitempty"`
-	IsActive      bool       `json:"is_active"`
-	EmailVerified bool       `json:"email_verified"`
-	LastActive    *time.Time `json:"last_active,omitempty"`
+	ID         string     `json:"id"`
+	Email      string     `json:"email"`
+	Username   *string    `json:"username,omitempty"`
+	Name       *string    `json:"name,omitempty"`
+	IsActive   bool       `json:"is_active"`
+	LastActive *time.Time `json:"last_active,omitempty"`
 }
 
 // UserRoleResponse represents the response for user role assignment
@@ -225,16 +221,15 @@ type AssignPermissionToUserRequest struct {
 // ToResponse converts User to UserResponse
 func (u *User) ToResponse() *UserResponse {
 	resp := &UserResponse{
-		ID:            u.ID,
-		Email:         u.Email,
-		Username:      u.Username,
-		IsActive:      u.IsActive,
-		EmailVerified: u.EmailVerified,
-		LastActive:    u.LastActive,
-		Preferences:   u.Preferences,
-		CreatedAt:     u.CreatedAt,
-		UpdatedAt:     u.UpdatedAt,
-		CreatedBy:     u.CreatedBy,
+		ID:          u.ID,
+		Email:       u.Email,
+		Username:    u.Username,
+		IsActive:    u.IsActive,
+		LastActive:  u.LastActive,
+		Preferences: u.Preferences,
+		CreatedAt:   u.CreatedAt,
+		UpdatedAt:   u.UpdatedAt,
+		CreatedBy:   u.CreatedBy,
 	}
 
 	if len(u.UserRoles) > 0 {
@@ -261,12 +256,11 @@ func (u *User) ToResponse() *UserResponse {
 // ToListResponse converts User to UserListResponse
 func (u *User) ToListResponse() *UserListResponse {
 	return &UserListResponse{
-		ID:            u.ID,
-		Email:         u.Email,
-		Username:      u.Username,
-		IsActive:      u.IsActive,
-		EmailVerified: u.EmailVerified,
-		LastActive:    u.LastActive,
+		ID:         u.ID,
+		Email:      u.Email,
+		Username:   u.Username,
+		IsActive:   u.IsActive,
+		LastActive: u.LastActive,
 	}
 }
 
@@ -354,11 +348,10 @@ func (up *UserPermission) IsEffective() bool {
 // ToUserInfo converts User to UserInfo with optional DataKaryawan
 func (u *User) ToUserInfo() *UserInfo {
 	userInfo := &UserInfo{
-		ID:            u.ID,
-		Email:         u.Email,
-		Username:      u.Username,
-		EmailVerified: u.EmailVerified,
-		IsActive:      u.IsActive,
+		ID:       u.ID,
+		Email:    u.Email,
+		Username: u.Username,
+		IsActive: u.IsActive,
 	}
 
 	// Add DataKaryawan if present
@@ -471,12 +464,11 @@ type AuthResponse struct {
 
 // UserInfo represents basic user information in auth response
 type UserInfo struct {
-	ID            string                    `json:"id"`
-	Email         string                    `json:"email"`
-	Username      *string                   `json:"username,omitempty"`
-	EmailVerified bool                      `json:"email_verified"`
-	IsActive      bool                      `json:"is_active"`
-	DataKaryawan  *DataKaryawanInfoResponse `json:"data_karyawan,omitempty"`
+	ID           string                    `json:"id"`
+	Email        string                    `json:"email"`
+	Username     *string                   `json:"username,omitempty"`
+	IsActive     bool                      `json:"is_active"`
+	DataKaryawan *DataKaryawanInfoResponse `json:"data_karyawan,omitempty"`
 }
 
 // DataKaryawanInfoResponse represents simplified employee data for auth response

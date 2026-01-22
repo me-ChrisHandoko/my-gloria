@@ -7,7 +7,11 @@ import * as z from "zod";
 import { Save, Key } from "lucide-react";
 import { toast } from "sonner";
 
-import { useCreatePermissionMutation } from "@/lib/store/services/permissionsApi";
+import {
+  useCreatePermissionMutation,
+  useGetPermissionScopesQuery,
+  useGetPermissionActionsQuery,
+} from "@/lib/store/services/permissionsApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -63,13 +67,14 @@ type PermissionFormData = z.infer<typeof permissionSchema>;
 export default function CreatePermissionPage() {
   const router = useRouter();
   const [createPermission, { isLoading }] = useCreatePermissionMutation();
+  const { data: scopes, isLoading: scopesLoading } = useGetPermissionScopesQuery();
+  const { data: actions, isLoading: actionsLoading } = useGetPermissionActionsQuery();
 
   const {
     register,
     handleSubmit,
     setValue,
     trigger,
-    watch,
     formState: { errors },
   } = useForm<PermissionFormData>({
     resolver: zodResolver(permissionSchema),
@@ -88,8 +93,6 @@ export default function CreatePermissionPage() {
     },
   });
 
-  const watchAction = watch("action");
-
   const onSubmit = async (data: PermissionFormData) => {
     try {
       // Build payload - remove empty strings and convert to null
@@ -105,7 +108,7 @@ export default function CreatePermissionPage() {
         group_icon?: string;
         group_sort_order?: number;
       } = {
-        code: data.code.toUpperCase(), // Force uppercase
+        code: data.code, // Already uppercase from onChange handler
         name: data.name,
         resource: data.resource,
         action: data.action,
@@ -164,7 +167,7 @@ export default function CreatePermissionPage() {
               </Label>
               <Input
                 id="code"
-                placeholder="USERS_READ"
+                placeholder="USER_READ"
                 className={`w-full ${errors.code ? "border-destructive" : ""}`}
                 {...register("code")}
                 onChange={(e) => {
@@ -187,7 +190,7 @@ export default function CreatePermissionPage() {
               </Label>
               <Input
                 id="name"
-                placeholder="Read Users"
+                placeholder="Read User"
                 className={`w-full ${errors.name ? "border-destructive" : ""}`}
                 {...register("name")}
               />
@@ -225,12 +228,12 @@ export default function CreatePermissionPage() {
               </Label>
               <Input
                 id="resource"
-                placeholder="users"
+                placeholder="user"
                 className={`w-full ${errors.resource ? "border-destructive" : ""}`}
                 {...register("resource")}
               />
               <p className="text-sm text-muted-foreground">
-                Resource yang diatur (contoh: users, roles, departments)
+                Resource yang diatur (contoh: user, roles, departments)
               </p>
               {errors.resource && (
                 <p className="text-sm text-destructive">{errors.resource.message}</p>
@@ -246,17 +249,17 @@ export default function CreatePermissionPage() {
                   setValue("action", value);
                   trigger("action");
                 }}
+                disabled={actionsLoading}
               >
                 <SelectTrigger className={`w-full ${errors.action ? "border-destructive" : ""}`}>
-                  <SelectValue placeholder="Pilih action" />
+                  <SelectValue placeholder={actionsLoading ? "Loading..." : "Pilih action"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="create">Create</SelectItem>
-                  <SelectItem value="read">Read</SelectItem>
-                  <SelectItem value="update">Update</SelectItem>
-                  <SelectItem value="delete">Delete</SelectItem>
-                  <SelectItem value="list">List</SelectItem>
-                  <SelectItem value="manage">Manage (Full Access)</SelectItem>
+                  {actions?.map((action) => (
+                    <SelectItem key={action.value} value={action.value}>
+                      {action.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {errors.action && (
@@ -271,16 +274,18 @@ export default function CreatePermissionPage() {
                   setValue("scope", value === "none" ? "" : value);
                   trigger("scope");
                 }}
+                disabled={scopesLoading}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pilih scope (opsional)" />
+                  <SelectValue placeholder={scopesLoading ? "Loading..." : "Pilih scope (opsional)"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Tidak ada scope</SelectItem>
-                  <SelectItem value="own">Own (Data sendiri)</SelectItem>
-                  <SelectItem value="department">Department</SelectItem>
-                  <SelectItem value="school">School</SelectItem>
-                  <SelectItem value="global">Global (Semua data)</SelectItem>
+                  {scopes?.map((scope) => (
+                    <SelectItem key={scope.value} value={scope.value}>
+                      {scope.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-sm text-muted-foreground">

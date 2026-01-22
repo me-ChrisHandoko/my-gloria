@@ -38,8 +38,8 @@ type User struct {
     PasswordHash string   `json:"-" gorm:"type:varchar(255);not null"`
 
     // Email Verification
-    EmailVerified          bool      `gorm:"default:false"`
-    EmailVerificationToken *string   `gorm:"type:varchar(255)"`
+    
+    
 
     // Password Reset
     PasswordResetToken     *string    `gorm:"type:varchar(255)"`
@@ -135,7 +135,7 @@ type UserInfo struct {
     ID            string  `json:"id"`
     Email         string  `json:"email"`
     Username      *string `json:"username,omitempty"`
-    EmailVerified bool    `json:"email_verified"`
+    
     IsActive      bool    `json:"is_active"`
 }
 ```
@@ -449,8 +449,8 @@ CREATE TABLE public.users (
     password_hash VARCHAR(255) NOT NULL,
 
     -- Email Verification (untuk future)
-    email_verified BOOLEAN DEFAULT false,
-    email_verification_token VARCHAR(255),
+    ,
+    ,
 
     -- Password Reset (untuk future)
     password_reset_token VARCHAR(255),
@@ -482,13 +482,13 @@ CREATE TABLE public.users (
 
 **Fields Used in MVP**:
 - ✅ `id`, `email`, `username`, `password_hash` - Core authentication
-- ✅ `email_verified` - Set false untuk semua user baru
+- ✅ `
 - ✅ `failed_login_attempts`, `locked_until` - Account locking
 - ✅ `is_active` - Soft account disable
 - ✅ `created_at`, `updated_at` - Audit trail
 
 **Fields NOT Used in MVP** (reserved for future):
-- ⏳ `email_verification_token` - Email verification flow
+- ⏳ `
 - ⏳ `password_reset_token`, `password_reset_expires_at` - Password reset
 - ⏳ `last_password_change` - Password expiry policy
 - ⏳ `preferences` - User preferences JSON
@@ -937,7 +937,7 @@ func Register(c *gin.Context) {
         Email:        req.Email,
         Username:     req.Username,
         PasswordHash: hashedPassword,
-        EmailVerified: false,
+        ,
         IsActive:     true,
     }
 
@@ -984,7 +984,7 @@ func Register(c *gin.Context) {
             ID:            user.ID,
             Email:         user.Email,
             Username:      user.Username,
-            EmailVerified: user.EmailVerified,
+            ,
             IsActive:      user.IsActive,
         },
     })
@@ -1113,7 +1113,7 @@ func Login(c *gin.Context) {
             ID:            user.ID,
             Email:         user.Email,
             Username:      user.Username,
-            EmailVerified: user.EmailVerified,
+            ,
             IsActive:      user.IsActive,
         },
     })
@@ -1772,7 +1772,7 @@ curl -X GET http://localhost:8080/api/v1/auth/me \
 
 ```sql
 -- Verify user created
-SELECT id, email, username, email_verified, is_active,
+SELECT id, email, username, , is_active,
        failed_login_attempts, locked_until, created_at
 FROM public.users
 WHERE email = 'john@example.com';
@@ -1840,7 +1840,7 @@ WHERE revoked_at IS NULL AND expires_at > NOW();
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "user@example.com",
     "username": "johndoe",
-    "email_verified": false,
+    ",
     "is_active": true
   }
 }
@@ -1896,7 +1896,7 @@ WHERE revoked_at IS NULL AND expires_at > NOW();
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "user@example.com",
     "username": "johndoe",
-    "email_verified": false,
+    ",
     "is_active": true
   }
 }
@@ -1990,7 +1990,7 @@ Authorization: Bearer {access_token}
   "email": "user@example.com",
   "username": "johndoe",
   "is_active": true,
-  "email_verified": false,
+  ",
   "created_at": "2024-01-08T10:00:00Z",
   "updated_at": "2024-01-08T10:00:00Z",
   "roles": [
@@ -2205,7 +2205,7 @@ const (
 // Never exposed in API
 - PasswordHash        json:"-"
 - PasswordResetToken  json:"-"
-- EmailVerificationToken json:"-"
+- 
 
 // Never logged
 - Password (raw)

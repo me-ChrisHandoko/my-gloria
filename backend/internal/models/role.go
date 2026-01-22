@@ -115,10 +115,23 @@ type RoleListResponse struct {
 	IsActive       bool   `json:"is_active"`
 }
 
+// AssignedPermissionResponse represents a permission assigned to a role with assignment_id
+type AssignedPermissionResponse struct {
+	AssignmentID       string           `json:"assignment_id"`        // role_permission.id (for DELETE operation)
+	ID                 string           `json:"id"`                   // permission.id
+	Code               string           `json:"code"`
+	Name               string           `json:"name"`
+	Resource           string           `json:"resource"`
+	Action             PermissionAction `json:"action"`
+	Scope              *PermissionScope `json:"scope,omitempty"`
+	IsSystemPermission bool             `json:"is_system_permission"`
+	IsActive           bool             `json:"is_active"`
+}
+
 // RoleWithPermissionsResponse represents a role with its permissions
 type RoleWithPermissionsResponse struct {
 	RoleResponse
-	Permissions []PermissionListResponse `json:"permissions,omitempty"`
+	Permissions []AssignedPermissionResponse `json:"permissions,omitempty"`
 }
 
 // AssignPermissionToRoleRequest represents the request for assigning permission to role

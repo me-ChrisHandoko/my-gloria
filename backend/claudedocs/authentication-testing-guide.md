@@ -79,7 +79,7 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "john@example.com",
     "username": "johndoe",
-    "email_verified": false,
+    ",
     "is_active": true
   }
 }
@@ -106,7 +106,7 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "john@example.com",
     "username": "johndoe",
-    "email_verified": false,
+    ",
     "is_active": true
   }
 }
@@ -127,7 +127,7 @@ curl -X GET http://localhost:8080/api/v1/auth/me \
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "email": "john@example.com",
   "username": "johndoe",
-  "email_verified": false,
+  ",
   "is_active": true,
   "roles": [],
   "positions": []
@@ -535,7 +535,7 @@ curl -X POST http://localhost:8080/api/v1/auth/refresh \
 
 ```sql
 -- View all users
-SELECT id, email, username, email_verified, is_active,
+SELECT id, email, username, , is_active,
        failed_login_attempts, locked_until,
        created_at, last_active
 FROM gloria_ops.users

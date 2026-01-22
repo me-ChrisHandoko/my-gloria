@@ -68,7 +68,7 @@ c.JSON(http.StatusCreated, models.AuthResponse{
         ID:            user.ID,
         Email:         user.Email,
         Username:      user.Username,
-        EmailVerified: user.EmailVerified,
+        ,
         IsActive:      user.IsActive,
     },
 })
@@ -108,7 +108,7 @@ type AuthResponse struct {
     "id": "uuid-here",
     "email": "user@example.com",
     "username": "johndoe",
-    "email_verified": true,
+    ",
     "is_active": true
   }
 }

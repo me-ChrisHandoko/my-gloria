@@ -8,7 +8,6 @@ export interface User {
   id: string;
   email: string;
   username?: string | null;
-  email_verified: boolean;
   is_active: boolean;
   last_active?: string | null;
   preferences?: Record<string, any> | null;
@@ -27,7 +26,6 @@ export interface UserListResponse {
   username?: string | null;
   name?: string | null;
   is_active: boolean;
-  email_verified: boolean;
   last_active?: string | null;
 }
 
@@ -137,7 +135,6 @@ export interface UserFilter {
   search?: string;
   role_id?: string;
   is_active?: boolean;
-  email_verified?: boolean;
   sort_by?: 'email' | 'created_at' | 'last_active' | 'username';
   sort_order?: 'asc' | 'desc';
 }

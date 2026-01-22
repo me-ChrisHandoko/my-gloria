@@ -1,6 +1,13 @@
 // lib/store/services/karyawanApi.ts
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { getCSRFToken } from '@/lib/utils/csrf';
+/**
+ * Karyawan (Employee) API Service
+ *
+ * RTK Query service for employee data management.
+ * Uses shared baseQueryWithReauth for consistent authentication handling.
+ */
+
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { baseQueryWithReauth } from '../baseApi';
 import {
   DataKaryawan,
   DataKaryawanListItem,
@@ -10,23 +17,9 @@ import {
   PaginatedResponse,
 } from '@/lib/types/karyawan';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
-
-// Create API with RTK Query
 export const karyawanApi = createApi({
   reducerPath: 'karyawanApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: API_BASE_URL,
-    credentials: 'include', // Send httpOnly cookies automatically
-    prepareHeaders: (headers) => {
-      // Inject CSRF token for state-changing requests
-      const csrfToken = getCSRFToken();
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
-      }
-      return headers;
-    },
-  }),
+  baseQuery: baseQueryWithReauth,
   tagTypes: ['Karyawan', 'KaryawanDetail'],
   endpoints: (builder) => ({
     // Get all karyawan with filters
@@ -107,7 +100,6 @@ export const karyawanApi = createApi({
   }),
 });
 
-// Export auto-generated hooks
 export const {
   useGetKaryawansQuery,
   useGetKaryawanByNipQuery,

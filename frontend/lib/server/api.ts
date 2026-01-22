@@ -179,6 +179,43 @@ export async function getDepartmentById(id: string) {
 }
 
 // ============================================
+// USERS API
+// ============================================
+
+/**
+ * Get users list with pagination and filters
+ * Server-side version for SSR initial data
+ */
+export async function getUsers(params?: {
+  page?: number;
+  page_size?: number;
+  search?: string;
+  role_id?: string;
+  is_active?: boolean;
+  sort_by?: 'email' | 'created_at' | 'last_active' | 'username';
+  sort_order?: 'asc' | 'desc';
+}) {
+  const queryParams = new URLSearchParams();
+  if (params?.page) queryParams.append('page', params.page.toString());
+  if (params?.page_size) queryParams.append('page_size', params.page_size.toString());
+  if (params?.search) queryParams.append('search', params.search);
+  if (params?.role_id) queryParams.append('role_id', params.role_id);
+  if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active.toString());
+  if (params?.sort_by) queryParams.append('sort_by', params.sort_by);
+  if (params?.sort_order) queryParams.append('sort_order', params.sort_order);
+
+  const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
+  return serverFetch<any>(`/users${query}`);
+}
+
+/**
+ * Get user by ID
+ */
+export async function getUserById(id: string) {
+  return serverFetch<any>(`/users/${id}`);
+}
+
+// ============================================
 // POSITIONS API
 // ============================================
 

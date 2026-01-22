@@ -206,8 +206,8 @@ func (s *RoleService) GetRoleWithPermissions(id string) (*models.RoleWithPermiss
 		return nil, fmt.Errorf("gagal mengambil permissions role: %w", err)
 	}
 
-	// Convert to permission list response
-	permissions := make([]models.PermissionListResponse, 0)
+	// Convert to assigned permission response with assignment_id
+	permissions := make([]models.AssignedPermissionResponse, 0)
 	now := time.Now()
 	for _, rp := range rolePermissions {
 		// Check if permission is currently effective
@@ -219,10 +219,16 @@ func (s *RoleService) GetRoleWithPermissions(id string) (*models.RoleWithPermiss
 		}
 
 		if rp.Permission != nil {
-			permissions = append(permissions, models.PermissionListResponse{
-				ID:   rp.Permission.ID,
-				Code: rp.Permission.Code,
-				Name: rp.Permission.Name,
+			permissions = append(permissions, models.AssignedPermissionResponse{
+				AssignmentID:       rp.ID,                             // role_permission.id for DELETE
+				ID:                 rp.Permission.ID,                  // permission.id
+				Code:               rp.Permission.Code,
+				Name:               rp.Permission.Name,
+				Resource:           rp.Permission.Resource,
+				Action:             rp.Permission.Action,
+				Scope:              rp.Permission.Scope,
+				IsSystemPermission: rp.Permission.IsSystemPermission,
+				IsActive:           rp.Permission.IsActive,
 			})
 		}
 	}

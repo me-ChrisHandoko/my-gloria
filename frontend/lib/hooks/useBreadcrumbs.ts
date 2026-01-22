@@ -16,8 +16,8 @@ const routeConfig: Record<string, { label: string; parent?: string }> = {
     "/employees/create": { label: "Tambah Karyawan", parent: "/employees" },
 
     // Pengguna
-    "/users": { label: "Pengguna", parent: "/dashboard" },
-    "/users/create": { label: "Tambah Pengguna", parent: "/users" },
+    "/user/users": { label: "Pengguna", parent: "/dashboard" },
+    "/user/users/create": { label: "Tambah Pengguna", parent: "/user/users" },
 
     // Organisasi
     "/organization/schools": { label: "Sekolah", parent: "/dashboard" },

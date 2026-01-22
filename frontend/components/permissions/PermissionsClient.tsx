@@ -129,7 +129,7 @@ export default function PermissionsClient({ initialData }: PermissionsClientProp
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 min-w-0">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
@@ -289,7 +289,7 @@ export default function PermissionsClient({ initialData }: PermissionsClientProp
                         ) : (
                             <>
                                 {/* Permissions Table Section */}
-                                <div className="px-4 pt-2 pb-2">
+                                <div className="px-4 pt-2 pb-2 min-w-0">
                                     <PermissionsDataTable permissions={displayData.data} sortBy={filters.sort_by} sortOrder={filters.sort_order} onSortChange={handleSortChange} />
                                 </div>
 

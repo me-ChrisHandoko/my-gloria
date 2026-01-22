@@ -65,12 +65,11 @@ func Register(c *gin.Context) {
 
 	// Create user
 	user := models.User{
-		ID:            uuid.New().String(),
-		Email:         req.Email,
-		Username:      &username,
-		PasswordHash:  hashedPassword,
-		EmailVerified: false,
-		IsActive:      true,
+		ID:           uuid.New().String(),
+		Email:        req.Email,
+		Username:     &username,
+		PasswordHash: hashedPassword,
+		IsActive:     true,
 	}
 
 	if err := db.Create(&user).Error; err != nil {

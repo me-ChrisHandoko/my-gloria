@@ -1,10 +1,13 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type {
-  BaseQueryFn,
-  FetchArgs,
-  FetchBaseQueryError,
-} from '@reduxjs/toolkit/query';
-import { getCSRFToken } from '@/lib/utils/csrf';
+// lib/store/services/rolesApi.ts
+/**
+ * Roles API Service
+ *
+ * RTK Query service for role management operations.
+ * Uses shared baseQueryWithReauth for consistent authentication handling.
+ */
+
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { baseQueryWithReauth } from '../baseApi';
 import {
   Role,
   RoleListResponse,
@@ -16,68 +19,6 @@ import {
   AssignPermissionToRoleRequest,
   RolePermission,
 } from '@/lib/types/role';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080/api/v1';
-
-// Base query without auto-refresh
-const baseQuery = fetchBaseQuery({
-  baseUrl: API_BASE_URL,
-  credentials: 'include', // Send httpOnly cookies automatically
-  prepareHeaders: (headers) => {
-    // Inject CSRF token for state-changing requests
-    const csrfToken = getCSRFToken();
-    if (csrfToken) {
-      headers.set('X-CSRF-Token', csrfToken);
-    }
-    return headers;
-  },
-});
-
-/**
- * RTK Query wrapper with automatic token refresh on 401 errors
- */
-const baseQueryWithReauth: BaseQueryFn<
-  string | FetchArgs,
-  unknown,
-  FetchBaseQueryError
-> = async (args, api, extraOptions) => {
-  // 1. Try the initial request
-  let result = await baseQuery(args, api, extraOptions);
-
-  // 2. If we get a 401, attempt to refresh the token
-  if (result.error && result.error.status === 401) {
-    console.log('[RTK Query - Roles] 401 detected, attempting token refresh');
-
-    try {
-      // 3. Call refresh endpoint
-      const refreshResult = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      // 4. If refresh succeeded, retry the original request
-      if (refreshResult.ok) {
-        console.log('[RTK Query - Roles] Token refreshed successfully, retrying original request');
-        result = await baseQuery(args, api, extraOptions);
-      } else {
-        console.error('[RTK Query - Roles] Token refresh failed, redirecting to login');
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
-      }
-    } catch (error) {
-      console.error('[RTK Query - Roles] Token refresh error:', error);
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
-    }
-  }
-
-  return result;
-};
 
 export const rolesApi = createApi({
   reducerPath: 'rolesApi',

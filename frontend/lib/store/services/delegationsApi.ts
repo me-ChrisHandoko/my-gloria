@@ -1,5 +1,13 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { getCSRFToken } from '@/lib/utils/csrf';
+// lib/store/services/delegationsApi.ts
+/**
+ * Delegations API Service
+ *
+ * RTK Query service for delegation management operations.
+ * Uses shared baseQueryWithReauth for consistent authentication handling.
+ */
+
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { baseQueryWithReauth } from '../baseApi';
 import {
   Delegation,
   DelegationListResponse,
@@ -10,22 +18,9 @@ import {
   PaginatedDelegationsResponse,
 } from '@/lib/types/delegation';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
-
 export const delegationsApi = createApi({
   reducerPath: 'delegationsApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: API_BASE_URL,
-    credentials: 'include', // Send httpOnly cookies automatically
-    prepareHeaders: (headers) => {
-      // Inject CSRF token for state-changing requests
-      const csrfToken = getCSRFToken();
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
-      }
-      return headers;
-    },
-  }),
+  baseQuery: baseQueryWithReauth,
   tagTypes: ['Delegation', 'DelegationDetail', 'UserDelegations'],
   endpoints: (builder) => ({
     // Delegation CRUD Operations

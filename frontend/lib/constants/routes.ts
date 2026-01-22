@@ -19,8 +19,8 @@ export const ROUTE_MIGRATION = {
   // Dynamic routes handled by pattern matching
 
   // User Management
-  '/users': '/users',
-  '/users/create': '/users/create',
+  '/users': '/user/users',
+  '/users/create': '/user/users/create',
 
   // Organization - Schools
   '/organization/schools': '/organization/schools',
@@ -78,9 +78,9 @@ export const ROUTES = {
 
   // ========== Users ==========
   USERS: {
-    LIST: '/users',
-    CREATE: '/users/create',
-    DETAIL: (id: string) => `/users/${id}`,
+    LIST: '/user/users',
+    CREATE: '/user/users/create',
+    DETAIL: (id: string) => `/user/users/${id}`,
   },
 
   // ========== Organization ==========
@@ -182,7 +182,7 @@ export function getNewRoute(oldPath: string): string | null {
   const patterns = [
     { from: /^\/employees\/([^/]+)\/edit$/, to: (nip: string) => `/employees/${nip}/edit` },
     { from: /^\/employees\/([^/]+)$/, to: (nip: string) => `/employees/${nip}` },
-    { from: /^\/users\/([^/]+)$/, to: (id: string) => `/users/${id}` },
+    { from: /^\/users\/([^/]+)$/, to: (id: string) => `/user/users/${id}` },
     { from: /^\/organization\/sekolah\/([^/]+)\/edit$/, to: (id: string) => `/organization/schools/${id}/edit` },
     { from: /^\/organization\/sekolah\/([^/]+)$/, to: (id: string) => `/organization/schools/${id}` },
     { from: /^\/organization\/departemen\/([^/]+)\/edit$/, to: (id: string) => `/organization/departments/${id}/edit` },

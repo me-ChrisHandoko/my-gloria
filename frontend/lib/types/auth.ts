@@ -19,8 +19,7 @@ export interface User {
   id: string;
   email: string;
   username?: string;
-  email_verified: boolean;  // Backend uses snake_case
-  is_active: boolean;        // Backend uses snake_case
+  is_active: boolean;  // Backend uses snake_case
   data_karyawan?: DataKaryawanInfo;
   roles?: Array<{ id: string; name: string }>;
   positions?: Array<{

@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import {
   useGetPermissionByIdQuery,
   useUpdatePermissionMutation,
+  useGetPermissionScopesQuery,
+  useGetPermissionActionsQuery,
 } from "@/lib/store/services/permissionsApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,6 +81,8 @@ export default function EditPermissionPage({ params }: PageProps) {
 
   const { data: permission, isLoading: isLoadingData, error } = useGetPermissionByIdQuery(id);
   const [updatePermission, { isLoading: isUpdating }] = useUpdatePermissionMutation();
+  const { data: scopes, isLoading: scopesLoading } = useGetPermissionScopesQuery();
+  const { data: actions, isLoading: actionsLoading } = useGetPermissionActionsQuery();
 
   const {
     register,
@@ -176,7 +180,7 @@ export default function EditPermissionPage({ params }: PageProps) {
 
       await updatePermission({ id, data: cleanedData }).unwrap();
       toast.success("Data permission berhasil diperbarui");
-      router.push(`/akses/permissions/${id}`);
+      router.push(`/access/permissions/${id}`);
     } catch (error: unknown) {
       const apiError = error as { data?: { message?: string; error?: string } };
       toast.error(apiError?.data?.error || apiError?.data?.message || "Gagal memperbarui data permission");
@@ -235,7 +239,7 @@ export default function EditPermissionPage({ params }: PageProps) {
               </Label>
               <Input
                 id="code"
-                placeholder="USERS_READ"
+                placeholder="USER_READ"
                 className={`w-full ${errors.code ? "border-destructive" : ""}`}
                 {...register("code")}
                 disabled={isSystemPermission}
@@ -257,7 +261,7 @@ export default function EditPermissionPage({ params }: PageProps) {
               </Label>
               <Input
                 id="name"
-                placeholder="Read Users"
+                placeholder="Read User"
                 className={`w-full ${errors.name ? "border-destructive" : ""}`}
                 {...register("name")}
               />
@@ -295,7 +299,7 @@ export default function EditPermissionPage({ params }: PageProps) {
               </Label>
               <Input
                 id="resource"
-                placeholder="users"
+                placeholder="user"
                 className={`w-full ${errors.resource ? "border-destructive" : ""}`}
                 {...register("resource")}
                 disabled={isSystemPermission}
@@ -320,18 +324,17 @@ export default function EditPermissionPage({ params }: PageProps) {
                   setValue("action", value);
                   trigger("action");
                 }}
-                disabled={isSystemPermission}
+                disabled={isSystemPermission || actionsLoading}
               >
                 <SelectTrigger className={`w-full ${errors.action ? "border-destructive" : ""}`}>
-                  <SelectValue placeholder="Pilih action" />
+                  <SelectValue placeholder={actionsLoading ? "Loading..." : "Pilih action"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="create">Create</SelectItem>
-                  <SelectItem value="read">Read</SelectItem>
-                  <SelectItem value="update">Update</SelectItem>
-                  <SelectItem value="delete">Delete</SelectItem>
-                  <SelectItem value="list">List</SelectItem>
-                  <SelectItem value="manage">Manage (Full Access)</SelectItem>
+                  {actions?.map((action) => (
+                    <SelectItem key={action.value} value={action.value}>
+                      {action.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {isSystemPermission && (
@@ -352,16 +355,18 @@ export default function EditPermissionPage({ params }: PageProps) {
                   setValue("scope", value === "none" ? "" : value);
                   trigger("scope");
                 }}
+                disabled={scopesLoading}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pilih scope (opsional)" />
+                  <SelectValue placeholder={scopesLoading ? "Loading..." : "Pilih scope (opsional)"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Tidak ada scope</SelectItem>
-                  <SelectItem value="own">Own (Data sendiri)</SelectItem>
-                  <SelectItem value="department">Department</SelectItem>
-                  <SelectItem value="school">School</SelectItem>
-                  <SelectItem value="global">Global (Semua data)</SelectItem>
+                  {scopes?.map((scope) => (
+                    <SelectItem key={scope.value} value={scope.value}>
+                      {scope.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -450,7 +455,7 @@ export default function EditPermissionPage({ params }: PageProps) {
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Batal
           </Button>
-          <Button type="submit" disabled={isUpdating || isSystemPermission}>
+          <Button type="submit" disabled={isUpdating}>
             {isUpdating ? (
               <>
                 <LoadingSpinner />

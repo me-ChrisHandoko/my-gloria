@@ -57,20 +57,20 @@ export function GloriaSidebar({ ...props }: React.ComponentProps<typeof Sidebar>
         },
         {
             title: "Pengguna",
-            url: "/users",
+            url: "/user/users",
             icon: UserCog,
-            isActive: isMenuActive("/users", [
-                { url: "/users" },
-                { url: "/users/create" },
+            isActive: isMenuActive("/user/users", [
+                { url: "/user/users" },
+                { url: "/user/users/create" },
             ]),
             items: [
                 {
                     title: "Daftar Pengguna",
-                    url: "/users",
+                    url: "/user/users",
                 },
                 {
                     title: "Tambah Pengguna",
-                    url: "/users/create",
+                    url: "/user/users/create",
                 },
             ],
         },

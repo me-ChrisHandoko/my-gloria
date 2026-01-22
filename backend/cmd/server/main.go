@@ -79,6 +79,7 @@ func setupRouter() *gin.Engine {
 	roleService := services.NewRoleService(db)
 	permissionService := services.NewPermissionService(db)
 	moduleService := services.NewModuleService(db)
+	userService := services.NewUserService(db)
 
 	// Initialize handlers
 	schoolHandler := handlers.NewSchoolHandler(schoolService)
@@ -89,6 +90,7 @@ func setupRouter() *gin.Engine {
 	roleHandler := handlers.NewRoleHandler(roleService)
 	permissionHandler := handlers.NewPermissionHandler(permissionService)
 	moduleHandler := handlers.NewModuleHandler(moduleService)
+	userHandler := handlers.NewUserHandler(userService)
 
 	// Configure CORS
 	// In development: Allow localhost origins for testing
@@ -162,10 +164,20 @@ func setupRouter() *gin.Engine {
 			// User routes
 			users := protected.Group("/users")
 			{
-				users.GET("", handlers.GetUsers)
-				users.GET("/:id", handlers.GetUser)
-				users.PUT("/:id", handlers.UpdateUser)
-				users.DELETE("/:id", handlers.DeleteUser)
+				users.GET("", userHandler.GetUsers)
+				users.GET("/:id", userHandler.GetUser)
+				users.PUT("/:id", userHandler.UpdateUser)
+				users.DELETE("/:id", userHandler.DeleteUser)
+
+				// User role assignment routes
+				users.GET("/:id/roles", userHandler.GetUserRoles)
+				users.POST("/:id/roles", userHandler.AssignRoleToUser)
+				users.DELETE("/:id/roles/:role_id", userHandler.RevokeRoleFromUser)
+
+				// User position assignment routes
+				users.GET("/:id/positions", userHandler.GetUserPositions)
+				users.POST("/:id/positions", userHandler.AssignPositionToUser)
+				users.DELETE("/:id/positions/:position_id", userHandler.RevokePositionFromUser)
 			}
 
 			// School routes
@@ -241,6 +253,8 @@ func setupRouter() *gin.Engine {
 				permissions.POST("", permissionHandler.CreatePermission)
 				permissions.GET("", permissionHandler.GetPermissions)
 				permissions.GET("/groups", permissionHandler.GetPermissionGroups)
+				permissions.GET("/scopes", permissionHandler.GetPermissionScopes)
+				permissions.GET("/actions", permissionHandler.GetPermissionActions)
 				permissions.GET("/:id", permissionHandler.GetPermissionByID)
 				permissions.PUT("/:id", permissionHandler.UpdatePermission)
 				permissions.DELETE("/:id", permissionHandler.DeletePermission)

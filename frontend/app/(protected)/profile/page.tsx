@@ -86,17 +86,6 @@ export default function ProfilePage() {
             <Separator />
             <div className="space-y-2">
               <div className="text-sm text-muted-foreground font-medium">
-                Email Verified:
-              </div>
-              <div>
-                <Badge variant={user.email_verified ? 'success' : 'warning'}>
-                  {user.email_verified ? 'Terverifikasi' : 'Belum Terverifikasi'}
-                </Badge>
-              </div>
-            </div>
-            <Separator />
-            <div className="space-y-2">
-              <div className="text-sm text-muted-foreground font-medium">
                 User ID:
               </div>
               <div className="font-mono text-sm">{user.id}</div>

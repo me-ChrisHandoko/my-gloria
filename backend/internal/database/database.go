@@ -42,46 +42,56 @@ func InitDB(cfg *configs.Config) error {
 func AutoMigrate() error {
 	log.Println("Running database migrations...")
 
-	err := DB.AutoMigrate(
+	// Migrate models individually to isolate issues
+	models := []struct {
+		name  string
+		model interface{}
+	}{
 		// Core entities
-		&models.User{},
-		&models.UserRole{},
-		&models.UserPosition{},
-		&models.UserPermission{},
-		&models.RefreshToken{},
-		&models.LoginAttempt{},
+		{"User", &models.User{}},
+		{"RefreshToken", &models.RefreshToken{}},
+		{"LoginAttempt", &models.LoginAttempt{}},
 
-		// Organization entities
-		&models.School{},
-		&models.Department{},
-		&models.Position{},
-		&models.DataKaryawan{},
+		// Organization entities (no foreign keys)
+		{"School", &models.School{}},
+		{"Department", &models.Department{}},
+		{"Position", &models.Position{}},
+		{"DataKaryawan", &models.DataKaryawan{}},
 
-		// Permission system
-		&models.Module{},
-		&models.ModulePermission{},
-		&models.Permission{},
-		&models.Role{},
-		&models.RolePermission{},
-		&models.RoleHierarchy{},
-		&models.RoleModuleAccess{},
-		&models.UserModuleAccess{},
+		// Permission system (base models first)
+		{"Module", &models.Module{}},
+		{"Permission", &models.Permission{}},
+		{"Role", &models.Role{}},
+
+		// Junction tables and relationships
+		{"ModulePermission", &models.ModulePermission{}},
+		{"RolePermission", &models.RolePermission{}},
+		{"RoleHierarchy", &models.RoleHierarchy{}},
+		{"RoleModuleAccess", &models.RoleModuleAccess{}},
+		{"UserRole", &models.UserRole{}},
+		{"UserPosition", &models.UserPosition{}},
+		{"UserPermission", &models.UserPermission{}},
+		{"UserModuleAccess", &models.UserModuleAccess{}},
 
 		// System entities
-		&models.ApiKey{},
-		&models.AuditLog{},
-		&models.Delegation{},
-		&models.FeatureFlag{},
-		&models.FeatureFlagEvaluation{},
-		&models.SystemConfiguration{},
-		&models.Workflow{},
-		&models.BulkOperationProgress{},
-		&models.WorkflowRule{},
-		&models.WorkflowRuleStep{},
-	)
+		{"ApiKey", &models.ApiKey{}},
+		{"AuditLog", &models.AuditLog{}},
+		{"Delegation", &models.Delegation{}},
+		{"FeatureFlag", &models.FeatureFlag{}},
+		{"FeatureFlagEvaluation", &models.FeatureFlagEvaluation{}},
+		{"SystemConfiguration", &models.SystemConfiguration{}},
+		{"Workflow", &models.Workflow{}},
+		{"BulkOperationProgress", &models.BulkOperationProgress{}},
+		{"WorkflowRule", &models.WorkflowRule{}},
+		{"WorkflowRuleStep", &models.WorkflowRuleStep{}},
+	}
 
-	if err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
+	for _, m := range models {
+		log.Printf("Migrating %s...", m.name)
+		if err := DB.AutoMigrate(m.model); err != nil {
+			return fmt.Errorf("failed to migrate %s: %w", m.name, err)
+		}
+		log.Printf("✓ %s migrated successfully", m.name)
 	}
 
 	log.Println("Database migrations completed successfully")

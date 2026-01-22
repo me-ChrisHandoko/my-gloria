@@ -1,5 +1,13 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { getCSRFToken } from '@/lib/utils/csrf';
+// lib/store/services/usersApi.ts
+/**
+ * Users API Service
+ *
+ * RTK Query service for user management operations.
+ * Uses shared baseQueryWithReauth for consistent authentication handling.
+ */
+
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { baseQueryWithReauth } from '../baseApi';
 import {
   User,
   UserListResponse,
@@ -13,22 +21,9 @@ import {
   UserPositionResponse,
 } from '@/lib/types/user';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080/api/v1';
-
 export const usersApi = createApi({
   reducerPath: 'usersApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: API_BASE_URL,
-    credentials: 'include', // Send httpOnly cookies automatically
-    prepareHeaders: (headers) => {
-      // Inject CSRF token for state-changing requests
-      const csrfToken = getCSRFToken();
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
-      }
-      return headers;
-    },
-  }),
+  baseQuery: baseQueryWithReauth,
   tagTypes: ['User', 'UserDetail', 'UserRoles', 'UserPositions'],
   endpoints: (builder) => ({
     // Get all users with filters
@@ -43,14 +38,35 @@ export const usersApi = createApi({
         if (filters.search) params.append('search', filters.search);
         if (filters.role_id) params.append('role_id', filters.role_id);
         if (filters.is_active !== undefined) params.append('is_active', filters.is_active.toString());
-        if (filters.email_verified !== undefined) params.append('email_verified', filters.email_verified.toString());
         if (filters.sort_by) params.append('sort_by', filters.sort_by);
         if (filters.sort_order) params.append('sort_order', filters.sort_order);
 
         return `/users${params.toString() ? `?${params.toString()}` : ''}`;
       },
+      transformResponse: (response: any) => {
+        // Ensure response has correct structure
+        if (!response || typeof response !== 'object') {
+          console.error('[usersApi] Invalid response format:', response);
+          return {
+            data: [],
+            total: 0,
+            page: 1,
+            page_size: 20,
+            total_pages: 0,
+          };
+        }
+
+        // Return properly formatted response
+        return {
+          data: Array.isArray(response.data) ? response.data : [],
+          total: response.total || 0,
+          page: response.page || 1,
+          page_size: response.page_size || 20,
+          total_pages: response.total_pages || 0,
+        };
+      },
       providesTags: (result) =>
-        result
+        result && result.data
           ? [
               ...result.data.map(({ id }) => ({ type: 'User' as const, id })),
               { type: 'User', id: 'LIST' },

@@ -1,22 +1,28 @@
 // Permission Types
 
+// Enum option for dynamic selects
+export interface EnumOption {
+  value: string;
+  label: string;
+}
+
 export type PermissionAction =
-  | 'create'
-  | 'read'
-  | 'update'
-  | 'delete'
-  | 'list'
-  | 'assign'
-  | 'revoke'
-  | 'approve'
-  | 'execute';
+  | 'CREATE'
+  | 'READ'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'APPROVE'
+  | 'EXPORT'
+  | 'IMPORT'
+  | 'PRINT'
+  | 'ASSIGN'
+  | 'CLOSE';
 
 export type PermissionScope =
-  | 'own'
-  | 'department'
-  | 'school'
-  | 'organization'
-  | 'all';
+  | 'OWN'
+  | 'DEPARTMENT'
+  | 'SCHOOL'
+  | 'ALL';
 
 export type ModuleCategory =
   | 'core'
@@ -58,6 +64,11 @@ export interface PermissionListResponse {
   scope?: PermissionScope | null;
   is_system_permission: boolean;
   is_active: boolean;
+}
+
+// Assigned permission response (includes assignment_id for revoke operations)
+export interface AssignedPermissionResponse extends PermissionListResponse {
+  assignment_id: string; // role_permission.id (for DELETE operation)
 }
 
 // Grouped permissions for UI

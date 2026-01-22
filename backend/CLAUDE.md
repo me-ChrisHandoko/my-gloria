@@ -168,7 +168,6 @@ The project uses Gin for HTTP routing. Typical patterns:
 -   **Security Features**:
     -   Failed login attempt tracking (`User.FailedLoginAttempts`)
     -   Account locking (`User.LockedUntil`)
-    -   Email verification (`User.EmailVerified`)
     -   Password reset tokens (`User.PasswordResetToken`)
     -   Login attempt auditing (`LoginAttempt` model)
 

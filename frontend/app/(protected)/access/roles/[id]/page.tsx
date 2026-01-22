@@ -5,12 +5,14 @@
  * - Client islands for interactive buttons
  */
 
-import { Shield, Calendar, Info, User, FileText, Award } from "lucide-react";
+import { Shield, Calendar, Info, User, FileText, Award, Key, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
+import Link from "next/link";
 
 import { getRoleById } from "@/lib/server/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import RoleDetailActions from "@/components/roles/RoleDetailActions";
 
@@ -87,6 +89,37 @@ export default async function RoleDetailPage({ params }: PageProps) {
                 <Badge variant="default">Role Custom</Badge>
               )}
             </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Permissions Management - Navigation Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Key className="h-5 w-5" />
+            Kelola Permissions
+          </CardTitle>
+          <CardDescription>
+            Assign dan kelola permissions untuk role ini
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between rounded-md border p-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">
+                Klik tombol di samping untuk mengelola permissions
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Anda dapat assign, melihat, dan mencabut permissions dari role ini
+              </p>
+            </div>
+            <Button asChild>
+              <Link href={`/access/roles/${id}/permissions`}>
+                Kelola Permissions
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
         </CardContent>
       </Card>

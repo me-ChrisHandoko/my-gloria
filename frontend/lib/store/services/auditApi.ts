@@ -1,5 +1,13 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { getCSRFToken } from '@/lib/utils/csrf';
+// lib/store/services/auditApi.ts
+/**
+ * Audit API Service
+ *
+ * RTK Query service for audit log operations.
+ * Uses shared baseQueryWithReauth for consistent authentication handling.
+ */
+
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { baseQueryWithReauth } from '../baseApi';
 import {
   AuditLog,
   AuditLogListResponse,
@@ -8,22 +16,9 @@ import {
   PaginatedAuditLogsResponse,
 } from '@/lib/types/audit';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
-
 export const auditApi = createApi({
   reducerPath: 'auditApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: API_BASE_URL,
-    credentials: 'include', // Send httpOnly cookies automatically
-    prepareHeaders: (headers) => {
-      // Inject CSRF token for state-changing requests
-      const csrfToken = getCSRFToken();
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
-      }
-      return headers;
-    },
-  }),
+  baseQuery: baseQueryWithReauth,
   tagTypes: ['AuditLog', 'AuditLogDetail'],
   endpoints: (builder) => ({
     // Audit Logs

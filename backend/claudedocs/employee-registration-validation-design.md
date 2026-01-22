@@ -235,7 +235,7 @@ func Register(c *gin.Context) {
 		Email:         req.Email,
 		Username:      req.Username,
 		PasswordHash:  hashedPassword,
-		EmailVerified: false,
+		,
 		IsActive:      true,
 	}
 
@@ -284,7 +284,7 @@ func Register(c *gin.Context) {
 			ID:            user.ID,
 			Email:         user.Email,
 			Username:      user.Username,
-			EmailVerified: user.EmailVerified,
+			,
 			IsActive:      user.IsActive,
 		},
 	})

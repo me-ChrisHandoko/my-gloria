@@ -1,6 +1,6 @@
 // Role and Permission Management Types
 
-import { PermissionListResponse } from './permission';
+import { PermissionListResponse, AssignedPermissionResponse } from './permission';
 
 // Role base interface
 export interface Role {
@@ -28,7 +28,7 @@ export interface RoleListResponse {
 
 // Role with permissions
 export interface RoleWithPermissions extends Role {
-  permissions?: PermissionListResponse[];
+  permissions?: AssignedPermissionResponse[]; // Changed to include assignment_id
 }
 
 // Role hierarchy

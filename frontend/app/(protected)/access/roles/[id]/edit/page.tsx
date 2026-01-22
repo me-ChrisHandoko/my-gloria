@@ -95,7 +95,7 @@ export default function EditRolePage({ params }: PageProps) {
 
       await updateRole({ id, data: cleanedData }).unwrap();
       toast.success("Role berhasil diperbarui");
-      router.push(`/akses/roles/${id}`);
+      router.push(`/access/roles/${id}`);
     } catch (error: unknown) {
       const apiError = error as { data?: { message?: string; error?: string } };
       toast.error(apiError?.data?.error || apiError?.data?.message || "Gagal memperbarui role");
