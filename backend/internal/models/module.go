@@ -173,6 +173,7 @@ type AssignModuleAccessToRoleRequest struct {
 	ModuleID    string         `json:"module_id" binding:"required,len=36"`
 	PositionID  *string        `json:"position_id,omitempty" binding:"omitempty,len=36"`
 	Permissions datatypes.JSON `json:"permissions" binding:"required"`
+	IsActive    *bool          `json:"is_active,omitempty"`
 }
 
 // AssignModuleAccessToUserRequest represents the request for assigning module access to user
@@ -187,11 +188,30 @@ type AssignModuleAccessToUserRequest struct {
 // RoleModuleAccessResponse represents module access response for roles
 type RoleModuleAccessResponse struct {
 	ID          string              `json:"id"`
+	RoleID      string              `json:"role_id"`
 	ModuleID    string              `json:"module_id"`
 	Module      *ModuleListResponse `json:"module,omitempty"`
 	PositionID  *string             `json:"position_id,omitempty"`
 	Permissions datatypes.JSON      `json:"permissions"`
 	IsActive    bool                `json:"is_active"`
+}
+
+// ToResponse converts RoleModuleAccess to RoleModuleAccessResponse
+func (rma *RoleModuleAccess) ToResponse() *RoleModuleAccessResponse {
+	resp := &RoleModuleAccessResponse{
+		ID:          rma.ID,
+		RoleID:      rma.RoleID,
+		ModuleID:    rma.ModuleID,
+		PositionID:  rma.PositionID,
+		Permissions: rma.Permissions,
+		IsActive:    rma.IsActive,
+	}
+
+	if rma.Module != nil {
+		resp.Module = rma.Module.ToListResponse()
+	}
+
+	return resp
 }
 
 // UserModuleAccessResponse represents module access response for users

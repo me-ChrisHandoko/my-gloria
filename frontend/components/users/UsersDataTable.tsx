@@ -13,8 +13,6 @@ import {
   Eye,
   Edit,
   Mail,
-  UserCheck,
-  UserX,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -38,12 +36,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 interface UsersDataTableProps {
   users: UserListResponse[];
@@ -71,21 +63,12 @@ export default function UsersDataTable({
     );
   };
 
-  // Truncate email after @glo
-  const truncateEmail = (email: string): string => {
-    const atIndex = email.indexOf("@glo");
-    if (atIndex !== -1) {
-      return email.substring(0, atIndex + 4) + "...";
-    }
-    return email;
-  };
-
   return (
-    <div className="w-full overflow-x-auto">
-      <Table className="table-fixed w-full">
+    <div className="rounded-md border overflow-x-auto">
+      <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-auto max-w-[200px]">
+            <TableHead>
               <Button
                 variant="ghost"
                 onClick={() => onSortChange("email")}
@@ -96,34 +79,25 @@ export default function UsersDataTable({
               </Button>
             </TableHead>
             <TableHead>Nama</TableHead>
-            <TableHead className="w-[100px]">
-              <Button
-                variant="ghost"
-                onClick={() => onSortChange("is_active")}
-                className="h-8 flex items-center"
-              >
-                Status
-                {getSortIcon("is_active")}
-              </Button>
-            </TableHead>
-            <TableHead className="hidden md:table-cell w-[130px]">
+            <TableHead>Status</TableHead>
+            <TableHead>
               <Button
                 variant="ghost"
                 onClick={() => onSortChange("last_active")}
-                className="h-8 flex items-center whitespace-nowrap"
+                className="h-8 flex items-center"
               >
                 Terakhir Aktif
                 {getSortIcon("last_active")}
               </Button>
             </TableHead>
-            <TableHead className="text-right w-[80px]">Aksi</TableHead>
+            <TableHead className="text-right">Aksi</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {users.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={7}
+                colSpan={5}
                 className="text-center py-8 text-muted-foreground"
               >
                 Tidak ada data pengguna
@@ -132,46 +106,23 @@ export default function UsersDataTable({
           ) : (
             users.map((user) => (
               <TableRow key={user.id}>
-                <TableCell className="max-w-[200px]">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center gap-2 cursor-help overflow-hidden">
-                          <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <span className="font-medium truncate">
-                            {truncateEmail(user.email)}
-                          </span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{user.email}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{user.email}</span>
+                  </div>
                 </TableCell>
                 <TableCell>
-                  <span className="text-sm">
-                    {user.name || "-"}
-                  </span>
+                  <span>{user.name || "-"}</span>
                 </TableCell>
-                <TableCell className="w-[100px]">
-                  <Badge variant={user.is_active ? "success" : "secondary"} className="whitespace-nowrap">
-                    {user.is_active ? (
-                      <div className="flex items-center gap-1">
-                        <UserCheck className="h-3 w-3" />
-                        <span className="hidden sm:inline">Aktif</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <UserX className="h-3 w-3" />
-                        <span className="hidden sm:inline">Non-Aktif</span>
-                      </div>
-                    )}
+                <TableCell>
+                  <Badge variant={user.is_active ? "success" : "destructive"}>
+                    {user.is_active ? "Aktif" : "Non-Aktif"}
                   </Badge>
                 </TableCell>
-                <TableCell className="hidden md:table-cell w-[130px]">
+                <TableCell>
                   {user.last_active ? (
-                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                    <span className="text-sm text-muted-foreground">
                       {new Date(user.last_active).toLocaleDateString("id-ID", {
                         day: "2-digit",
                         month: "short",
@@ -179,7 +130,7 @@ export default function UsersDataTable({
                       })}
                     </span>
                   ) : (
-                    <span className="text-muted-foreground text-sm">-</span>
+                    <span className="text-muted-foreground">-</span>
                   )}
                 </TableCell>
                 <TableCell className="text-right">

@@ -8,6 +8,7 @@ export interface User {
   id: string;
   email: string;
   username?: string | null;
+  name?: string | null;
   is_active: boolean;
   last_active?: string | null;
   preferences?: Record<string, any> | null;

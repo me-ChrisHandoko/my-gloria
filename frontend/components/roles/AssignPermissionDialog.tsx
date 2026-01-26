@@ -179,7 +179,7 @@ export function AssignPermissionDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline">
           <Plus className="mr-2 h-4 w-4" />
           Assign Permission
         </Button>

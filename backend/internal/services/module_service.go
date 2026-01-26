@@ -372,3 +372,122 @@ func (s *ModuleService) DeleteModule(id string) error {
 
 	return nil
 }
+
+// ==================== Role Module Access Methods ====================
+
+// GetRoleModuleAccesses retrieves all module accesses for a role
+func (s *ModuleService) GetRoleModuleAccesses(roleID string) ([]*models.RoleModuleAccessResponse, error) {
+	// Validate role exists
+	var role models.Role
+	if err := s.db.First(&role, "id = ?", roleID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("role tidak ditemukan")
+		}
+		return nil, fmt.Errorf("gagal mengambil data role: %w", err)
+	}
+
+	// Fetch role module accesses with module relation
+	var accesses []models.RoleModuleAccess
+	if err := s.db.Preload("Module").
+		Where("role_id = ?", roleID).
+		Order("created_at DESC").
+		Find(&accesses).Error; err != nil {
+		return nil, fmt.Errorf("gagal mengambil data module access: %w", err)
+	}
+
+	// Convert to response
+	result := make([]*models.RoleModuleAccessResponse, len(accesses))
+	for i, access := range accesses {
+		result[i] = access.ToResponse()
+	}
+
+	return result, nil
+}
+
+// AssignModuleToRole assigns a module to a role
+func (s *ModuleService) AssignModuleToRole(roleID string, req models.AssignModuleAccessToRoleRequest, userID string) (*models.RoleModuleAccess, error) {
+	// Validate role exists
+	var role models.Role
+	if err := s.db.First(&role, "id = ?", roleID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("role tidak ditemukan")
+		}
+		return nil, fmt.Errorf("gagal mengambil data role: %w", err)
+	}
+
+	// Validate module exists
+	if err := s.validateModuleExists(req.ModuleID); err != nil {
+		return nil, err
+	}
+
+	// Validate position if provided
+	if req.PositionID != nil {
+		var position models.Position
+		if err := s.db.First(&position, "id = ?", *req.PositionID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, errors.New("position tidak ditemukan")
+			}
+			return nil, fmt.Errorf("gagal mengambil data position: %w", err)
+		}
+	}
+
+	// Check if access already exists
+	var existing models.RoleModuleAccess
+	query := s.db.Where("role_id = ? AND module_id = ?", roleID, req.ModuleID)
+	if req.PositionID != nil {
+		query = query.Where("position_id = ?", *req.PositionID)
+	} else {
+		query = query.Where("position_id IS NULL")
+	}
+	if err := query.First(&existing).Error; err == nil {
+		return nil, errors.New("module sudah di-assign ke role ini")
+	}
+
+	// Get username for audit trail
+	username := s.getUsername(userID)
+
+	// Set default is_active to true if not provided
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
+
+	// Create access
+	access := models.RoleModuleAccess{
+		ID:          uuid.New().String(),
+		RoleID:      roleID,
+		ModuleID:    req.ModuleID,
+		PositionID:  req.PositionID,
+		Permissions: req.Permissions,
+		IsActive:    isActive,
+		CreatedBy:   &username,
+	}
+
+	if err := s.db.Create(&access).Error; err != nil {
+		return nil, fmt.Errorf("gagal assign module ke role: %w", err)
+	}
+
+	// Load module relation for response
+	s.db.Preload("Module").First(&access, "id = ?", access.ID)
+
+	return &access, nil
+}
+
+// RevokeModuleFromRole revokes a module access from a role
+func (s *ModuleService) RevokeModuleFromRole(roleID string, accessID string) error {
+	// Find the access
+	var access models.RoleModuleAccess
+	if err := s.db.Where("id = ? AND role_id = ?", accessID, roleID).First(&access).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("module access tidak ditemukan")
+		}
+		return fmt.Errorf("gagal mengambil data module access: %w", err)
+	}
+
+	// Delete the access
+	if err := s.db.Delete(&access).Error; err != nil {
+		return fmt.Errorf("gagal mencabut module dari role: %w", err)
+	}
+
+	return nil
+}

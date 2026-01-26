@@ -1,40 +1,41 @@
-// app/(protected)/access/roles/[id]/permissions/page.tsx
+// app/(protected)/access/roles/[id]/modules/page.tsx
 /**
- * Role Permissions Management Page
+ * Role Modules Management Page
  *
  * Client Component that uses RTK Query for data fetching.
  * This ensures proper token refresh handling on 401 errors.
  *
  * Provides UI for:
- * - Viewing all assigned permissions
- * - Assigning new permissions to the role
- * - Revoking permissions from the role
+ * - Viewing all assigned modules
+ * - Assigning new modules to the role
+ * - Revoking modules from the role
  * - Search and filter functionality
  */
 "use client";
 
 import { use } from "react";
-import { ArrowLeft, Shield } from "lucide-react";
+import { ArrowLeft, LayoutGrid } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import RolePermissionsManagement from "@/components/roles/RolePermissionsManagement";
-import { AssignPermissionDialog } from "@/components/roles/AssignPermissionDialog";
-import { useGetRoleByIdQuery, useGetRoleWithPermissionsQuery } from "@/lib/store/services/rolesApi";
+import RoleModulesManagement from "@/components/roles/RoleModulesManagement";
+import { AssignModuleDialog } from "@/components/roles/AssignModuleDialog";
+import { useGetRoleByIdQuery } from "@/lib/store/services/rolesApi";
+import { useGetRoleModuleAccessesQuery } from "@/lib/store/services/modulesApi";
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function RolePermissionsPage({ params }: PageProps) {
+export default function RoleModulesPage({ params }: PageProps) {
   // Use React.use() for client-side param resolution
   const { id } = use(params);
 
   // Client-side data fetching with automatic token refresh on 401
   const { data: role, isLoading, error } = useGetRoleByIdQuery(id);
-  const { data: roleWithPermissions, refetch } = useGetRoleWithPermissionsQuery(id);
+  const { data: moduleAccesses, refetch } = useGetRoleModuleAccessesQuery(id);
 
   // Loading state
   if (isLoading) {
@@ -72,15 +73,15 @@ export default function RolePermissionsPage({ params }: PageProps) {
     );
   }
 
-  const assignedPermissionIds = roleWithPermissions?.permissions.map((p) => p.id) || [];
+  const assignedModuleIds = moduleAccesses?.map((a) => a.module_id) || [];
 
   return (
     <div className="space-y-6">
-      {/* Header - Same pattern as detail page */}
+      {/* Header - Same pattern as permissions page */}
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">Kelola Permissions</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Kelola Modules</h1>
             <Badge variant={role.is_active ? "success" : "secondary"}>
               {role.is_active ? "Aktif" : "Non-Aktif"}
             </Badge>
@@ -100,10 +101,10 @@ export default function RolePermissionsPage({ params }: PageProps) {
               Kembali ke Detail Role
             </Link>
           </Button>
-          <AssignPermissionDialog
+          <AssignModuleDialog
             roleId={id}
             roleName={role.name}
-            assignedPermissionIds={assignedPermissionIds}
+            assignedModuleIds={assignedModuleIds}
             onSuccess={refetch}
           />
         </div>
@@ -112,18 +113,18 @@ export default function RolePermissionsPage({ params }: PageProps) {
       {/* System Role Warning */}
       {role.is_system_role && (
         <Alert>
-          <Shield className="h-4 w-4" />
+          <LayoutGrid className="h-4 w-4" />
           <div>
             <p className="font-medium">Role Sistem</p>
             <p className="text-sm">
-              Ini adalah role sistem. Hati-hati saat mengelola permissions untuk role ini.
+              Ini adalah role sistem. Hati-hati saat mengelola modules untuk role ini.
             </p>
           </div>
         </Alert>
       )}
 
       {/* Main Content - Client Component */}
-      <RolePermissionsManagement roleId={id} roleName={role.name} hideHeader />
+      <RoleModulesManagement roleId={id} roleName={role.name} hideHeader />
     </div>
   );
 }

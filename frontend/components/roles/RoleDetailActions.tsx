@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Edit, Trash2, ArrowLeft } from "lucide-react";
+import { Edit, Trash2, ArrowLeft, Key, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 
 import { useDeleteRoleMutation } from "@/lib/store/services/rolesApi";
@@ -42,10 +42,18 @@ export default function RoleDetailActions({ roleId, roleName }: RoleDetailAction
 
   return (
     <>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button variant="outline" onClick={() => router.back()}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Kembali
+        </Button>
+        <Button variant="outline" onClick={() => router.push(`/access/roles/${roleId}/permissions`)}>
+          <Key className="mr-2 h-4 w-4" />
+          Permissions
+        </Button>
+        <Button variant="outline" onClick={() => router.push(`/access/roles/${roleId}/modules`)}>
+          <LayoutGrid className="mr-2 h-4 w-4" />
+          Modules
         </Button>
         <Button variant="outline" onClick={() => router.push(`/access/roles/${roleId}/edit`)}>
           <Edit className="mr-2 h-4 w-4" />

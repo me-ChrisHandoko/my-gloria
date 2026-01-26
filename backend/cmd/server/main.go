@@ -245,6 +245,10 @@ func setupRouter() *gin.Engine {
 				roles.DELETE("/:id", roleHandler.DeleteRole)
 				roles.POST("/:id/permissions", roleHandler.AssignPermissionToRole)
 				roles.DELETE("/:id/permissions/:permission_id", roleHandler.RevokePermissionFromRole)
+				// Role Module Access routes
+				roles.GET("/:id/modules", moduleHandler.GetRoleModuleAccesses)
+				roles.POST("/:id/modules", moduleHandler.AssignModuleToRole)
+				roles.DELETE("/:id/modules/:access_id", moduleHandler.RevokeModuleFromRole)
 			}
 
 			// Permission routes

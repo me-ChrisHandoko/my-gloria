@@ -133,12 +133,12 @@ export default function UsersClient({ initialData }: UsersClientProps) {
   };
 
   return (
-    <div className="space-y-4 max-w-full">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Pengguna</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight">Pengguna</h1>
+          <p className="text-muted-foreground">
             Kelola data pengguna dan akses sistem
           </p>
         </div>
@@ -146,10 +146,10 @@ export default function UsersClient({ initialData }: UsersClientProps) {
       </div>
 
       {/* Main Card - Contains Filters, Table, and Pagination */}
-      <Card className="overflow-hidden">
+      <Card>
         {/* Filters Section */}
-        <div className="px-3 sm:px-4 pt-4 pb-2">
-          <div className="flex flex-col gap-3 sm:gap-4">
+        <div className="px-4 pt-4 pb-2">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             {/* Search */}
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -161,41 +161,38 @@ export default function UsersClient({ initialData }: UsersClientProps) {
               />
             </div>
 
-            {/* Filter Row */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              {/* Status Filter */}
-              <Select
-                value={
-                  statusFilter === undefined
-                    ? "all"
-                    : statusFilter
-                    ? "active"
-                    : "inactive"
-                }
-                onValueChange={handleStatusFilterChange}
-              >
-                <SelectTrigger className="w-full sm:w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  <SelectItem value="active">Aktif</SelectItem>
-                  <SelectItem value="inactive">Non-Aktif</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Status Filter */}
+            <Select
+              value={
+                statusFilter === undefined
+                  ? "all"
+                  : statusFilter
+                  ? "active"
+                  : "inactive"
+              }
+              onValueChange={handleStatusFilterChange}
+            >
+              <SelectTrigger className="w-full sm:w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                <SelectItem value="active">Aktif</SelectItem>
+                <SelectItem value="inactive">Non-Aktif</SelectItem>
+              </SelectContent>
+            </Select>
 
-              {/* Clear Filters Button */}
-              {(search || statusFilter !== undefined) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearFilters}
-                  className="w-full sm:w-auto"
-                >
-                  Reset Filter
-                </Button>
-              )}
-            </div>
+            {/* Clear Filters Button */}
+            {(search || statusFilter !== undefined) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClearFilters}
+                className="w-full sm:w-auto"
+              >
+                Reset Filter
+              </Button>
+            )}
           </div>
         </div>
 
@@ -331,7 +328,7 @@ export default function UsersClient({ initialData }: UsersClientProps) {
             ) : (
               <>
                 {/* Users Table Section */}
-                <div className="px-0 pt-2 pb-2">
+                <div className="px-4 pt-2 pb-2">
                   <UsersDataTable
                     users={displayData.data}
                     sortBy={filters.sort_by}
@@ -341,7 +338,7 @@ export default function UsersClient({ initialData }: UsersClientProps) {
                 </div>
 
                 {/* Pagination Section */}
-                <div className="px-3 sm:px-4 pb-4">
+                <div className="px-4 pb-4">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
                     {/* 1. Summary - Record Data */}
                     <div className="text-sm text-muted-foreground text-center lg:text-left">

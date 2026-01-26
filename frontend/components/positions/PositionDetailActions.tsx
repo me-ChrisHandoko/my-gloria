@@ -10,50 +10,50 @@ import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 interface PositionDetailActionsProps {
-  positionId: string;
-  positionName: string;
+    positionId: string;
+    positionName: string;
 }
 
 export default function PositionDetailActions({ positionId, positionName }: PositionDetailActionsProps) {
-  const router = useRouter();
-  const [deletePosition, { isLoading: isDeleting }] = useDeletePositionMutation();
+    const router = useRouter();
+    const [deletePosition, { isLoading: isDeleting }] = useDeletePositionMutation();
 
-  const handleDelete = async () => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus posisi ${positionName}?`)) return;
+    const handleDelete = async () => {
+        if (!confirm(`Apakah Anda yakin ingin menghapus posisi ${positionName}?`)) return;
 
-    try {
-      await deletePosition(positionId).unwrap();
-      toast.success("Posisi berhasil dihapus");
-      router.push("/organization/positions");
-    } catch (error: unknown) {
-      const apiError = error as { data?: { message?: string } };
-      toast.error(apiError?.data?.message || "Gagal menghapus posisi");
-    }
-  };
+        try {
+            await deletePosition(positionId).unwrap();
+            toast.success("Posisi berhasil dihapus");
+            router.push("/organization/positions");
+        } catch (error: unknown) {
+            const apiError = error as { data?: { message?: string } };
+            toast.error(apiError?.data?.message || "Gagal menghapus posisi");
+        }
+    };
 
-  return (
-    <div className="flex gap-2">
-      <Button variant="outline" onClick={() => router.push("/organization/positions")}>
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Kembali
-      </Button>
-      <Button variant="outline" onClick={() => router.push(`/organization/positions/${positionId}/edit`)}>
-        <Edit className="mr-2 h-4 w-4" />
-        Edit
-      </Button>
-      <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-        {isDeleting ? (
-          <>
-            <LoadingSpinner />
-            <span className="ml-2">Menghapus...</span>
-          </>
-        ) : (
-          <>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Hapus
-          </>
-        )}
-      </Button>
-    </div>
-  );
+    return (
+        <div className="flex gap-2">
+            <Button variant="outline" onClick={() => router.push("/organization/positions")}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Kembali ke Daftar
+            </Button>
+            <Button variant="outline" onClick={() => router.push(`/organization/positions/${positionId}/edit`)}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                {isDeleting ? (
+                    <>
+                        <LoadingSpinner />
+                        <span className="ml-2">Menghapus...</span>
+                    </>
+                ) : (
+                    <>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Hapus
+                    </>
+                )}
+            </Button>
+        </div>
+    );
 }

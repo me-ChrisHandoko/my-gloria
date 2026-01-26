@@ -242,3 +242,109 @@ func (h *ModuleHandler) DeleteModule(c *gin.Context) {
 	// HTTP: Format response
 	c.JSON(http.StatusOK, gin.H{"message": "Module berhasil dihapus"})
 }
+
+// ==================== Role Module Access Handlers ====================
+
+// GetRoleModuleAccesses handles getting module accesses for a role
+// @Summary Get module accesses for a role
+// @Tags roles
+// @Produce json
+// @Param id path string true "Role ID"
+// @Success 200 {array} models.RoleModuleAccessResponse
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /roles/{id}/modules [get]
+func (h *ModuleHandler) GetRoleModuleAccesses(c *gin.Context) {
+	// HTTP: Get role ID from URL
+	roleID := c.Param("id")
+
+	// Business logic: Get role module accesses via service
+	accesses, err := h.moduleService.GetRoleModuleAccesses(roleID)
+	if err != nil {
+		if err.Error() == "role tidak ditemukan" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	// HTTP: Format response
+	c.JSON(http.StatusOK, accesses)
+}
+
+// AssignModuleToRole handles assigning a module to a role
+// @Summary Assign a module to a role
+// @Tags roles
+// @Accept json
+// @Produce json
+// @Param id path string true "Role ID"
+// @Param request body models.AssignModuleAccessToRoleRequest true "Module assignment data"
+// @Success 201 {object} models.RoleModuleAccessResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /roles/{id}/modules [post]
+func (h *ModuleHandler) AssignModuleToRole(c *gin.Context) {
+	// HTTP: Get role ID from URL
+	roleID := c.Param("id")
+
+	// HTTP: Parse and validate request
+	var req models.AssignModuleAccessToRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// HTTP: Get authenticated user
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Business logic: Assign module to role via service
+	access, err := h.moduleService.AssignModuleToRole(roleID, req, userID.(string))
+	if err != nil {
+		if err.Error() == "role tidak ditemukan" || err.Error() == "module tidak ditemukan" || err.Error() == "position tidak ditemukan" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else if err.Error() == "module sudah di-assign ke role ini" {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	// HTTP: Format response
+	c.JSON(http.StatusCreated, access.ToResponse())
+}
+
+// RevokeModuleFromRole handles revoking a module from a role
+// @Summary Revoke a module from a role
+// @Tags roles
+// @Produce json
+// @Param id path string true "Role ID"
+// @Param access_id path string true "Module Access ID"
+// @Success 200 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /roles/{id}/modules/{access_id} [delete]
+func (h *ModuleHandler) RevokeModuleFromRole(c *gin.Context) {
+	// HTTP: Get IDs from URL
+	roleID := c.Param("id")
+	accessID := c.Param("access_id")
+
+	// Business logic: Revoke module from role via service
+	err := h.moduleService.RevokeModuleFromRole(roleID, accessID)
+	if err != nil {
+		if err.Error() == "module access tidak ditemukan" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	// HTTP: Format response
+	c.JSON(http.StatusOK, gin.H{"message": "Module berhasil dicabut dari role"})
+}

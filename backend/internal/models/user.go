@@ -138,17 +138,19 @@ type UpdateUserRequest struct {
 
 // UserResponse represents the response body for user data
 type UserResponse struct {
-	ID          string                 `json:"id"`
-	Email       string                 `json:"email"`
-	Username    *string                `json:"username,omitempty"`
-	IsActive    bool                   `json:"is_active"`
-	LastActive  *time.Time             `json:"last_active,omitempty"`
-	Preferences *datatypes.JSON        `json:"preferences,omitempty"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
-	CreatedBy   *string                `json:"created_by,omitempty"`
-	Roles       []RoleListResponse     `json:"roles,omitempty"`
-	Positions   []UserPositionResponse `json:"positions,omitempty"`
+	ID           string                    `json:"id"`
+	Email        string                    `json:"email"`
+	Username     *string                   `json:"username,omitempty"`
+	Name         *string                   `json:"name,omitempty"`
+	IsActive     bool                      `json:"is_active"`
+	LastActive   *time.Time                `json:"last_active,omitempty"`
+	Preferences  *datatypes.JSON           `json:"preferences,omitempty"`
+	CreatedAt    time.Time                 `json:"created_at"`
+	UpdatedAt    time.Time                 `json:"updated_at"`
+	CreatedBy    *string                   `json:"created_by,omitempty"`
+	Roles        []RoleListResponse        `json:"roles,omitempty"`
+	Positions    []UserPositionResponse    `json:"positions,omitempty"`
+	DataKaryawan *DataKaryawanInfoResponse `json:"data_karyawan,omitempty"`
 }
 
 // UserListResponse represents the response for listing users
@@ -230,6 +232,33 @@ func (u *User) ToResponse() *UserResponse {
 		CreatedAt:   u.CreatedAt,
 		UpdatedAt:   u.UpdatedAt,
 		CreatedBy:   u.CreatedBy,
+	}
+
+	// Add DataKaryawan if present
+	if u.DataKaryawan != nil {
+		firstname, lastname := u.DataKaryawan.SplitName()
+
+		// Get full name directly from database (preserves all parts of name)
+		fullName := ""
+		if u.DataKaryawan.Nama != nil && *u.DataKaryawan.Nama != "" {
+			fullName = *u.DataKaryawan.Nama
+		} else {
+			// Fallback to NIP if name is empty
+			fullName = u.DataKaryawan.NIP
+		}
+
+		resp.DataKaryawan = &DataKaryawanInfoResponse{
+			NIP:           u.DataKaryawan.NIP,
+			Firstname:     firstname,
+			Lastname:      lastname,
+			FullName:      fullName,
+			Departemen:    u.DataKaryawan.BagianKerja,
+			Jabatan:       u.DataKaryawan.BidangKerja,
+			JenisKaryawan: u.DataKaryawan.JenisKaryawan,
+		}
+
+		// Also set Name field for convenience
+		resp.Name = &fullName
 	}
 
 	if len(u.UserRoles) > 0 {
