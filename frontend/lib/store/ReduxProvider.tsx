@@ -12,12 +12,13 @@ export default function ReduxProvider({
   children: React.ReactNode;
 }) {
   useEffect(() => {
-    // Restore user info from sessionStorage (if exists)
+    // Restore user info from localStorage (if exists)
     // NOTE: We DO NOT store tokens anymore - they're in httpOnly cookies
     // This only restores non-sensitive user info for UI state
+    // Using localStorage to share auth state across all browser tabs
     if (typeof window !== 'undefined') {
       try {
-        const stored = sessionStorage.getItem('gloria_user');
+        const stored = localStorage.getItem('gloria_user');
         if (stored) {
           const { user, isAuthenticated } = JSON.parse(stored);
           if (user && isAuthenticated) {
@@ -28,7 +29,7 @@ export default function ReduxProvider({
       } catch (error) {
         console.error('Failed to restore user state:', error);
         // Clear corrupted data
-        sessionStorage.removeItem('gloria_user');
+        localStorage.removeItem('gloria_user');
       }
     }
   }, []);

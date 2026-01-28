@@ -29,7 +29,7 @@ const moduleSchema = z.object({
     .min(2, { message: "Nama minimal 2 karakter" })
     .max(255, { message: "Nama maksimal 255 karakter" }),
   category: z.enum(["SERVICE", "PERFORMANCE", "QUALITY", "FEEDBACK", "TRAINING", "SYSTEM"], {
-    required_error: "Kategori harus dipilih",
+    message: "Kategori harus dipilih",
   }),
   icon: z.string().optional().or(z.literal("")),
   path: z.string().optional().or(z.literal("")),

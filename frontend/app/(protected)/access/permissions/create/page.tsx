@@ -12,6 +12,7 @@ import {
   useGetPermissionScopesQuery,
   useGetPermissionActionsQuery,
 } from "@/lib/store/services/permissionsApi";
+import type { CreatePermissionRequest } from "@/lib/types/permission";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -97,32 +98,21 @@ function CreatePermissionForm() {
   const onSubmit = async (data: PermissionFormData) => {
     try {
       // Build payload - remove empty strings and convert to null
-      const payload: {
-        code: string;
-        name: string;
-        resource: string;
-        action: string;
-        description?: string;
-        scope?: string;
-        category?: string;
-        group_name?: string;
-        group_icon?: string;
-        group_sort_order?: number;
-      } = {
+      const payload: CreatePermissionRequest = {
         code: data.code, // Already uppercase from onChange handler
         name: data.name,
         resource: data.resource,
-        action: data.action,
+        action: data.action as CreatePermissionRequest["action"],
       };
 
       if (data.description && data.description !== "") {
         payload.description = data.description;
       }
       if (data.scope && data.scope !== "") {
-        payload.scope = data.scope;
+        payload.scope = data.scope as CreatePermissionRequest["scope"];
       }
       if (data.category && data.category !== "") {
-        payload.category = data.category;
+        payload.category = data.category as CreatePermissionRequest["category"];
       }
       if (data.group_name && data.group_name !== "") {
         payload.group_name = data.group_name;

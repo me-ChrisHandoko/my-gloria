@@ -19,7 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Alert } from "@/components/ui/alert";
-import { PermissionGate, ActionButton } from "@/components/rbac";
+import { PermissionGate, ActionLink } from "@/components/rbac";
 
 const columns: ColumnDef<DataKaryawanListItem>[] = [
   {
@@ -141,15 +141,14 @@ export default function KaryawanPage() {
             Kelola data karyawan YPK Gloria
           </p>
         </div>
-        <ActionButton
+        <ActionLink
+          href="/employees/create"
           resource="employees"
           action="CREATE"
-          hideOnDenied
-          onClick={() => router.push("/employees/create")}
         >
           <Plus className="mr-2 h-4 w-4" />
           Tambah Karyawan
-        </ActionButton>
+        </ActionLink>
       </div>
 
       <div className="rounded-lg border bg-card">

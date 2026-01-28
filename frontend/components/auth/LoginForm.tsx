@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { useLoginMutation } from '@/lib/store/services/authApi';
 import { useAppDispatch } from '@/lib/store/hooks';
 import { setCredentials } from '@/lib/store/features/authSlice';
@@ -18,6 +19,7 @@ export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
+  const t = useTranslations('Auth.login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -110,7 +112,7 @@ export default function LoginForm() {
           })
         );
 
-        toast.success('Login successful!');
+        toast.success(t('success'));
 
         // Set redirecting state to maintain button spinner during navigation
         setIsRedirecting(true);
@@ -139,7 +141,7 @@ export default function LoginForm() {
           }
         } else {
           setLockedUntil(null);
-          toast.error('Network error. Please check your connection and try again.');
+          toast.error(t('networkError'));
         }
       }
     });
@@ -148,9 +150,9 @@ export default function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-5 w-full max-w-md" noValidate>
       <div className="text-center space-y-2">
-        <h2 className="text-2xl font-bold">Welcome Back</h2>
+        <h2 className="text-2xl font-bold">{t('title')}</h2>
         <p className="text-sm text-muted-foreground">
-          Enter your credentials to access your account
+          {t('subtitle')}
         </p>
       </div>
 
@@ -160,22 +162,22 @@ export default function LoginForm() {
             <p className="font-medium">{errorMessage}</p>
             {lockedUntil && remainingTime > 0 && (
               <div className="mt-2 p-3 rounded-md bg-red-900/20 border border-red-900/30">
-                <p className="text-sm font-semibold">Account Locked</p>
+                <p className="text-sm font-semibold">{t('accountLocked')}</p>
                 <p className="text-xs mt-1">
-                  Your account has been temporarily locked due to multiple failed login attempts.
+                  {t('accountLockedMessage')}
                 </p>
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="text-xs opacity-90">Time remaining:</span>
+                  <span className="text-xs opacity-90">{t('timeRemaining')}</span>
                   <span className="font-mono font-bold text-base">{formatRemainingTime(remainingTime)}</span>
                 </div>
                 <p className="text-xs mt-2 opacity-80">
-                  You can try logging in again after the timer expires.
+                  {t('tryAgainAfter')}
                 </p>
               </div>
             )}
             {!lockedUntil && attemptCount >= 3 && (
               <p className="text-xs opacity-90">
-                Having trouble? Make sure you&apos;re using the correct email and password.
+                {t('troubleHint')}
               </p>
             )}
           </div>
@@ -184,14 +186,14 @@ export default function LoginForm() {
 
       <div className="space-y-2">
         <label htmlFor="email" className="text-sm font-medium">
-          Email Address
+          {t('email')}
         </label>
         <Input
           id="email"
           type="email"
           value={email}
           onChange={handleEmailChange}
-          placeholder="your@email.com"
+          placeholder={t('emailPlaceholder')}
           required
           autoComplete="email"
           className={errorMessage ? 'border-red-500 focus-visible:ring-red-500' : ''}
@@ -202,10 +204,10 @@ export default function LoginForm() {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label htmlFor="password" className="text-sm font-medium">
-            Password
+            {t('password')}
           </label>
           <Link href="/forgot-password" className="text-xs text-primary hover:underline">
-            Forgot password?
+            {t('forgotPassword')}
           </Link>
         </div>
         <div className="relative">
@@ -214,7 +216,7 @@ export default function LoginForm() {
             type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={handlePasswordChange}
-            placeholder="••••••••"
+            placeholder={t('passwordPlaceholder')}
             required
             autoComplete="current-password"
             className={errorMessage ? 'border-red-500 focus-visible:ring-red-500 pr-10' : 'pr-10'}
@@ -243,17 +245,17 @@ export default function LoginForm() {
         {isLoading || isRedirecting ? (
           <span className="flex items-center gap-2">
             <span className="animate-spin">⏳</span>
-            {isLoading ? 'Signing in...' : 'Redirecting...'}
+            {isLoading ? t('submitting') : t('redirecting')}
           </span>
         ) : (
-          'Sign In'
+          t('submit')
         )}
       </Button>
 
       <p className="text-center text-sm text-muted-foreground">
-        Don&apos;t have an account?{' '}
+        {t('noAccount')}{' '}
         <Link href="/register" className="text-primary hover:underline font-medium">
-          Create account
+          {t('createAccount')}
         </Link>
       </p>
     </form>

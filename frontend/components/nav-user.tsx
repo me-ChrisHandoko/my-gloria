@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
+import { useTranslations } from "next-intl"
 import {
   ChevronsUpDown,
+  Globe,
   KeyRound,
   LogOut,
   Monitor,
@@ -11,6 +13,8 @@ import {
   Palette,
   Sun,
 } from "lucide-react"
+import { locales, localeNames, type Locale } from "@/i18n/config"
+import { FlagIcons } from "@/components/icons/flags"
 
 import {
   Avatar,
@@ -54,6 +58,13 @@ export function NavUser({
   const dispatch = useAppDispatch()
   const [logout] = useLogoutMutation()
   const { setTheme } = useTheme()
+  const t = useTranslations("NavUser")
+
+  // Handle locale change
+  const handleLocaleChange = (newLocale: Locale) => {
+    document.cookie = `NEXT_LOCALE=${newLocale};path=/;max-age=31536000`
+    router.refresh()
+  }
 
   // Generate initials from name (first letter of first word + first letter of last word)
   const getInitials = (name: string): string => {
@@ -122,33 +133,53 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={() => router.push("/change-password")}>
                 <KeyRound />
-                Change Password
+                {t("changePassword")}
               </DropdownMenuItem>
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <Palette />
-                  Mode
+                  {t("mode")}
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuItem onClick={() => setTheme("dark")}>
                     <Moon />
-                    Dark
+                    {t("dark")}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setTheme("light")}>
                     <Sun />
-                    Light
+                    {t("light")}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setTheme("system")}>
                     <Monitor />
-                    System
+                    {t("system")}
                   </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Globe />
+                  {t("language")}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {locales.map((locale) => {
+                    const FlagIcon = FlagIcons[locale]
+                    return (
+                      <DropdownMenuItem
+                        key={locale}
+                        onClick={() => handleLocaleChange(locale)}
+                      >
+                        <FlagIcon className="h-4 w-6" />
+                        {localeNames[locale]}
+                      </DropdownMenuItem>
+                    )
+                  })}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>
               <LogOut />
-              Log out
+              {t("logout")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Alert } from "@/components/ui/alert";
-import { PermissionGate, ActionButton } from "@/components/rbac";
+import { PermissionGate, ActionLink } from "@/components/rbac";
 
 const getDelegationTypeColor = (type: string) => {
   const colors: Record<string, string> = {
@@ -215,15 +215,14 @@ export default function DelegationsPage() {
             Kelola delegasi approval, permission, dan workflow
           </p>
         </div>
-        <ActionButton
+        <ActionLink
+          href="/delegations/create"
           resource="delegations"
           action="CREATE"
-          hideOnDenied
-          onClick={() => router.push("/delegations/create")}
         >
           <Plus className="mr-2 h-4 w-4" />
           Tambah Delegasi
-        </ActionButton>
+        </ActionLink>
       </div>
 
       {/* Data Table */}

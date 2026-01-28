@@ -1,9 +1,13 @@
 // components/ui/LoadingSpinner.tsx
-export default function LoadingSpinner() {
+interface LoadingSpinnerProps {
+  className?: string;
+}
+
+export default function LoadingSpinner({ className }: LoadingSpinnerProps) {
   return (
     <div className="flex items-center justify-center">
       <svg
-        className="animate-spin h-8 w-8 text-blue-600"
+        className={`animate-spin text-blue-600 ${className || "h-8 w-8"}`}
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"

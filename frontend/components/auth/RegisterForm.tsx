@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { useRegisterMutation } from '@/lib/store/services/authApi';
 import { useAppDispatch } from '@/lib/store/hooks';
 import { setCredentials } from '@/lib/store/features/authSlice';
@@ -16,6 +17,7 @@ import { useMutex } from '@/lib/hooks/useMutex';
 export default function RegisterForm() {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const t = useTranslations('Auth.register');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -47,7 +49,7 @@ export default function RegisterForm() {
 
     // Validate password match
     if (password !== confirmPassword) {
-      toast.error('Password and Confirm Password do not match');
+      toast.error(t('passwordMismatch'));
       return;
     }
 
@@ -62,7 +64,7 @@ export default function RegisterForm() {
         // Store user info in Redux (tokens handled by httpOnly cookies)
         dispatch(setCredentials({ user: result.user }));
 
-        toast.success('Registration successful!');
+        toast.success(t('success'));
         // Redirect to dashboard
         router.push('/dashboard');
       } catch (err: any) {
@@ -75,33 +77,33 @@ export default function RegisterForm() {
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-5 w-full max-w-md" noValidate>
       <div className="text-center space-y-2">
-        <h2 className="text-2xl font-bold">Create Account</h2>
+        <h2 className="text-2xl font-bold">{t('title')}</h2>
         <p className="text-sm text-muted-foreground">
-          Enter your information to create an account
+          {t('subtitle')}
         </p>
       </div>
 
       <div className="space-y-2">
         <label htmlFor="email" className="text-sm font-medium">
-          Email Address
+          {t('email')}
         </label>
         <Input
           id="email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="your@email.com"
+          placeholder={t('emailPlaceholder')}
           required
         />
         <p className="text-xs text-muted-foreground">
-          Use your company email address
+          {t('emailHint')}
         </p>
       </div>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label htmlFor="password" className="text-sm font-medium">
-            Password
+            {t('password')}
           </label>
           <button
             type="button"
@@ -109,7 +111,7 @@ export default function RegisterForm() {
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
           >
             <Info className="h-3 w-3" />
-            Requirements
+            {t('requirements')}
           </button>
         </div>
         <Input
@@ -118,7 +120,7 @@ export default function RegisterForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           onFocus={() => setShowPasswordInfo(true)}
-          placeholder="••••••••"
+          placeholder={t('passwordPlaceholder')}
           required
           minLength={8}
           maxLength={100}
@@ -126,7 +128,7 @@ export default function RegisterForm() {
 
         {showPasswordInfo && password.length > 0 && (
           <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Password Requirements:</p>
+            <p className="text-xs font-medium text-muted-foreground mb-2">{t('passwordRequirements')}</p>
             <div className="space-y-1.5">
               <div className="flex items-center gap-2 text-xs">
                 {passwordChecks.minLength ? (
@@ -135,7 +137,7 @@ export default function RegisterForm() {
                   <X className="h-4 w-4 text-muted-foreground" />
                 )}
                 <span className={passwordChecks.minLength ? 'text-foreground' : 'text-muted-foreground'}>
-                  At least 8 characters
+                  {t('minLength')}
                 </span>
               </div>
               <div className="flex items-center gap-2 text-xs">
@@ -145,11 +147,11 @@ export default function RegisterForm() {
                   <X className="h-4 w-4 text-muted-foreground" />
                 )}
                 <span className={passwordChecks.maxLength ? 'text-foreground' : 'text-muted-foreground'}>
-                  Maximum 100 characters
+                  {t('maxLength')}
                 </span>
               </div>
               <div className="border-t pt-2 mt-2">
-                <p className="text-xs text-muted-foreground mb-1.5">Recommended for stronger security:</p>
+                <p className="text-xs text-muted-foreground mb-1.5">{t('recommendedSecurity')}</p>
                 <div className="flex items-center gap-2 text-xs">
                   {passwordChecks.hasNumber ? (
                     <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
@@ -157,7 +159,7 @@ export default function RegisterForm() {
                     <X className="h-4 w-4 text-muted-foreground" />
                   )}
                   <span className={passwordChecks.hasNumber ? 'text-foreground' : 'text-muted-foreground'}>
-                    Contains a number
+                    {t('hasNumber')}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
@@ -167,7 +169,7 @@ export default function RegisterForm() {
                     <X className="h-4 w-4 text-muted-foreground" />
                   )}
                   <span className={passwordChecks.hasSpecialChar ? 'text-foreground' : 'text-muted-foreground'}>
-                    Contains a special character (!@#$%^&*)
+                    {t('hasSpecialChar')}
                   </span>
                 </div>
               </div>
@@ -178,14 +180,14 @@ export default function RegisterForm() {
 
       <div className="space-y-2">
         <label htmlFor="confirmPassword" className="text-sm font-medium">
-          Confirm Password
+          {t('confirmPassword')}
         </label>
         <Input
           id="confirmPassword"
           type="password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          placeholder="••••••••"
+          placeholder={t('passwordPlaceholder')}
           required
           minLength={8}
           maxLength={100}
@@ -195,12 +197,12 @@ export default function RegisterForm() {
             {passwordChecks.passwordsMatch ? (
               <>
                 <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
-                <span className="text-green-600 dark:text-green-400">Passwords match</span>
+                <span className="text-green-600 dark:text-green-400">{t('passwordsMatch')}</span>
               </>
             ) : (
               <>
                 <X className="h-4 w-4 text-red-600 dark:text-red-400" />
-                <span className="text-red-600 dark:text-red-400">Passwords do not match</span>
+                <span className="text-red-600 dark:text-red-400">{t('passwordsNotMatch')}</span>
               </>
             )}
           </div>
@@ -213,13 +215,13 @@ export default function RegisterForm() {
         disabled={isLoading || isLocked || !passwordChecks.minLength || !passwordChecks.maxLength || !passwordChecks.passwordsMatch}
         className="w-full"
       >
-        {isLoading || isLocked ? 'Creating Account...' : 'Create Account'}
+        {isLoading || isLocked ? t('submitting') : t('submit')}
       </Button>
 
       <p className="text-center text-sm text-muted-foreground">
-        Already have an account?{' '}
+        {t('hasAccount')}{' '}
         <Link href="/login" className="text-primary hover:underline font-medium">
-          Sign in
+          {t('signIn')}
         </Link>
       </p>
     </form>

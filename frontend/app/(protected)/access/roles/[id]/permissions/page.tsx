@@ -72,7 +72,7 @@ export default function RolePermissionsPage({ params }: PageProps) {
     );
   }
 
-  const assignedPermissionIds = roleWithPermissions?.permissions.map((p) => p.id) || [];
+  const assignedPermissionIds = roleWithPermissions?.permissions?.map((p) => p.id) || [];
 
   return (
     <div className="space-y-6">

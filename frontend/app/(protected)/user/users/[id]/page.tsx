@@ -229,7 +229,6 @@ export default function UserDetailPage({ params }: PageProps) {
                                                     )}
                                                 </div>
                                                 <div className="text-xs text-muted-foreground space-y-1">
-                                                    {positionAssignment.position?.department?.name && <div>Bagian: {positionAssignment.position.department.name}</div>}
                                                     {positionAssignment.sk_number && <div>SK: {positionAssignment.sk_number}</div>}
                                                     <div className="flex gap-3">
                                                         <span>Mulai: {new Date(positionAssignment.start_date).toLocaleDateString("id-ID")}</span>

@@ -124,14 +124,7 @@ export function AssignPositionDialog({ userId, assignedPositionIds = [] }: Assig
                 <SelectContent>
                   {availablePositions.map((position) => (
                     <SelectItem key={position.id} value={position.id}>
-                      <div className="flex flex-col">
-                        <span>{position.name}</span>
-                        {position.department?.name && (
-                          <span className="text-xs text-muted-foreground">
-                            {position.department.name}
-                          </span>
-                        )}
-                      </div>
+                      <span>{position.name}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -18,7 +18,7 @@ interface DynamicIconProps extends LucideProps {
  */
 export function DynamicIcon({ name, fallback, ...props }: DynamicIconProps) {
   // Get the icon component from lucide-react
-  const IconComponent = (LucideIcons as Record<string, React.ComponentType<LucideProps>>)[name];
+  const IconComponent = (LucideIcons as unknown as Record<string, React.ComponentType<LucideProps>>)[name];
 
   if (!IconComponent) {
     // Return fallback or null if icon not found

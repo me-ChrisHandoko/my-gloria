@@ -12,6 +12,7 @@ import (
 	"backend/internal/database"
 	"backend/internal/email"
 	"backend/internal/helpers"
+	"backend/internal/i18n"
 	"backend/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -32,28 +33,28 @@ func Register(c *gin.Context) {
 	var employee models.DataKaryawan
 	if err := db.Where("email = ?", req.Email).First(&employee).Error; err != nil {
 		// Email not found in employee database
-		c.JSON(http.StatusForbidden, gin.H{"error": "Email tidak terdaftar sebagai karyawan"})
+		helpers.Forbidden(c, i18n.MsgAuthEmailNotRegistered)
 		return
 	}
 
 	// Check if employee is active using existing helper method
 	if !employee.IsActiveEmployee() {
 		// Employee exists but status not active
-		c.JSON(http.StatusForbidden, gin.H{"error": "Akun karyawan tidak aktif"})
+		helpers.Forbidden(c, i18n.MsgAuthAccountInactive)
 		return
 	}
 
 	// Check email uniqueness in users table (prevent double registration)
 	var existingUser models.User
 	if err := db.Where("email = ?", req.Email).First(&existingUser).Error; err == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Email sudah terdaftar"})
+		helpers.BadRequest(c, i18n.MsgAuthEmailAlreadyExists)
 		return
 	}
 
 	// Hash password
 	hashedPassword, err := auth.HashPassword(req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		helpers.InternalError(c, i18n.MsgAuthPasswordHashFailed)
 		return
 	}
 
@@ -73,20 +74,20 @@ func Register(c *gin.Context) {
 	}
 
 	if err := db.Create(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		helpers.InternalError(c, i18n.MsgCrudCreateFailed)
 		return
 	}
 
 	// Generate tokens
 	accessToken, err := auth.GenerateAccessToken(user.ID, user.Email)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate access token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
 	refreshToken, refreshHash, err := auth.GenerateRefreshToken()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate refresh token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
@@ -103,20 +104,20 @@ func Register(c *gin.Context) {
 	}
 
 	if err := db.Create(&rt).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store refresh token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
 	// Preload DataKaryawan for user (only active employees)
 	if err := db.Preload("DataKaryawan", "status_aktif = ?", "Aktif").First(&user, "id = ?", user.ID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load user data"})
+		helpers.InternalError(c, i18n.MsgCrudFetchFailed)
 		return
 	}
 
 	// Generate CSRF token for this user session
 	csrfToken, err := auth.GenerateCSRFToken(user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate CSRF token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
@@ -141,10 +142,7 @@ func Register(c *gin.Context) {
 	}()
 
 	// Return success with user info only (NO TOKENS in body for security)
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Registration successful",
-		"user":    user.ToUserInfo(),
-	})
+	helpers.SuccessResponse(c, http.StatusCreated, i18n.MsgAuthRegisterSuccess, user.ToUserInfo())
 }
 
 // Login handles user authentication
@@ -178,15 +176,14 @@ func Login(c *gin.Context) {
 	var user models.User
 	if err := db.Where("email = ?", req.Email).First(&user).Error; err != nil {
 		logAttempt(false, "invalid_credentials")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrInvalidCredentials})
+		helpers.Unauthorized(c, i18n.MsgAuthCredentialsInvalid)
 		return
 	}
 
 	// Check if account is locked
 	if user.LockedUntil != nil && time.Now().Before(*user.LockedUntil) {
 		logAttempt(false, "account_locked")
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":        auth.ErrAccountLocked,
+		helpers.ErrorResponseWithDetails(c, http.StatusUnauthorized, i18n.MsgAuthAccountInactive, gin.H{
 			"locked_until": user.LockedUntil,
 		})
 		return
@@ -201,7 +198,7 @@ func Login(c *gin.Context) {
 	// Check if account is active
 	if !user.IsActive {
 		logAttempt(false, "account_inactive")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrAccountInactive})
+		helpers.Unauthorized(c, i18n.MsgAuthAccountInactive)
 		return
 	}
 
@@ -218,7 +215,7 @@ func Login(c *gin.Context) {
 
 		db.Save(&user)
 		logAttempt(false, "invalid_credentials")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrInvalidCredentials})
+		helpers.Unauthorized(c, i18n.MsgAuthCredentialsInvalid)
 		return
 	}
 
@@ -228,9 +225,7 @@ func Login(c *gin.Context) {
 		// Employee record exists, check if active
 		if !employee.IsActiveEmployee() {
 			logAttempt(false, "employee_inactive")
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Akun karyawan Anda sudah tidak aktif. Silakan hubungi administrator.",
-			})
+			helpers.Forbidden(c, i18n.MsgAuthAccountInactive)
 			return
 		}
 	}
@@ -246,13 +241,13 @@ func Login(c *gin.Context) {
 	// Generate tokens
 	accessToken, err := auth.GenerateAccessToken(user.ID, user.Email)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate access token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
 	refreshToken, refreshHash, err := auth.GenerateRefreshToken()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate refresh token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
@@ -267,7 +262,7 @@ func Login(c *gin.Context) {
 	}
 
 	if err := db.Create(&rt).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store refresh token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
@@ -280,7 +275,7 @@ func Login(c *gin.Context) {
 	// Preload DataKaryawan for user (only active employees)
 	if err := db.Preload("DataKaryawan", "status_aktif = ?", "Aktif").First(&user, "id = ?", user.ID).Error; err != nil {
 		println("DEBUG: Failed to preload user:", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load user data"})
+		helpers.InternalError(c, i18n.MsgCrudFetchFailed)
 		return
 	}
 
@@ -299,7 +294,7 @@ func Login(c *gin.Context) {
 	// Generate CSRF token for this user session
 	csrfToken, err := auth.GenerateCSRFToken(user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate CSRF token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
@@ -309,10 +304,7 @@ func Login(c *gin.Context) {
 	helpers.SetCSRFCookie(c, csrfToken, isProduction)
 
 	// Return success with user info only (NO TOKENS in body for security)
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Login successful",
-		"user":    user.ToUserInfo(),
-	})
+	helpers.SuccessResponse(c, http.StatusOK, i18n.MsgAuthLoginSuccess, user.ToUserInfo())
 }
 
 // RefreshToken handles token refresh with rotation (security best practice)
@@ -320,7 +312,7 @@ func RefreshToken(c *gin.Context) {
 	// Get refresh token from httpOnly cookie (secure)
 	refreshTokenFromCookie, err := c.Cookie("gloria_refresh_token")
 	if err != nil || refreshTokenFromCookie == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token required"})
+		helpers.Unauthorized(c, i18n.MsgAuthTokenInvalid)
 		return
 	}
 
@@ -331,7 +323,7 @@ func RefreshToken(c *gin.Context) {
 	if err := db.Where("expires_at > ?", time.Now()).
 		Preload("User").
 		Find(&refreshTokens).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrTokenInvalid})
+		helpers.Unauthorized(c, i18n.MsgAuthTokenInvalid)
 		return
 	}
 
@@ -344,7 +336,7 @@ func RefreshToken(c *gin.Context) {
 	}
 
 	if oldRT == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrTokenInvalid})
+		helpers.Unauthorized(c, i18n.MsgAuthTokenInvalid)
 		return
 	}
 
@@ -356,26 +348,26 @@ func RefreshToken(c *gin.Context) {
 			Where("user_id = ?", oldRT.User.ID).
 			Update("revoked_at", time.Now())
 
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "token reuse detected - all sessions revoked for security"})
+		helpers.Unauthorized(c, i18n.MsgAuthTokenInvalid)
 		return
 	}
 
 	// Check expiry
 	if time.Now().After(oldRT.ExpiresAt) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrTokenExpired})
+		helpers.Unauthorized(c, i18n.MsgAuthTokenExpired)
 		return
 	}
 
 	// Check user is active
 	if !oldRT.User.IsActive {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": auth.ErrAccountInactive})
+		helpers.Unauthorized(c, i18n.MsgAuthAccountInactive)
 		return
 	}
 
 	// TOKEN ROTATION: Start transaction for atomic operation
 	tx := db.Begin()
 	if tx.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start transaction"})
+		helpers.InternalError(c, i18n.MsgErrorInternal)
 		return
 	}
 
@@ -385,7 +377,7 @@ func RefreshToken(c *gin.Context) {
 	oldRT.LastUsedAt = &now
 	if err := tx.Save(oldRT).Error; err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke old token"})
+		helpers.InternalError(c, i18n.MsgAuthRefreshFailed)
 		return
 	}
 
@@ -393,7 +385,7 @@ func RefreshToken(c *gin.Context) {
 	accessToken, err := auth.GenerateAccessToken(oldRT.User.ID, oldRT.User.Email)
 	if err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate access token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
@@ -401,7 +393,7 @@ func RefreshToken(c *gin.Context) {
 	newRefreshToken, newRefreshHash, err := auth.GenerateRefreshToken()
 	if err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate new refresh token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
@@ -419,7 +411,7 @@ func RefreshToken(c *gin.Context) {
 
 	if err := tx.Create(&newRT).Error; err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store new refresh token"})
+		helpers.InternalError(c, i18n.MsgAuthRefreshFailed)
 		return
 	}
 
@@ -427,13 +419,13 @@ func RefreshToken(c *gin.Context) {
 	csrfToken, err := auth.GenerateCSRFToken(oldRT.User.ID)
 	if err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate CSRF token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
 	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit transaction"})
+		helpers.InternalError(c, i18n.MsgErrorInternal)
 		return
 	}
 
@@ -448,22 +440,20 @@ func RefreshToken(c *gin.Context) {
 		oldRT.User.Email, oldRT.ID, newRT.ID, ipAddress)
 
 	// Return success only (NO TOKEN in body for security)
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Token refreshed successfully",
-	})
+	helpers.MessageOnlyResponse(c, http.StatusOK, i18n.MsgAuthRefreshSuccess)
 }
 
 // ChangePassword handles password change
 func ChangePassword(c *gin.Context) {
 	userID := c.GetString("user_id")
 	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		helpers.Unauthorized(c, i18n.MsgErrorUnauthorized)
 		return
 	}
 
 	var req models.ChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		helpers.BadRequest(c, i18n.MsgErrorBadRequest)
 		return
 	}
 
@@ -472,20 +462,20 @@ func ChangePassword(c *gin.Context) {
 	// Get user
 	var user models.User
 	if err := db.First(&user, "id = ?", userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		helpers.NotFound(c, i18n.MsgUserNotFound)
 		return
 	}
 
 	// Verify current password
 	if !auth.VerifyPassword(req.CurrentPassword, user.PasswordHash) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "current password is incorrect"})
+		helpers.Unauthorized(c, i18n.MsgAuthOldPasswordIncorrect)
 		return
 	}
 
 	// Hash new password
 	newHash, err := auth.HashPassword(req.NewPassword)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		helpers.InternalError(c, i18n.MsgAuthPasswordHashFailed)
 		return
 	}
 
@@ -495,30 +485,23 @@ func ChangePassword(c *gin.Context) {
 	user.LastPasswordChange = &now
 
 	if err := db.Save(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+		helpers.InternalError(c, i18n.MsgCrudUpdateFailed)
 		return
 	}
 
 	// Revoke all refresh tokens (force re-login)
-	if err := db.Model(&models.RefreshToken{}).
+	db.Model(&models.RefreshToken{}).
 		Where("user_id = ?", userID).
-		Update("revoked_at", time.Now()).Error; err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "password changed successfully, but failed to revoke tokens",
-		})
-		return
-	}
+		Update("revoked_at", time.Now())
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "password changed successfully.",
-	})
+	helpers.MessageOnlyResponse(c, http.StatusOK, i18n.MsgAuthPasswordChanged)
 }
 
 // GetMe returns current user information
 func GetMe(c *gin.Context) {
 	userID := c.GetString("user_id")
 	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		helpers.Unauthorized(c, i18n.MsgErrorUnauthorized)
 		return
 	}
 
@@ -529,21 +512,43 @@ func GetMe(c *gin.Context) {
 		Preload("UserPositions.Position").
 		Preload("DataKaryawan", "status_aktif = ?", "Aktif").
 		First(&user, "id = ?", userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		helpers.NotFound(c, i18n.MsgUserNotFound)
 		return
 	}
 
-	c.JSON(http.StatusOK, user.ToUserInfo())
+	helpers.DataResponse(c, http.StatusOK, user.ToUserInfo())
 }
 
 // Logout revokes refresh token
+// This endpoint is public (no JWT required) to allow logout with expired tokens
+// But we still validate CSRF when possible to prevent logout CSRF attacks
 func Logout(c *gin.Context) {
+	// Try to validate CSRF if we have an access token (even if expired)
+	// This prevents logout CSRF attacks while allowing logout with expired JWT
+	accessTokenFromCookie, _ := c.Cookie("gloria_access_token")
+	if accessTokenFromCookie != "" {
+		// Parse token without validation to get user_id (works even if expired)
+		claims, err := auth.ParseTokenClaims(accessTokenFromCookie)
+		if err == nil && claims.UserID != "" {
+			// We have user_id, validate CSRF token
+			csrfToken := c.GetHeader("X-CSRF-Token")
+			if csrfToken == "" {
+				c.JSON(http.StatusForbidden, gin.H{"error": "CSRF token is required"})
+				return
+			}
+			if err := auth.ValidateCSRFToken(csrfToken, claims.UserID); err != nil {
+				c.JSON(http.StatusForbidden, gin.H{"error": "CSRF validation failed"})
+				return
+			}
+		}
+	}
+
 	// Get refresh token from httpOnly cookie (secure)
 	refreshTokenFromCookie, err := c.Cookie("gloria_refresh_token")
 	if err != nil || refreshTokenFromCookie == "" {
 		// Even if no cookie, still clear cookies for logout
 		helpers.ClearAuthCookies(c)
-		c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
+		helpers.MessageOnlyResponse(c, http.StatusOK, i18n.MsgAuthLogoutSuccess)
 		return
 	}
 
@@ -554,7 +559,7 @@ func Logout(c *gin.Context) {
 	if err := db.Find(&refreshTokens).Error; err != nil {
 		// Clear cookies even if DB query fails
 		helpers.ClearAuthCookies(c)
-		c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
+		helpers.MessageOnlyResponse(c, http.StatusOK, i18n.MsgAuthLogoutSuccess)
 		return
 	}
 
@@ -567,7 +572,7 @@ func Logout(c *gin.Context) {
 			// Clear httpOnly cookies
 			helpers.ClearAuthCookies(c)
 
-			c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
+			helpers.MessageOnlyResponse(c, http.StatusOK, i18n.MsgAuthLogoutSuccess)
 			return
 		}
 	}
@@ -575,7 +580,7 @@ func Logout(c *gin.Context) {
 	// Even if token not found in DB, still clear cookies (client-side logout)
 	helpers.ClearAuthCookies(c)
 
-	c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
+	helpers.MessageOnlyResponse(c, http.StatusOK, i18n.MsgAuthLogoutSuccess)
 }
 
 // ForgotPasswordRequest represents the request body for forgot password
@@ -602,7 +607,7 @@ func generateResetToken() (string, error) {
 func ForgotPassword(c *gin.Context) {
 	var req ForgotPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		helpers.BadRequest(c, i18n.MsgErrorBadRequest)
 		return
 	}
 
@@ -612,27 +617,27 @@ func ForgotPassword(c *gin.Context) {
 	var user models.User
 	if err := db.Where("email = ?", req.Email).First(&user).Error; err != nil {
 		// Don't reveal if email exists or not for security
-		c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a password reset link has been sent"})
+		helpers.MessageOnlyResponse(c, http.StatusOK, i18n.MsgAuthPasswordResetSent)
 		return
 	}
 
 	// Check if user is active
 	if !user.IsActive {
-		c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a password reset link has been sent"})
+		helpers.MessageOnlyResponse(c, http.StatusOK, i18n.MsgAuthPasswordResetSent)
 		return
 	}
 
 	// Generate reset token
 	resetToken, err := generateResetToken()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate reset token"})
+		helpers.InternalError(c, i18n.MsgAuthTokenGenerateFailed)
 		return
 	}
 
 	// Hash the token before storing
 	tokenHash, err := auth.HashPassword(resetToken)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash token"})
+		helpers.InternalError(c, i18n.MsgAuthPasswordHashFailed)
 		return
 	}
 
@@ -644,7 +649,7 @@ func ForgotPassword(c *gin.Context) {
 	user.PasswordResetExpiresAt = &expiresAt
 
 	if err := db.Save(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save reset token"})
+		helpers.InternalError(c, i18n.MsgErrorInternal)
 		return
 	}
 
@@ -652,18 +657,18 @@ func ForgotPassword(c *gin.Context) {
 	emailSender := email.NewEmailSender()
 	if err := emailSender.SendPasswordResetEmail(user.Email, resetToken); err != nil {
 		// Log error but don't reveal to user
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send email"})
+		helpers.InternalError(c, i18n.MsgErrorInternal)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a password reset link has been sent"})
+	helpers.MessageOnlyResponse(c, http.StatusOK, i18n.MsgAuthPasswordResetSent)
 }
 
 // ResetPassword handles password reset with token
 func ResetPassword(c *gin.Context) {
 	var req ResetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		helpers.BadRequest(c, i18n.MsgErrorBadRequest)
 		return
 	}
 
@@ -672,7 +677,7 @@ func ResetPassword(c *gin.Context) {
 	// Find user with non-expired reset token
 	var users []models.User
 	if err := db.Where("password_reset_token IS NOT NULL AND password_reset_expires_at > ?", time.Now()).Find(&users).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired reset token"})
+		helpers.BadRequest(c, i18n.MsgAuthPasswordResetInvalid)
 		return
 	}
 
@@ -686,14 +691,14 @@ func ResetPassword(c *gin.Context) {
 	}
 
 	if targetUser == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired reset token"})
+		helpers.BadRequest(c, i18n.MsgAuthPasswordResetExpired)
 		return
 	}
 
 	// Hash new password
 	hashedPassword, err := auth.HashPassword(req.NewPassword)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		helpers.InternalError(c, i18n.MsgAuthPasswordHashFailed)
 		return
 	}
 
@@ -707,9 +712,9 @@ func ResetPassword(c *gin.Context) {
 	targetUser.LockedUntil = nil
 
 	if err := db.Save(targetUser).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+		helpers.InternalError(c, i18n.MsgCrudUpdateFailed)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Password has been reset successfully"})
+	helpers.MessageOnlyResponse(c, http.StatusOK, i18n.MsgAuthPasswordResetSuccess)
 }

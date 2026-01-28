@@ -14,6 +14,8 @@ import {
   useGetPermissionScopesQuery,
   useGetPermissionActionsQuery,
 } from "@/lib/store/services/permissionsApi";
+import type { UpdatePermissionRequest } from "@/lib/types/permission";
+import type { PermissionAction, PermissionScope, ModuleCategory } from "@/lib/types/permission";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -113,7 +115,7 @@ function EditPermissionForm({ params }: PageProps) {
         category: permission.category || "",
         group_name: permission.group_name || "",
         group_icon: permission.group_icon || "",
-        group_sort_order: permission.group_sort_order,
+        group_sort_order: permission.group_sort_order ?? undefined,
         is_active: permission.is_active,
       });
     }
@@ -122,24 +124,12 @@ function EditPermissionForm({ params }: PageProps) {
   const onSubmit = async (data: PermissionFormData) => {
     try {
       // Build update payload
-      const cleanedData: {
-        code?: string;
-        name?: string;
-        description?: string | null;
-        resource?: string;
-        action?: string;
-        scope?: string | null;
-        category?: string | null;
-        group_name?: string | null;
-        group_icon?: string | null;
-        group_sort_order?: number | null;
-        is_active?: boolean;
-      } = {};
+      const cleanedData: Partial<UpdatePermissionRequest> = {};
 
       if (data.code !== undefined && data.code !== "") cleanedData.code = data.code;
       if (data.name !== undefined && data.name !== "") cleanedData.name = data.name;
       if (data.resource !== undefined && data.resource !== "") cleanedData.resource = data.resource;
-      if (data.action !== undefined && data.action !== "") cleanedData.action = data.action;
+      if (data.action !== undefined && data.action !== "") cleanedData.action = data.action as PermissionAction;
       if (data.is_active !== undefined) cleanedData.is_active = data.is_active;
 
       // Handle optional fields - convert empty string to null
@@ -152,13 +142,13 @@ function EditPermissionForm({ params }: PageProps) {
       if (data.scope === "") {
         cleanedData.scope = null;
       } else if (data.scope) {
-        cleanedData.scope = data.scope;
+        cleanedData.scope = data.scope as PermissionScope;
       }
 
       if (data.category === "") {
         cleanedData.category = null;
       } else if (data.category) {
-        cleanedData.category = data.category;
+        cleanedData.category = data.category as ModuleCategory;
       }
 
       if (data.group_name === "") {

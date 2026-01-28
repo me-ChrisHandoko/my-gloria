@@ -74,6 +74,10 @@ func setupRouter() *gin.Engine {
 	// Apply security headers middleware to all routes
 	router.Use(middleware.SecurityHeaders())
 
+	// Apply locale detection middleware for i18n support
+	// This reads NEXT_LOCALE cookie or Accept-Language header
+	router.Use(middleware.LocaleMiddleware())
+
 	// Initialize services
 	db := database.GetDB()
 	schoolService := services.NewSchoolService(db)
@@ -159,6 +163,7 @@ func setupRouter() *gin.Engine {
 			authPublic.POST("/register", handlers.Register)
 			authPublic.POST("/login", handlers.Login)
 			authPublic.POST("/refresh", handlers.RefreshToken)
+			authPublic.POST("/logout", handlers.Logout) // Public: allows logout even with expired token
 			authPublic.POST("/forgot-password", handlers.ForgotPassword)
 			authPublic.POST("/reset-password", handlers.ResetPassword)
 		}
@@ -172,7 +177,6 @@ func setupRouter() *gin.Engine {
 			authProtected := protected.Group("/auth")
 			{
 				authProtected.GET("/me", handlers.GetMe)
-				authProtected.POST("/logout", handlers.Logout)
 				authProtected.POST("/change-password", handlers.ChangePassword)
 			}
 			// User routes
