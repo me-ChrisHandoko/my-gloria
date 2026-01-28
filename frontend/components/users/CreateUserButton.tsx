@@ -8,18 +8,21 @@
 
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/rbac";
 
 export default function CreateUserButton() {
   const router = useRouter();
 
   return (
-    <Button
+    <ActionButton
+      resource="users"
+      action="CREATE"
+      hideOnDenied
       onClick={() => router.push("/user/users/create")}
       data-create-user-btn
     >
       <Plus className="mr-2 h-4 w-4" />
       Tambah Pengguna
-    </Button>
+    </ActionButton>
   );
 }

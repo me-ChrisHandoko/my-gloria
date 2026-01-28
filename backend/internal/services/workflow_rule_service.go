@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"backend/internal/models"
 
@@ -188,10 +189,22 @@ func (s *WorkflowRuleService) GetWorkflowRules(params WorkflowRuleListParams) (*
 		return nil, fmt.Errorf("gagal menghitung total aturan workflow: %w", err)
 	}
 
-	// Apply sorting
+	// Apply sorting with SQL injection prevention
 	if params.SortBy != "" {
-		order := params.SortBy + " " + params.SortOrder
-		query = query.Order(order)
+		validSortColumns := map[string]bool{
+			"workflow_type": true, "name": true, "priority": true,
+			"created_at": true, "is_active": true, "position_id": true,
+			"school_id": true, "creator_position_id": true,
+		}
+		if validSortColumns[params.SortBy] {
+			direction := "ASC"
+			if strings.ToLower(params.SortOrder) == "desc" {
+				direction = "DESC"
+			}
+			query = query.Order(fmt.Sprintf("%s %s", params.SortBy, direction))
+		} else {
+			query = query.Order("workflow_type ASC, created_at DESC")
+		}
 	} else {
 		query = query.Order("workflow_type ASC, created_at DESC")
 	}

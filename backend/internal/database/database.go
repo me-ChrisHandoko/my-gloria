@@ -95,6 +95,12 @@ func AutoMigrate() error {
 	}
 
 	log.Println("Database migrations completed successfully")
+
+	// Create RBAC performance indexes
+	if err := MigrateRBACIndexes(); err != nil {
+		log.Printf("Warning: RBAC index migration had issues: %v", err)
+	}
+
 	return nil
 }
 

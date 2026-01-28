@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const roleSchema = z.object({
   code: z.string()
@@ -34,7 +35,7 @@ const roleSchema = z.object({
 
 type RoleFormData = z.infer<typeof roleSchema>;
 
-export default function CreateRolePage() {
+function CreateRoleForm() {
   const router = useRouter();
   const [createRole, { isLoading }] = useCreateRoleMutation();
 
@@ -189,5 +190,13 @@ export default function CreateRolePage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function CreateRolePage() {
+  return (
+    <PermissionRouteGuard resource="roles" action="CREATE">
+      <CreateRoleForm />
+    </PermissionRouteGuard>
   );
 }

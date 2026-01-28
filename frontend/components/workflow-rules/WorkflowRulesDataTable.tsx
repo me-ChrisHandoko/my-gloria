@@ -29,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PermissionGate } from "@/components/rbac";
 
 interface WorkflowRulesDataTableProps {
   rules: WorkflowRuleListResponse[];
@@ -169,25 +170,31 @@ export default function WorkflowRulesDataTable({
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Aksi</DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/workflow/rules/${rule.id}`)}
-                      >
-                        <Eye className="mr-2 h-4 w-4" />
-                        Lihat Detail
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/workflow/rules/${rule.id}/edit`)}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-destructive"
-                        onClick={() => onDeleteClick(rule.id, `${getWorkflowTypeLabel(rule.workflow_type)} - ${rule.position_name}`)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Hapus
-                      </DropdownMenuItem>
+                      <PermissionGate resource="workflow_rules" action="READ" hideOnDenied>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/workflow/rules/${rule.id}`)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          Lihat Detail
+                        </DropdownMenuItem>
+                      </PermissionGate>
+                      <PermissionGate resource="workflow_rules" action="UPDATE" hideOnDenied>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/workflow/rules/${rule.id}/edit`)}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                      </PermissionGate>
+                      <PermissionGate resource="workflow_rules" action="DELETE" hideOnDenied>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => onDeleteClick(rule.id, `${getWorkflowTypeLabel(rule.workflow_type)} - ${rule.position_name}`)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Hapus
+                        </DropdownMenuItem>
+                      </PermissionGate>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

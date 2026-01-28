@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const karyawanSchema = z.object({
   nip: z.string().min(1, "NIP wajib diisi").max(15, "NIP maksimal 15 karakter"),
@@ -36,7 +37,7 @@ const karyawanSchema = z.object({
 
 type KaryawanFormData = z.infer<typeof karyawanSchema>;
 
-export default function CreateKaryawanPage() {
+function CreateKaryawanForm() {
   const router = useRouter();
   const [createKaryawan, { isLoading }] = useCreateKaryawanMutation();
 
@@ -272,5 +273,13 @@ export default function CreateKaryawanPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function CreateKaryawanPage() {
+  return (
+    <PermissionRouteGuard resource="employees" action="CREATE">
+      <CreateKaryawanForm />
+    </PermissionRouteGuard>
   );
 }

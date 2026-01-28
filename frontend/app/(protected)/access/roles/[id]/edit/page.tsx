@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Alert } from "@/components/ui/alert";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const roleSchema = z.object({
   code: z.string()
@@ -47,7 +48,7 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function EditRolePage({ params }: PageProps) {
+function EditRoleForm({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
 
@@ -240,5 +241,13 @@ export default function EditRolePage({ params }: PageProps) {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function EditRolePage({ params }: PageProps) {
+  return (
+    <PermissionRouteGuard resource="roles" action="UPDATE">
+      <EditRoleForm params={params} />
+    </PermissionRouteGuard>
   );
 }

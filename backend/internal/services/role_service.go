@@ -14,12 +14,29 @@ import (
 
 // RoleService handles business logic for roles
 type RoleService struct {
-	db *gorm.DB
+	db                   *gorm.DB
+	escalationPrevention *EscalationPreventionService
+	permissionCache      *PermissionCacheService
 }
 
 // NewRoleService creates a new RoleService instance
 func NewRoleService(db *gorm.DB) *RoleService {
 	return &RoleService{db: db}
+}
+
+// NewRoleServiceWithRBAC creates a new RoleService instance with RBAC services
+func NewRoleServiceWithRBAC(db *gorm.DB, escalation *EscalationPreventionService, cache *PermissionCacheService) *RoleService {
+	return &RoleService{
+		db:                   db,
+		escalationPrevention: escalation,
+		permissionCache:      cache,
+	}
+}
+
+// SetRBACServices sets the RBAC services (for dependency injection after creation)
+func (s *RoleService) SetRBACServices(escalation *EscalationPreventionService, cache *PermissionCacheService) {
+	s.escalationPrevention = escalation
+	s.permissionCache = cache
 }
 
 // RoleListParams represents parameters for listing roles
@@ -131,15 +148,23 @@ func (s *RoleService) GetRoles(params RoleListParams) (*RoleListResult, error) {
 		return nil, fmt.Errorf("gagal menghitung total role: %w", err)
 	}
 
-	// Apply sorting
+	// Apply sorting with validation to prevent SQL injection
 	if params.SortBy != "" {
-		order := params.SortBy
-		if params.SortOrder == "desc" {
-			order += " DESC"
-		} else {
-			order += " ASC"
+		validSortColumns := map[string]bool{
+			"code":            true,
+			"name":            true,
+			"hierarchy_level": true,
+			"created_at":      true,
+			"is_active":       true,
+			"is_system_role":  true,
 		}
-		query = query.Order(order)
+		if validSortColumns[params.SortBy] {
+			direction := "ASC"
+			if strings.ToLower(params.SortOrder) == "desc" {
+				direction = "DESC"
+			}
+			query = query.Order(fmt.Sprintf("%s %s", params.SortBy, direction))
+		}
 	} else {
 		query = query.Order("created_at DESC")
 	}
@@ -290,6 +315,11 @@ func (s *RoleService) UpdateRole(id string, req models.UpdateRoleRequest) (*mode
 		return nil, fmt.Errorf("gagal mengupdate role: %w", err)
 	}
 
+	// Invalidate cache for all users with this role
+	if s.permissionCache != nil {
+		s.invalidateCacheForRoleUsers(id)
+	}
+
 	return &role, nil
 }
 
@@ -317,6 +347,21 @@ func (s *RoleService) DeleteRole(id string) error {
 
 	if userRoleCount > 0 {
 		return errors.New("role masih digunakan oleh user, tidak dapat dihapus")
+	}
+
+	// Business rule: Check if role is a parent in role hierarchy
+	var childRoleCount int64
+	if err := s.db.Model(&models.RoleHierarchy{}).Where("parent_role_id = ?", id).Count(&childRoleCount).Error; err != nil {
+		return fmt.Errorf("gagal memeriksa hierarchy role: %w", err)
+	}
+
+	if childRoleCount > 0 {
+		return errors.New("role masih memiliki child roles dalam hierarchy, tidak dapat dihapus")
+	}
+
+	// Invalidate cache for all users with this role before deletion
+	if s.permissionCache != nil {
+		s.invalidateCacheForRoleUsers(id)
 	}
 
 	// Soft delete: set is_active to false
@@ -347,6 +392,13 @@ func (s *RoleService) AssignPermissionToRole(roleID string, req models.AssignPer
 		return nil, fmt.Errorf("gagal mengambil data permission: %w", err)
 	}
 
+	// Escalation Prevention: Validate that userID can grant this permission to the role
+	if s.escalationPrevention != nil {
+		if err := s.escalationPrevention.ValidateRolePermissionAssignment(userID, roleID, req.PermissionID); err != nil {
+			return nil, fmt.Errorf("escalation prevention: %w", err)
+		}
+	}
+
 	// Check if permission is already assigned
 	var existing models.RolePermission
 	err := s.db.Where("role_id = ? AND permission_id = ?", roleID, req.PermissionID).First(&existing).Error
@@ -370,6 +422,11 @@ func (s *RoleService) AssignPermissionToRole(roleID string, req models.AssignPer
 
 		if err := s.db.Save(&existing).Error; err != nil {
 			return nil, fmt.Errorf("gagal mengupdate permission role: %w", err)
+		}
+
+		// Invalidate cache for all users with this role
+		if s.permissionCache != nil {
+			s.invalidateCacheForRoleUsers(roleID)
 		}
 
 		return &existing, nil
@@ -402,6 +459,11 @@ func (s *RoleService) AssignPermissionToRole(roleID string, req models.AssignPer
 		return nil, fmt.Errorf("gagal menambahkan permission ke role: %w", err)
 	}
 
+	// Invalidate cache for all users with this role
+	if s.permissionCache != nil {
+		s.invalidateCacheForRoleUsers(roleID)
+	}
+
 	return &rolePermission, nil
 }
 
@@ -421,5 +483,24 @@ func (s *RoleService) RevokePermissionFromRole(roleID, permissionAssignmentID st
 		return fmt.Errorf("gagal menghapus permission dari role: %w", err)
 	}
 
+	// Invalidate cache for all users with this role
+	if s.permissionCache != nil {
+		s.invalidateCacheForRoleUsers(roleID)
+	}
+
 	return nil
+}
+
+// invalidateCacheForRoleUsers invalidates permission cache for all users who have a specific role
+func (s *RoleService) invalidateCacheForRoleUsers(roleID string) {
+	// Find all users with this role
+	var userRoles []models.UserRole
+	if err := s.db.Where("role_id = ? AND is_active = true", roleID).Find(&userRoles).Error; err != nil {
+		return // Silently fail - cache will eventually expire
+	}
+
+	// Invalidate cache for each user
+	for _, ur := range userRoles {
+		s.permissionCache.InvalidateUser(ur.UserID)
+	}
 }

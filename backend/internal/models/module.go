@@ -99,7 +99,7 @@ type CreateModuleRequest struct {
 	Description *string        `json:"description,omitempty"`
 	Icon        *string        `json:"icon,omitempty"`
 	Path        *string        `json:"path,omitempty"`
-	ParentID    *string        `json:"parent_id,omitempty" binding:"omitempty,len=36"`
+	ParentID    *string        `json:"parent_id,omitempty"`
 	SortOrder   *int           `json:"sort_order,omitempty"`
 	IsVisible   *bool          `json:"is_visible,omitempty"`
 }
@@ -112,7 +112,7 @@ type UpdateModuleRequest struct {
 	Description *string         `json:"description,omitempty"`
 	Icon        *string         `json:"icon,omitempty"`
 	Path        *string         `json:"path,omitempty"`
-	ParentID    *string         `json:"parent_id,omitempty" binding:"omitempty,len=36"`
+	ParentID    *string         `json:"parent_id,omitempty"`
 	SortOrder   *int            `json:"sort_order,omitempty"`
 	IsActive    *bool           `json:"is_active,omitempty"`
 	IsVisible   *bool           `json:"is_visible,omitempty"`

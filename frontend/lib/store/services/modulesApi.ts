@@ -8,6 +8,7 @@
 
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQueryWithReauth } from '../baseApi';
+import { accessApi } from './accessApi';
 import {
   Module,
   ModuleListResponse,
@@ -57,7 +58,16 @@ export const modulesApi = createApi({
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['Module'],
+      invalidatesTags: ['Module', 'ModuleTree'],
+      // Also invalidate accessApi to refresh sidebar menu
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(accessApi.util.invalidateTags(['UserModules']));
+        } catch {
+          // Error is handled by invalidatesTags
+        }
+      },
     }),
     updateModule: builder.mutation<Module, { id: string; data: UpdateModuleRequest }>({
       query: ({ id, data }) => ({
@@ -68,14 +78,33 @@ export const modulesApi = createApi({
       invalidatesTags: (result, error, { id }) => [
         { type: 'Module', id: 'LIST' },
         { type: 'ModuleDetail', id },
+        'ModuleTree',
       ],
+      // Also invalidate accessApi to refresh sidebar menu when is_visible changes
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(accessApi.util.invalidateTags(['UserModules']));
+        } catch {
+          // Error is handled by invalidatesTags
+        }
+      },
     }),
     deleteModule: builder.mutation<void, string>({
       query: (id) => ({
         url: `/modules/${id}`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['Module'],
+      invalidatesTags: ['Module', 'ModuleTree'],
+      // Also invalidate accessApi to refresh sidebar menu
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(accessApi.util.invalidateTags(['UserModules']));
+        } catch {
+          // Error is handled by invalidatesTags
+        }
+      },
     }),
 
     // Module Access Endpoints
@@ -99,6 +128,16 @@ export const modulesApi = createApi({
         { type: 'RoleModuleAccess', id: roleId },
         { type: 'RoleModuleAccess', id: 'LIST' },
       ],
+      // Also invalidate accessApi to refresh sidebar menu
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          // Invalidate user modules and permissions from accessApi
+          dispatch(accessApi.util.invalidateTags(['UserModules', 'UserPermissions']));
+        } catch {
+          // Error is handled by invalidatesTags
+        }
+      },
     }),
     revokeModuleFromRole: builder.mutation<void, { roleId: string; accessId: string }>({
       query: ({ roleId, accessId }) => ({
@@ -109,6 +148,16 @@ export const modulesApi = createApi({
         { type: 'RoleModuleAccess', id: roleId },
         { type: 'RoleModuleAccess', id: 'LIST' },
       ],
+      // Also invalidate accessApi to refresh sidebar menu
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          // Invalidate user modules and permissions from accessApi
+          dispatch(accessApi.util.invalidateTags(['UserModules', 'UserPermissions']));
+        } catch {
+          // Error is handled by invalidatesTags
+        }
+      },
     }),
 
     // User Module Access endpoints
@@ -130,6 +179,15 @@ export const modulesApi = createApi({
       invalidatesTags: (result, error, { userId }) => [
         { type: 'UserModuleAccess', id: userId },
       ],
+      // Also invalidate accessApi to refresh sidebar menu
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(accessApi.util.invalidateTags(['UserModules', 'UserPermissions']));
+        } catch {
+          // Error is handled by invalidatesTags
+        }
+      },
     }),
     revokeModuleAccessFromUser: builder.mutation<
       void,
@@ -143,6 +201,15 @@ export const modulesApi = createApi({
       invalidatesTags: (result, error, { userId }) => [
         { type: 'UserModuleAccess', id: userId },
       ],
+      // Also invalidate accessApi to refresh sidebar menu
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(accessApi.util.invalidateTags(['UserModules', 'UserPermissions']));
+        } catch {
+          // Error is handled by invalidatesTags
+        }
+      },
     }),
   }),
 });

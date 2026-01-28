@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Alert } from "@/components/ui/alert";
+import { PermissionGate, ActionButton } from "@/components/rbac";
 
 const getDelegationTypeColor = (type: string) => {
   const colors: Record<string, string> = {
@@ -164,21 +165,27 @@ export default function DelegationsPage() {
                 Copy Delegation ID
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push(`/delegations/${delegation.id}`)}>
-                <Eye className="mr-2 h-4 w-4" />
-                Lihat Detail
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push(`/delegations/${delegation.id}/edit`)}>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleDelete(delegation.id, delegatorName)}
-                className="text-destructive"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Hapus
-              </DropdownMenuItem>
+              <PermissionGate resource="delegations" action="READ" hideOnDenied>
+                <DropdownMenuItem onClick={() => router.push(`/delegations/${delegation.id}`)}>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Lihat Detail
+                </DropdownMenuItem>
+              </PermissionGate>
+              <PermissionGate resource="delegations" action="UPDATE" hideOnDenied>
+                <DropdownMenuItem onClick={() => router.push(`/delegations/${delegation.id}/edit`)}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+              </PermissionGate>
+              <PermissionGate resource="delegations" action="DELETE" hideOnDenied>
+                <DropdownMenuItem
+                  onClick={() => handleDelete(delegation.id, delegatorName)}
+                  className="text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Hapus
+                </DropdownMenuItem>
+              </PermissionGate>
             </DropdownMenuContent>
           </DropdownMenu>
         );
@@ -208,10 +215,15 @@ export default function DelegationsPage() {
             Kelola delegasi approval, permission, dan workflow
           </p>
         </div>
-        <Button onClick={() => router.push("/delegations/create")}>
+        <ActionButton
+          resource="delegations"
+          action="CREATE"
+          hideOnDenied
+          onClick={() => router.push("/delegations/create")}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Tambah Delegasi
-        </Button>
+        </ActionButton>
       </div>
 
       {/* Data Table */}

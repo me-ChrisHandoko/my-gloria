@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useDeletePositionMutation } from "@/lib/store/services/organizationApi";
 import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { ActionButton } from "@/components/rbac";
 
 interface PositionDetailActionsProps {
     positionId: string;
@@ -37,11 +38,24 @@ export default function PositionDetailActions({ positionId, positionName }: Posi
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Kembali ke Daftar
             </Button>
-            <Button variant="outline" onClick={() => router.push(`/organization/positions/${positionId}/edit`)}>
+            <ActionButton
+                resource="positions"
+                action="UPDATE"
+                variant="outline"
+                hideOnDenied
+                onClick={() => router.push(`/organization/positions/${positionId}/edit`)}
+            >
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
-            </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+            </ActionButton>
+            <ActionButton
+                resource="positions"
+                action="DELETE"
+                variant="destructive"
+                hideOnDenied
+                onClick={handleDelete}
+                disabled={isDeleting}
+            >
                 {isDeleting ? (
                     <>
                         <LoadingSpinner />
@@ -53,7 +67,7 @@ export default function PositionDetailActions({ positionId, positionName }: Posi
                         Hapus
                     </>
                 )}
-            </Button>
+            </ActionButton>
         </div>
     );
 }

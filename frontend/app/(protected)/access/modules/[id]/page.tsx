@@ -1,31 +1,60 @@
-// app/(protected)/akses/modules/[id]/page.tsx
+// app/(protected)/access/modules/[id]/page.tsx
 /**
- * Module Detail Page with Hybrid SSR
- * - Server Component for initial data fetch
- * - Client islands for interactive buttons
+ * Module Detail Page - Pure CSR Pattern
+ *
+ * Client Component that uses RTK Query for data fetching.
+ * This ensures proper token refresh handling on 401 errors.
+ *
+ * Benefits:
+ * - Automatic token refresh via baseQueryWithReauth
+ * - Consistent with other protected pages (roles, profile)
+ * - Simpler code with single data flow
+ * - Built-in caching via RTK Query
  */
+"use client";
 
+import { use } from "react";
 import { Box, Network, Calendar, Info, User, FileText, Eye, EyeOff } from "lucide-react";
 import { format } from "date-fns";
 
-import { getModuleById } from "@/lib/server/api";
+import { useGetModuleByIdQuery } from "@/lib/store/services/modulesApi";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ModuleDetailActions from "@/components/modules/ModuleDetailActions";
 
 interface PageProps {
     params: Promise<{ id: string }>;
 }
 
-export default async function ModuleDetailPage({ params }: PageProps) {
-    const { id } = await params;
+export default function ModuleDetailPage({ params }: PageProps) {
+    // Use React.use() for client-side param resolution
+    const { id } = use(params);
 
-    // Server-side data fetching
-    const { data: module, error } = await getModuleById(id);
+    // Client-side data fetching with automatic token refresh on 401
+    const { data: module, isLoading, error } = useGetModuleByIdQuery(id);
 
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="flex justify-center py-12">
+                <LoadingSpinner />
+            </div>
+        );
+    }
+
+    // Error state
     if (error || !module) {
-        return <Alert variant="error">Gagal memuat data module: {error || "Module not found"}</Alert>;
+        const errorMessage = error
+            ? "status" in error
+                ? (error.data as { message?: string; error?: string })?.message ||
+                  (error.data as { message?: string; error?: string })?.error ||
+                  `Error ${error.status}`
+                : error.message || "Unknown error"
+            : "Module not found";
+
+        return <Alert variant="error">Gagal memuat data module: {errorMessage}</Alert>;
     }
 
     return (
@@ -38,11 +67,11 @@ export default async function ModuleDetailPage({ params }: PageProps) {
                     </div>
                     <p className="text-muted-foreground">Kode: {module.code}</p>
                 </div>
-                {/* Client Island - Action Buttons */}
+                {/* Action Buttons */}
                 <ModuleDetailActions moduleId={id} moduleName={module.name} />
             </div>
 
-            {/* Informasi Dasar - Static Content (Server Component) */}
+            {/* Informasi Dasar */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -72,7 +101,9 @@ export default async function ModuleDetailPage({ params }: PageProps) {
                             <Network className="h-4 w-4" />
                             Parent Module
                         </Label>
-                        <p className="text-sm">{module.parent?.name || <span className="text-muted-foreground">Root (Tanpa parent)</span>}</p>
+                        <p className="text-sm">
+                            {module.parent?.name || <span className="text-muted-foreground">Root (Tanpa parent)</span>}
+                        </p>
                     </div>
 
                     {module.icon && (
@@ -115,7 +146,7 @@ export default async function ModuleDetailPage({ params }: PageProps) {
                 </CardContent>
             </Card>
 
-            {/* Deskripsi - Static Content (Server Component) */}
+            {/* Deskripsi */}
             {module.description && (
                 <Card>
                     <CardHeader>
@@ -131,7 +162,7 @@ export default async function ModuleDetailPage({ params }: PageProps) {
                 </Card>
             )}
 
-            {/* Informasi Tambahan - Static Content (Server Component) */}
+            {/* Informasi Tambahan */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -180,7 +211,9 @@ export default async function ModuleDetailPage({ params }: PageProps) {
                     <div className="space-y-1">
                         <Label>Status</Label>
                         <div>
-                            <Badge variant={module.is_active ? "success" : "secondary"}>{module.is_active ? "Aktif" : "Non-Aktif"}</Badge>
+                            <Badge variant={module.is_active ? "success" : "secondary"}>
+                                {module.is_active ? "Aktif" : "Non-Aktif"}
+                            </Badge>
                         </div>
                     </div>
 
@@ -216,6 +249,3 @@ function getCategoryColor(category: string): string {
     };
     return colors[category] || "bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-500/20";
 }
-
-// Optional: Enable revalidation for fresh data
-export const revalidate = 0;

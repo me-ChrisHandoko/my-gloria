@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Alert } from "@/components/ui/alert";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const schoolSchema = z.object({
   code: z.string()
@@ -56,7 +57,7 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function EditSchoolPage({ params }: PageProps) {
+function EditSchoolForm({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
 
@@ -294,5 +295,13 @@ export default function EditSchoolPage({ params }: PageProps) {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function EditSchoolPage({ params }: PageProps) {
+  return (
+    <PermissionRouteGuard resource="schools" action="UPDATE">
+      <EditSchoolForm params={params} />
+    </PermissionRouteGuard>
   );
 }

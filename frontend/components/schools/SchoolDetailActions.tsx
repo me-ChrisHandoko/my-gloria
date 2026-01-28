@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { useDeleteSchoolMutation } from "@/lib/store/services/organizationApi";
 import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { ActionButton } from "@/components/rbac";
 
 interface SchoolDetailActionsProps {
     schoolId: string;
@@ -37,11 +38,24 @@ export default function SchoolDetailActions({ schoolId, schoolName }: SchoolDeta
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Kembali ke Daftar
             </Button>
-            <Button variant="outline" onClick={() => router.push(`/organization/schools/${schoolId}/edit`)}>
+            <ActionButton
+                resource="schools"
+                action="UPDATE"
+                variant="outline"
+                hideOnDenied
+                onClick={() => router.push(`/organization/schools/${schoolId}/edit`)}
+            >
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
-            </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+            </ActionButton>
+            <ActionButton
+                resource="schools"
+                action="DELETE"
+                variant="destructive"
+                hideOnDenied
+                onClick={handleDelete}
+                disabled={isDeleting}
+            >
                 {isDeleting ? (
                     <>
                         <LoadingSpinner />
@@ -53,7 +67,7 @@ export default function SchoolDetailActions({ schoolId, schoolName }: SchoolDeta
                         Hapus
                     </>
                 )}
-            </Button>
+            </ActionButton>
         </div>
     );
 }

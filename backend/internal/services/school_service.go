@@ -100,10 +100,19 @@ func (s *SchoolService) GetSchools(params SchoolListParams) (*SchoolListResult, 
 		return nil, fmt.Errorf("gagal menghitung total sekolah: %w", err)
 	}
 
-	// Apply sorting
+	// Apply sorting with SQL injection prevention
 	if params.SortBy != "" {
-		order := params.SortBy + " " + params.SortOrder
-		query = query.Order(order)
+		validSortColumns := map[string]bool{
+			"code": true, "name": true, "address": true,
+			"created_at": true, "is_active": true, "school_level": true,
+		}
+		if validSortColumns[params.SortBy] {
+			direction := "ASC"
+			if strings.ToLower(params.SortOrder) == "desc" {
+				direction = "DESC"
+			}
+			query = query.Order(fmt.Sprintf("%s %s", params.SortBy, direction))
+		}
 	}
 
 	// Apply pagination

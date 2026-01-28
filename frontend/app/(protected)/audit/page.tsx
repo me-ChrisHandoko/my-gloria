@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Alert } from "@/components/ui/alert";
+import { PermissionGate } from "@/components/rbac";
 
 const getActionColor = (action: string) => {
   const colors: Record<string, string> = {
@@ -160,10 +161,12 @@ export default function AuditLogsPage() {
                 Copy Audit Log ID
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push(`/audit/${auditLog.id}`)}>
-                <Eye className="mr-2 h-4 w-4" />
-                Lihat Detail
-              </DropdownMenuItem>
+              <PermissionGate resource="audit_logs" action="READ" hideOnDenied>
+                <DropdownMenuItem onClick={() => router.push(`/audit/${auditLog.id}`)}>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Lihat Detail
+                </DropdownMenuItem>
+              </PermissionGate>
             </DropdownMenuContent>
           </DropdownMenu>
         );

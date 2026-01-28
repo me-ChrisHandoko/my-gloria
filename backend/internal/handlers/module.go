@@ -334,8 +334,15 @@ func (h *ModuleHandler) RevokeModuleFromRole(c *gin.Context) {
 	roleID := c.Param("id")
 	accessID := c.Param("access_id")
 
+	// HTTP: Get authenticated user
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	// Business logic: Revoke module from role via service
-	err := h.moduleService.RevokeModuleFromRole(roleID, accessID)
+	err := h.moduleService.RevokeModuleFromRole(roleID, accessID, userID.(string))
 	if err != nil {
 		if err.Error() == "module access tidak ditemukan" {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

@@ -2,12 +2,17 @@
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, GraduationCap, Users, UserCog, Building2, Shield, Boxes, GitBranch, Workflow, FileText } from "lucide-react";
+import { LayoutDashboard, GraduationCap, Users, UserCog, Building2, Shield, GitBranch, Workflow, FileText } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
+import { ModuleMenu, StaticModuleMenu } from "@/components/rbac";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarRail } from "@/components/ui/sidebar";
 import { useAppSelector } from "@/lib/store/hooks";
+
+// Feature flag for dynamic RBAC menu
+// Set to true to use dynamic module-based navigation
+const USE_DYNAMIC_RBAC_MENU = true;
 
 export function GloriaSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { user } = useAppSelector((state) => state.auth);
@@ -223,7 +228,13 @@ export function GloriaSidebar({ ...props }: React.ComponentProps<typeof Sidebar>
                 </SidebarMenu>
             </SidebarHeader>
             <SidebarContent>
-                <NavMain items={navMain} />
+                {USE_DYNAMIC_RBAC_MENU ? (
+                    // Dynamic RBAC-controlled menu based on user's accessible modules
+                    <ModuleMenu label="Menu Utama" />
+                ) : (
+                    // Static menu (current behavior)
+                    <NavMain items={navMain} />
+                )}
             </SidebarContent>
             <SidebarFooter>
                 <NavUser user={userData} />

@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const stepSchema = z.object({
   id: z.string().optional(),
@@ -50,7 +51,7 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function EditWorkflowRulePage({ params }: PageProps) {
+function EditWorkflowRuleForm({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
 
@@ -541,5 +542,13 @@ export default function EditWorkflowRulePage({ params }: PageProps) {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function EditWorkflowRulePage({ params }: PageProps) {
+  return (
+    <PermissionRouteGuard resource="workflow_rules" action="UPDATE">
+      <EditWorkflowRuleForm params={params} />
+    </PermissionRouteGuard>
   );
 }

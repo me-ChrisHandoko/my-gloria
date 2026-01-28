@@ -146,10 +146,19 @@ func (s *DepartmentService) GetDepartments(params DepartmentListParams) (*Depart
 		return nil, fmt.Errorf("gagal menghitung total departemen: %w", err)
 	}
 
-	// Apply sorting
+	// Apply sorting with SQL injection prevention
 	if params.SortBy != "" {
-		order := params.SortBy + " " + params.SortOrder
-		query = query.Order(order)
+		validSortColumns := map[string]bool{
+			"code": true, "name": true, "level": true,
+			"created_at": true, "is_active": true, "parent_id": true,
+		}
+		if validSortColumns[params.SortBy] {
+			direction := "ASC"
+			if strings.ToLower(params.SortOrder) == "desc" {
+				direction = "DESC"
+			}
+			query = query.Order(fmt.Sprintf("%s %s", params.SortBy, direction))
+		}
 	}
 
 	// Apply pagination

@@ -29,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PermissionGate } from "@/components/rbac";
 
 interface SchoolsDataTableProps {
   schools: SchoolListResponse[];
@@ -137,18 +138,22 @@ export default function SchoolsDataTable({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Aksi</DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/organization/schools/${school.id}`)}
-                      >
-                        <Eye className="mr-2 h-4 w-4" />
-                        Lihat Detail
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/organization/schools/${school.id}/edit`)}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
+                      <PermissionGate resource="schools" action="READ" hideOnDenied>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/organization/schools/${school.id}`)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          Lihat Detail
+                        </DropdownMenuItem>
+                      </PermissionGate>
+                      <PermissionGate resource="schools" action="UPDATE" hideOnDenied>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/organization/schools/${school.id}/edit`)}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                      </PermissionGate>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

@@ -24,6 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { cn } from "@/lib/utils";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const departmentSchema = z.object({
   code: z.string()
@@ -42,7 +43,7 @@ const departmentSchema = z.object({
 
 type DepartmentFormData = z.infer<typeof departmentSchema>;
 
-export default function CreateDepartmentPage() {
+function CreateDepartmentForm() {
   const router = useRouter();
   const [createDepartment, { isLoading }] = useCreateDepartmentMutation();
   const [codeOpen, setCodeOpen] = useState(false);
@@ -312,5 +313,13 @@ export default function CreateDepartmentPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function CreateDepartmentPage() {
+  return (
+    <PermissionRouteGuard resource="departments" action="CREATE">
+      <CreateDepartmentForm />
+    </PermissionRouteGuard>
   );
 }

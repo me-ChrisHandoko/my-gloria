@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const positionSchema = z.object({
   code: z.string()
@@ -39,7 +40,7 @@ const positionSchema = z.object({
 
 type PositionFormData = z.infer<typeof positionSchema>;
 
-export default function CreatePositionPage() {
+function CreatePositionForm() {
   const router = useRouter();
   const [createPosition, { isLoading }] = useCreatePositionMutation();
 
@@ -292,5 +293,13 @@ export default function CreatePositionPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function CreatePositionPage() {
+  return (
+    <PermissionRouteGuard resource="positions" action="CREATE">
+      <CreatePositionForm />
+    </PermissionRouteGuard>
   );
 }

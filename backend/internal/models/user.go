@@ -220,6 +220,50 @@ type AssignPermissionToUserRequest struct {
 	EffectiveUntil *time.Time `json:"effective_until,omitempty"`
 }
 
+// UserPermissionResponse represents the response for user permission assignment
+type UserPermissionResponse struct {
+	ID             string                  `json:"id"`
+	PermissionID   string                  `json:"permission_id"`
+	Permission     *PermissionListResponse `json:"permission,omitempty"`
+	IsGranted      bool                    `json:"is_granted"`
+	Conditions     *string                 `json:"conditions,omitempty"`
+	GrantedBy      string                  `json:"granted_by"`
+	GrantReason    string                  `json:"grant_reason"`
+	Priority       int                     `json:"priority"`
+	IsTemporary    bool                    `json:"is_temporary"`
+	ResourceID     *string                 `json:"resource_id,omitempty"`
+	ResourceType   *string                 `json:"resource_type,omitempty"`
+	EffectiveFrom  time.Time               `json:"effective_from"`
+	EffectiveUntil *time.Time              `json:"effective_until,omitempty"`
+	CreatedAt      time.Time               `json:"created_at"`
+}
+
+// ToResponse converts UserPermission to UserPermissionResponse
+func (up *UserPermission) ToResponse() *UserPermissionResponse {
+	resp := &UserPermissionResponse{
+		ID:             up.ID,
+		PermissionID:   up.PermissionID,
+		IsGranted:      up.IsGranted,
+		Conditions:     up.Conditions,
+		GrantedBy:      up.GrantedBy,
+		GrantReason:    up.GrantReason,
+		Priority:       up.Priority,
+		IsTemporary:    up.IsTemporary,
+		ResourceID:     up.ResourceID,
+		ResourceType:   up.ResourceType,
+		EffectiveFrom:  up.EffectiveFrom,
+		EffectiveUntil: up.EffectiveUntil,
+		CreatedAt:      up.CreatedAt,
+	}
+
+	// Add Permission details if present
+	if up.Permission != nil {
+		resp.Permission = up.Permission.ToListResponse()
+	}
+
+	return resp
+}
+
 // ToResponse converts User to UserResponse
 func (u *User) ToResponse() *UserResponse {
 	resp := &UserResponse{

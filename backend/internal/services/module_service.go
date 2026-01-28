@@ -13,12 +13,29 @@ import (
 
 // ModuleService handles business logic for modules
 type ModuleService struct {
-	db *gorm.DB
+	db                   *gorm.DB
+	permissionCache      *PermissionCacheService
+	escalationPrevention *EscalationPreventionService
 }
 
 // NewModuleService creates a new ModuleService instance
 func NewModuleService(db *gorm.DB) *ModuleService {
 	return &ModuleService{db: db}
+}
+
+// NewModuleServiceWithRBAC creates a new ModuleService with RBAC services
+func NewModuleServiceWithRBAC(db *gorm.DB, cache *PermissionCacheService, escalation *EscalationPreventionService) *ModuleService {
+	return &ModuleService{
+		db:                   db,
+		permissionCache:      cache,
+		escalationPrevention: escalation,
+	}
+}
+
+// SetRBACServices sets the RBAC services (for dependency injection after creation)
+func (s *ModuleService) SetRBACServices(cache *PermissionCacheService, escalation *EscalationPreventionService) {
+	s.permissionCache = cache
+	s.escalationPrevention = escalation
 }
 
 // ModuleListParams represents parameters for listing modules
@@ -76,6 +93,18 @@ func (s *ModuleService) validateModuleExists(moduleID string) error {
 	return nil
 }
 
+// normalizePath ensures path starts with / to prevent relative URL issues
+func normalizePath(path *string) *string {
+	if path == nil || *path == "" {
+		return path
+	}
+	normalized := *path
+	if !strings.HasPrefix(normalized, "/") {
+		normalized = "/" + normalized
+	}
+	return &normalized
+}
+
 // CreateModule creates a new module with validation
 func (s *ModuleService) CreateModule(req models.CreateModuleRequest, userID string) (*models.Module, error) {
 	// Business rule: Check if code already exists
@@ -84,11 +113,14 @@ func (s *ModuleService) CreateModule(req models.CreateModuleRequest, userID stri
 		return nil, errors.New("kode module sudah digunakan")
 	}
 
-	// Validate parent_id if provided
-	if req.ParentID != nil {
+	// Validate parent_id if provided and not empty
+	// Empty string means "no parent" (set to null)
+	var parentID *string
+	if req.ParentID != nil && *req.ParentID != "" {
 		if err := s.validateModuleExists(*req.ParentID); err != nil {
 			return nil, errors.New("parent module tidak ditemukan")
 		}
+		parentID = req.ParentID
 	}
 
 	// Get username for audit trail
@@ -113,8 +145,8 @@ func (s *ModuleService) CreateModule(req models.CreateModuleRequest, userID stri
 		Category:    req.Category,
 		Description: req.Description,
 		Icon:        req.Icon,
-		Path:        req.Path,
-		ParentID:    req.ParentID,
+		Path:        normalizePath(req.Path),
+		ParentID:    parentID,
 		SortOrder:   sortOrder,
 		IsActive:    true,
 		IsVisible:   isVisible,
@@ -129,7 +161,11 @@ func (s *ModuleService) CreateModule(req models.CreateModuleRequest, userID stri
 	}
 
 	// Load relations for response
-	s.db.Preload("Parent").First(&module, "id = ?", module.ID)
+	if err := s.db.Preload("Parent").First(&module, "id = ?", module.ID).Error; err != nil {
+		// Module was created successfully, but failed to reload with relations
+		// Return the module as-is without parent relation
+		return &module, nil
+	}
 
 	return &module, nil
 }
@@ -173,10 +209,24 @@ func (s *ModuleService) GetModules(params ModuleListParams) (*ModuleListResult, 
 		return nil, fmt.Errorf("gagal menghitung total module: %w", err)
 	}
 
-	// Apply sorting
+	// Apply sorting with validation to prevent SQL injection
 	if params.SortBy != "" {
-		order := params.SortBy + " " + params.SortOrder
-		query = query.Order(order)
+		validSortColumns := map[string]bool{
+			"code":       true,
+			"name":       true,
+			"category":   true,
+			"sort_order": true,
+			"created_at": true,
+			"is_active":  true,
+			"is_visible": true,
+		}
+		if validSortColumns[params.SortBy] {
+			direction := "ASC"
+			if strings.ToUpper(params.SortOrder) == "DESC" {
+				direction = "DESC"
+			}
+			query = query.Order(fmt.Sprintf("%s %s", params.SortBy, direction))
+		}
 	} else {
 		// Default sort by sort_order and name
 		query = query.Order("sort_order ASC, name ASC")
@@ -285,8 +335,9 @@ func (s *ModuleService) UpdateModule(id string, req models.UpdateModuleRequest, 
 		}
 	}
 
-	// Validate parent_id if provided
-	if req.ParentID != nil {
+	// Validate parent_id if provided and not empty
+	// Empty string means "remove parent" (set to null)
+	if req.ParentID != nil && *req.ParentID != "" {
 		// Prevent circular reference
 		if *req.ParentID == id {
 			return nil, errors.New("module tidak boleh menjadi parent dari dirinya sendiri")
@@ -316,10 +367,15 @@ func (s *ModuleService) UpdateModule(id string, req models.UpdateModuleRequest, 
 		module.Icon = req.Icon
 	}
 	if req.Path != nil {
-		module.Path = req.Path
+		module.Path = normalizePath(req.Path)
 	}
 	if req.ParentID != nil {
-		module.ParentID = req.ParentID
+		// Empty string means "remove parent" (set to null)
+		if *req.ParentID == "" {
+			module.ParentID = nil
+		} else {
+			module.ParentID = req.ParentID
+		}
 	}
 	if req.SortOrder != nil {
 		module.SortOrder = *req.SortOrder
@@ -338,8 +394,17 @@ func (s *ModuleService) UpdateModule(id string, req models.UpdateModuleRequest, 
 		return nil, fmt.Errorf("gagal memperbarui module: %w", err)
 	}
 
+	// Invalidate cache for all users who have access to this module
+	if s.permissionCache != nil {
+		s.invalidateCacheForModuleUsers(id)
+	}
+
 	// Load relations for response
-	s.db.Preload("Parent").First(&module, "id = ?", module.ID)
+	if err := s.db.Preload("Parent").First(&module, "id = ?", module.ID).Error; err != nil {
+		// Module was updated successfully, but failed to reload with relations
+		// Return the module as-is without parent relation
+		return &module, nil
+	}
 
 	return &module, nil
 }
@@ -365,6 +430,11 @@ func (s *ModuleService) DeleteModule(id string) error {
 		return errors.New("tidak dapat menghapus module yang memiliki sub-module")
 	}
 
+	// Invalidate cache for all users who have access to this module before deletion
+	if s.permissionCache != nil {
+		s.invalidateCacheForModuleUsers(id)
+	}
+
 	// Soft delete
 	if err := s.db.Delete(&module).Error; err != nil {
 		return fmt.Errorf("gagal menghapus module: %w", err)
@@ -387,10 +457,13 @@ func (s *ModuleService) GetRoleModuleAccesses(roleID string) ([]*models.RoleModu
 	}
 
 	// Fetch role module accesses with module relation
+	// Filter out modules where is_active = false
 	var accesses []models.RoleModuleAccess
 	if err := s.db.Preload("Module").
-		Where("role_id = ?", roleID).
-		Order("created_at DESC").
+		Joins("JOIN modules ON modules.id = role_module_access.module_id").
+		Where("role_module_access.role_id = ?", roleID).
+		Where("modules.is_active = ?", true).
+		Order("role_module_access.created_at DESC").
 		Find(&accesses).Error; err != nil {
 		return nil, fmt.Errorf("gagal mengambil data module access: %w", err)
 	}
@@ -415,9 +488,16 @@ func (s *ModuleService) AssignModuleToRole(roleID string, req models.AssignModul
 		return nil, fmt.Errorf("gagal mengambil data role: %w", err)
 	}
 
-	// Validate module exists
-	if err := s.validateModuleExists(req.ModuleID); err != nil {
-		return nil, err
+	// Validate module exists and is active
+	var module models.Module
+	if err := s.db.First(&module, "id = ?", req.ModuleID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("module tidak ditemukan")
+		}
+		return nil, fmt.Errorf("gagal mengambil data module: %w", err)
+	}
+	if !module.IsActive {
+		return nil, errors.New("module tidak aktif, tidak dapat di-assign")
 	}
 
 	// Validate position if provided
@@ -428,6 +508,14 @@ func (s *ModuleService) AssignModuleToRole(roleID string, req models.AssignModul
 				return nil, errors.New("position tidak ditemukan")
 			}
 			return nil, fmt.Errorf("gagal mengambil data position: %w", err)
+		}
+	}
+
+	// Escalation Prevention: Validate that userID can modify this role's module access
+	// User must have at least the same hierarchy level or higher to assign modules to a role
+	if s.escalationPrevention != nil {
+		if err := s.escalationPrevention.ValidateRoleModification(userID, roleID); err != nil {
+			return nil, fmt.Errorf("escalation prevention: %w", err)
 		}
 	}
 
@@ -467,6 +555,11 @@ func (s *ModuleService) AssignModuleToRole(roleID string, req models.AssignModul
 		return nil, fmt.Errorf("gagal assign module ke role: %w", err)
 	}
 
+	// Invalidate cache for all users with this role
+	if s.permissionCache != nil {
+		s.invalidateCacheForRoleUsers(roleID)
+	}
+
 	// Load module relation for response
 	s.db.Preload("Module").First(&access, "id = ?", access.ID)
 
@@ -474,7 +567,7 @@ func (s *ModuleService) AssignModuleToRole(roleID string, req models.AssignModul
 }
 
 // RevokeModuleFromRole revokes a module access from a role
-func (s *ModuleService) RevokeModuleFromRole(roleID string, accessID string) error {
+func (s *ModuleService) RevokeModuleFromRole(roleID string, accessID string, userID string) error {
 	// Find the access
 	var access models.RoleModuleAccess
 	if err := s.db.Where("id = ? AND role_id = ?", accessID, roleID).First(&access).Error; err != nil {
@@ -484,10 +577,50 @@ func (s *ModuleService) RevokeModuleFromRole(roleID string, accessID string) err
 		return fmt.Errorf("gagal mengambil data module access: %w", err)
 	}
 
+	// Escalation Prevention: Validate that userID can modify this role's module access
+	if s.escalationPrevention != nil {
+		if err := s.escalationPrevention.ValidateRoleModification(userID, roleID); err != nil {
+			return fmt.Errorf("escalation prevention: %w", err)
+		}
+	}
+
 	// Delete the access
 	if err := s.db.Delete(&access).Error; err != nil {
 		return fmt.Errorf("gagal mencabut module dari role: %w", err)
 	}
 
+	// Invalidate cache for all users with this role
+	if s.permissionCache != nil {
+		s.invalidateCacheForRoleUsers(roleID)
+	}
+
 	return nil
+}
+
+// invalidateCacheForRoleUsers invalidates permission cache for all users who have a specific role
+func (s *ModuleService) invalidateCacheForRoleUsers(roleID string) {
+	// Find all users with this role
+	var userRoles []models.UserRole
+	if err := s.db.Where("role_id = ? AND is_active = true", roleID).Find(&userRoles).Error; err != nil {
+		return // Silently fail - cache will eventually expire
+	}
+
+	// Invalidate cache for each user
+	for _, ur := range userRoles {
+		s.permissionCache.InvalidateUser(ur.UserID)
+	}
+}
+
+// invalidateCacheForModuleUsers invalidates permission cache for all users who have access to a specific module
+func (s *ModuleService) invalidateCacheForModuleUsers(moduleID string) {
+	// Find all roles that have access to this module
+	var moduleAccesses []models.RoleModuleAccess
+	if err := s.db.Where("module_id = ? AND is_active = true", moduleID).Find(&moduleAccesses).Error; err != nil {
+		return // Silently fail - cache will eventually expire
+	}
+
+	// For each role, invalidate cache for all users with that role
+	for _, ma := range moduleAccesses {
+		s.invalidateCacheForRoleUsers(ma.RoleID)
+	}
 }

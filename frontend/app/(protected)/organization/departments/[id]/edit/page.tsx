@@ -26,6 +26,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Alert } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const departmentSchema = z.object({
   code: z.string()
@@ -51,7 +52,7 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function EditDepartmentPage({ params }: PageProps) {
+function EditDepartmentForm({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
   const [codeOpen, setCodeOpen] = useState(false);
@@ -388,5 +389,13 @@ export default function EditDepartmentPage({ params }: PageProps) {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function EditDepartmentPage({ params }: PageProps) {
+  return (
+    <PermissionRouteGuard resource="departments" action="UPDATE">
+      <EditDepartmentForm params={params} />
+    </PermissionRouteGuard>
   );
 }

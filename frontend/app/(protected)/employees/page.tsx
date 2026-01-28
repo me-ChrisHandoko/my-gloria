@@ -19,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Alert } from "@/components/ui/alert";
+import { PermissionGate, ActionButton } from "@/components/rbac";
 
 const columns: ColumnDef<DataKaryawanListItem>[] = [
   {
@@ -88,18 +89,24 @@ const columns: ColumnDef<DataKaryawanListItem>[] = [
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Aksi</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => router.push(`/employees/${karyawan.nip}`)}>
-              <Eye className="mr-2 h-4 w-4" />
-              Lihat Detail
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push(`/employees/${karyawan.nip}/edit`)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Hapus
-            </DropdownMenuItem>
+            <PermissionGate resource="employees" action="READ" hideOnDenied>
+              <DropdownMenuItem onClick={() => router.push(`/employees/${karyawan.nip}`)}>
+                <Eye className="mr-2 h-4 w-4" />
+                Lihat Detail
+              </DropdownMenuItem>
+            </PermissionGate>
+            <PermissionGate resource="employees" action="UPDATE" hideOnDenied>
+              <DropdownMenuItem onClick={() => router.push(`/employees/${karyawan.nip}/edit`)}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+            </PermissionGate>
+            <PermissionGate resource="employees" action="DELETE" hideOnDenied>
+              <DropdownMenuItem className="text-destructive">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Hapus
+              </DropdownMenuItem>
+            </PermissionGate>
           </DropdownMenuContent>
         </DropdownMenu>
       );
@@ -134,10 +141,15 @@ export default function KaryawanPage() {
             Kelola data karyawan YPK Gloria
           </p>
         </div>
-        <Button onClick={() => router.push("/employees/create")}>
+        <ActionButton
+          resource="employees"
+          action="CREATE"
+          hideOnDenied
+          onClick={() => router.push("/employees/create")}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Tambah Karyawan
-        </Button>
+        </ActionButton>
       </div>
 
       <div className="rounded-lg border bg-card">

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { PermissionGate } from "@/components/rbac";
 
 interface PermissionsDataTableProps {
     permissions: PermissionListResponse[];
@@ -139,14 +140,18 @@ export default function PermissionsDataTable({ permissions, sortBy, sortOrder, o
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
                                             <DropdownMenuLabel>Aksi</DropdownMenuLabel>
-                                            <DropdownMenuItem onClick={() => router.push(`/access/permissions/${permission.id}`)}>
-                                                <Eye className="mr-2 h-4 w-4" />
-                                                Lihat Detail
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => router.push(`/access/permissions/${permission.id}/edit`)}>
-                                                <Edit className="mr-2 h-4 w-4" />
-                                                Edit
-                                            </DropdownMenuItem>
+                                            <PermissionGate resource="permissions" action="READ" hideOnDenied>
+                                                <DropdownMenuItem onClick={() => router.push(`/access/permissions/${permission.id}`)}>
+                                                    <Eye className="mr-2 h-4 w-4" />
+                                                    Lihat Detail
+                                                </DropdownMenuItem>
+                                            </PermissionGate>
+                                            <PermissionGate resource="permissions" action="UPDATE" hideOnDenied>
+                                                <DropdownMenuItem onClick={() => router.push(`/access/permissions/${permission.id}/edit`)}>
+                                                    <Edit className="mr-2 h-4 w-4" />
+                                                    Edit
+                                                </DropdownMenuItem>
+                                            </PermissionGate>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </TableCell>

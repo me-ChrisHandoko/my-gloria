@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"backend/internal/models"
 
@@ -136,10 +137,20 @@ func (s *PositionService) GetPositions(params PositionListParams) (*PositionList
 		return nil, fmt.Errorf("gagal menghitung total posisi: %w", err)
 	}
 
-	// Apply sorting
+	// Apply sorting with SQL injection prevention
 	if params.SortBy != "" {
-		order := params.SortBy + " " + params.SortOrder
-		query = query.Order(order)
+		validSortColumns := map[string]bool{
+			"code": true, "name": true, "level": true,
+			"created_at": true, "is_active": true, "school_id": true,
+			"department_id": true,
+		}
+		if validSortColumns[params.SortBy] {
+			direction := "ASC"
+			if strings.ToLower(params.SortOrder) == "desc" {
+				direction = "DESC"
+			}
+			query = query.Order(fmt.Sprintf("%s %s", params.SortBy, direction))
+		}
 	}
 
 	// Apply pagination

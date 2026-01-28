@@ -28,6 +28,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PermissionGate } from "@/components/rbac";
 
 interface DepartmentsDataTableProps {
   departments: DepartmentListResponse[];
@@ -144,18 +145,22 @@ export default function DepartmentsDataTable({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Aksi</DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/organization/departments/${department.id}`)}
-                      >
-                        <Eye className="mr-2 h-4 w-4" />
-                        Lihat Detail
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/organization/departments/${department.id}/edit`)}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
+                      <PermissionGate resource="departments" action="READ" hideOnDenied>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/organization/departments/${department.id}`)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          Lihat Detail
+                        </DropdownMenuItem>
+                      </PermissionGate>
+                      <PermissionGate resource="departments" action="UPDATE" hideOnDenied>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/organization/departments/${department.id}/edit`)}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                      </PermissionGate>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

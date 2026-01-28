@@ -1,31 +1,60 @@
-// app/(protected)/organisasi/posisi/[id]/page.tsx
+// app/(protected)/organization/positions/[id]/page.tsx
 /**
- * Position Detail Page with Hybrid SSR
- * - Server Component for initial data fetch
- * - Client islands for interactive buttons
+ * Position Detail Page - Pure CSR Pattern
+ *
+ * Client Component that uses RTK Query for data fetching.
+ * This ensures proper token refresh handling on 401 errors.
+ *
+ * Benefits:
+ * - Automatic token refresh via baseQueryWithReauth
+ * - Consistent with other protected pages (roles, modules)
+ * - Simpler code with single data flow
+ * - Built-in caching via RTK Query
  */
+"use client";
 
+import { use } from "react";
 import { Briefcase, Layers, Building2, Network, Calendar, Info, User, Users } from "lucide-react";
 import { format } from "date-fns";
 
-import { getPositionById } from "@/lib/server/api";
+import { useGetPositionByIdQuery } from "@/lib/store/services/organizationApi";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import PositionDetailActions from "@/components/positions/PositionDetailActions";
 
 interface PageProps {
     params: Promise<{ id: string }>;
 }
 
-export default async function PositionDetailPage({ params }: PageProps) {
-    const { id } = await params;
+export default function PositionDetailPage({ params }: PageProps) {
+    // Use React.use() for client-side param resolution
+    const { id } = use(params);
 
-    // Server-side data fetching
-    const { data: position, error } = await getPositionById(id);
+    // Client-side data fetching with automatic token refresh on 401
+    const { data: position, isLoading, error } = useGetPositionByIdQuery(id);
 
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="flex justify-center py-12">
+                <LoadingSpinner />
+            </div>
+        );
+    }
+
+    // Error state
     if (error || !position) {
-        return <Alert variant="error">Gagal memuat data posisi: {error || "Position not found"}</Alert>;
+        const errorMessage = error
+            ? "status" in error
+                ? (error.data as { message?: string; error?: string })?.message ||
+                  (error.data as { message?: string; error?: string })?.error ||
+                  `Error ${error.status}`
+                : error.message || "Unknown error"
+            : "Position not found";
+
+        return <Alert variant="error">Gagal memuat data posisi: {errorMessage}</Alert>;
     }
 
     return (
@@ -38,11 +67,11 @@ export default async function PositionDetailPage({ params }: PageProps) {
                     </div>
                     <p className="text-muted-foreground">Kode: {position.code}</p>
                 </div>
-                {/* Client Island - Action Buttons */}
+                {/* Action Buttons */}
                 <PositionDetailActions positionId={id} positionName={position.name} />
             </div>
 
-            {/* Informasi Dasar - Static Content (Server Component) */}
+            {/* Informasi Dasar */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -85,13 +114,15 @@ export default async function PositionDetailPage({ params }: PageProps) {
                     <div className="space-y-1">
                         <Label>Posisi Unik</Label>
                         <p className="text-sm">
-                            <Badge variant={position.is_unique ? "default" : "secondary"}>{position.is_unique ? "Ya" : "Tidak"}</Badge>
+                            <Badge variant={position.is_unique ? "default" : "secondary"}>
+                                {position.is_unique ? "Ya" : "Tidak"}
+                            </Badge>
                         </p>
                     </div>
                 </CardContent>
             </Card>
 
-            {/* Organisasi - Static Content (Server Component) */}
+            {/* Organisasi */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -106,7 +137,13 @@ export default async function PositionDetailPage({ params }: PageProps) {
                             <Network className="h-4 w-4" />
                             Departemen
                         </Label>
-                        <p className="text-sm">{position.department ? position.department.name : <span className="text-muted-foreground">Tidak terkait departemen</span>}</p>
+                        <p className="text-sm">
+                            {position.department ? (
+                                position.department.name
+                            ) : (
+                                <span className="text-muted-foreground">Tidak terkait departemen</span>
+                            )}
+                        </p>
                     </div>
 
                     <div className="space-y-1">
@@ -114,12 +151,18 @@ export default async function PositionDetailPage({ params }: PageProps) {
                             <Building2 className="h-4 w-4" />
                             Sekolah
                         </Label>
-                        <p className="text-sm">{position.school ? position.school.name : <span className="text-muted-foreground">Tidak terkait sekolah</span>}</p>
+                        <p className="text-sm">
+                            {position.school ? (
+                                position.school.name
+                            ) : (
+                                <span className="text-muted-foreground">Tidak terkait sekolah</span>
+                            )}
+                        </p>
                     </div>
                 </CardContent>
             </Card>
 
-            {/* Informasi Tambahan - Static Content (Server Component) */}
+            {/* Informasi Tambahan */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -168,7 +211,9 @@ export default async function PositionDetailPage({ params }: PageProps) {
                     <div className="space-y-1">
                         <Label>Status</Label>
                         <div>
-                            <Badge variant={position.is_active ? "success" : "secondary"}>{position.is_active ? "Aktif" : "Non-Aktif"}</Badge>
+                            <Badge variant={position.is_active ? "success" : "secondary"}>
+                                {position.is_active ? "Aktif" : "Non-Aktif"}
+                            </Badge>
                         </div>
                     </div>
                 </CardContent>
@@ -186,6 +231,3 @@ function Label({ children, className = "" }: { children: React.ReactNode; classN
 function formatDisplayName(name: string): string {
     return name.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
-
-// Optional: Enable revalidation for fresh data
-export const revalidate = 0;

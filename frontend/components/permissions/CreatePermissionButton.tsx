@@ -3,18 +3,21 @@
 
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/rbac";
 
 export default function CreatePermissionButton() {
   const router = useRouter();
 
   return (
-    <Button
+    <ActionButton
+      resource="permissions"
+      action="CREATE"
+      hideOnDenied
       onClick={() => router.push("/access/permissions/create")}
       data-create-permission-btn
     >
       <Plus className="mr-2 h-4 w-4" />
       Tambah Permission
-    </Button>
+    </ActionButton>
   );
 }

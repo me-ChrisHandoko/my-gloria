@@ -1,31 +1,60 @@
-// app/(protected)/organisasi/departemen/[id]/page.tsx
+// app/(protected)/organization/departments/[id]/page.tsx
 /**
- * Department Detail Page with Hybrid SSR
- * - Server Component for initial data fetch
- * - Client islands for interactive buttons
+ * Department Detail Page - Pure CSR Pattern
+ *
+ * Client Component that uses RTK Query for data fetching.
+ * This ensures proper token refresh handling on 401 errors.
+ *
+ * Benefits:
+ * - Automatic token refresh via baseQueryWithReauth
+ * - Consistent with other protected pages (roles, modules)
+ * - Simpler code with single data flow
+ * - Built-in caching via RTK Query
  */
+"use client";
 
+import { use } from "react";
 import { Network, Building2, Calendar, Info, User, FileText } from "lucide-react";
 import { format } from "date-fns";
 
-import { getDepartmentById } from "@/lib/server/api";
+import { useGetDepartmentByIdQuery } from "@/lib/store/services/organizationApi";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import DepartmentDetailActions from "@/components/departments/DepartmentDetailActions";
 
 interface PageProps {
     params: Promise<{ id: string }>;
 }
 
-export default async function DepartmentDetailPage({ params }: PageProps) {
-    const { id } = await params;
+export default function DepartmentDetailPage({ params }: PageProps) {
+    // Use React.use() for client-side param resolution
+    const { id } = use(params);
 
-    // Server-side data fetching
-    const { data: department, error } = await getDepartmentById(id);
+    // Client-side data fetching with automatic token refresh on 401
+    const { data: department, isLoading, error } = useGetDepartmentByIdQuery(id);
 
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="flex justify-center py-12">
+                <LoadingSpinner />
+            </div>
+        );
+    }
+
+    // Error state
     if (error || !department) {
-        return <Alert variant="error">Gagal memuat data departemen: {error || "Department not found"}</Alert>;
+        const errorMessage = error
+            ? "status" in error
+                ? (error.data as { message?: string; error?: string })?.message ||
+                  (error.data as { message?: string; error?: string })?.error ||
+                  `Error ${error.status}`
+                : error.message || "Unknown error"
+            : "Department not found";
+
+        return <Alert variant="error">Gagal memuat data departemen: {errorMessage}</Alert>;
     }
 
     return (
@@ -38,11 +67,11 @@ export default async function DepartmentDetailPage({ params }: PageProps) {
                     </div>
                     <p className="text-muted-foreground">Kode: {department.code}</p>
                 </div>
-                {/* Client Island - Action Buttons */}
+                {/* Action Buttons */}
                 <DepartmentDetailActions departmentId={id} departmentName={department.name} />
             </div>
 
-            {/* Informasi Dasar - Static Content (Server Component) */}
+            {/* Informasi Dasar */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -67,7 +96,11 @@ export default async function DepartmentDetailPage({ params }: PageProps) {
                             <Building2 className="h-4 w-4" />
                             Sekolah
                         </Label>
-                        <p className="text-sm">{department.school?.name || <span className="text-muted-foreground">Tidak terkait sekolah (Umum)</span>}</p>
+                        <p className="text-sm">
+                            {department.school?.name || (
+                                <span className="text-muted-foreground">Tidak terkait sekolah (Umum)</span>
+                            )}
+                        </p>
                     </div>
 
                     <div className="space-y-1">
@@ -75,12 +108,16 @@ export default async function DepartmentDetailPage({ params }: PageProps) {
                             <Network className="h-4 w-4" />
                             Parent Departemen
                         </Label>
-                        <p className="text-sm">{department.parent?.name || <span className="text-muted-foreground">Root (Tanpa parent)</span>}</p>
+                        <p className="text-sm">
+                            {department.parent?.name || (
+                                <span className="text-muted-foreground">Root (Tanpa parent)</span>
+                            )}
+                        </p>
                     </div>
                 </CardContent>
             </Card>
 
-            {/* Deskripsi - Static Content (Server Component) */}
+            {/* Deskripsi */}
             {department.description && (
                 <Card>
                     <CardHeader>
@@ -96,7 +133,7 @@ export default async function DepartmentDetailPage({ params }: PageProps) {
                 </Card>
             )}
 
-            {/* Informasi Tambahan - Static Content (Server Component) */}
+            {/* Informasi Tambahan */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -145,7 +182,9 @@ export default async function DepartmentDetailPage({ params }: PageProps) {
                     <div className="space-y-1">
                         <Label>Status</Label>
                         <div>
-                            <Badge variant={department.is_active ? "success" : "secondary"}>{department.is_active ? "Aktif" : "Non-Aktif"}</Badge>
+                            <Badge variant={department.is_active ? "success" : "secondary"}>
+                                {department.is_active ? "Aktif" : "Non-Aktif"}
+                            </Badge>
                         </div>
                     </div>
                 </CardContent>
@@ -163,6 +202,3 @@ function Label({ children, className = "" }: { children: React.ReactNode; classN
 function formatDisplayName(name: string): string {
     return name.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
-
-// Optional: Enable revalidation for fresh data
-export const revalidate = 0;

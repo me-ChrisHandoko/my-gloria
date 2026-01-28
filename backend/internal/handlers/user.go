@@ -391,3 +391,103 @@ func (h *UserHandler) RevokePositionFromUser(c *gin.Context) {
 	// HTTP: Format response
 	c.JSON(http.StatusOK, gin.H{"message": "Posisi berhasil di-revoke dari pengguna"})
 }
+
+// GetUserPermissions handles getting all direct permissions assigned to a user
+// @Summary Get user direct permissions
+// @Tags users
+// @Produce json
+// @Param id path string true "User ID"
+// @Success 200 {array} models.UserPermissionResponse
+// @Failure 404 {object} map[string]string
+// @Router /users/{id}/permissions [get]
+func (h *UserHandler) GetUserPermissions(c *gin.Context) {
+	// HTTP: Get user ID from URL
+	userID := c.Param("id")
+
+	// Business logic: Get user permissions via service
+	permissions, err := h.userService.GetUserPermissions(userID)
+	if err != nil {
+		if err.Error() == "pengguna tidak ditemukan" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	// HTTP: Format response
+	c.JSON(http.StatusOK, permissions)
+}
+
+// AssignPermissionToUser handles assigning a direct permission to a user
+// @Summary Assign permission to user
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param id path string true "User ID"
+// @Param request body models.AssignPermissionToUserRequest true "Permission assignment data"
+// @Success 201 {object} models.UserPermissionResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /users/{id}/permissions [post]
+func (h *UserHandler) AssignPermissionToUser(c *gin.Context) {
+	// HTTP: Get user ID from URL
+	userID := c.Param("id")
+
+	// HTTP: Parse and validate request
+	var req models.AssignPermissionToUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// HTTP: Get authenticated user (who is granting the permission)
+	grantedBy, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Business logic: Assign permission to user via service
+	permissionResponse, err := h.userService.AssignPermissionToUser(userID, req, grantedBy.(string))
+	if err != nil {
+		if err.Error() == "pengguna tidak ditemukan" || err.Error() == "permission tidak ditemukan" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	// HTTP: Format response
+	c.JSON(http.StatusCreated, permissionResponse)
+}
+
+// RevokePermissionFromUser handles revoking a direct permission from a user
+// @Summary Revoke permission from user
+// @Tags users
+// @Produce json
+// @Param id path string true "User ID"
+// @Param permission_id path string true "Permission Assignment ID"
+// @Success 200 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /users/{id}/permissions/{permission_id} [delete]
+func (h *UserHandler) RevokePermissionFromUser(c *gin.Context) {
+	// HTTP: Get IDs from URL
+	userID := c.Param("id")
+	permissionAssignmentID := c.Param("permission_id")
+
+	// Business logic: Revoke permission from user via service
+	err := h.userService.RevokePermissionFromUser(userID, permissionAssignmentID)
+	if err != nil {
+		if err.Error() == "pengguna tidak ditemukan" || err.Error() == "permission assignment tidak ditemukan" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	// HTTP: Format response
+	c.JSON(http.StatusOK, gin.H{"message": "Permission berhasil di-revoke dari pengguna"})
+}

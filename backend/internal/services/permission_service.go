@@ -13,12 +13,18 @@ import (
 
 // PermissionService handles business logic for permissions
 type PermissionService struct {
-	db *gorm.DB
+	db              *gorm.DB
+	permissionCache *PermissionCacheService
 }
 
 // NewPermissionService creates a new PermissionService instance
 func NewPermissionService(db *gorm.DB) *PermissionService {
 	return &PermissionService{db: db}
+}
+
+// SetRBACServices sets the RBAC services (for dependency injection after creation)
+func (s *PermissionService) SetRBACServices(cache *PermissionCacheService) {
+	s.permissionCache = cache
 }
 
 // PermissionListParams represents parameters for listing permissions
@@ -297,6 +303,11 @@ func (s *PermissionService) UpdatePermission(id string, req models.UpdatePermiss
 		return nil, fmt.Errorf("gagal mengupdate permission: %w", err)
 	}
 
+	// Invalidate cache for all affected users
+	if s.permissionCache != nil {
+		s.invalidateCacheForPermissionUsers(id)
+	}
+
 	// Reload permission to get updated data
 	if err := s.db.First(&permission, "id = ?", id).Error; err != nil {
 		return nil, fmt.Errorf("gagal mengambil permission yang diupdate: %w", err)
@@ -320,11 +331,20 @@ func (s *PermissionService) DeletePermission(id string) error {
 
 	// Business rule: Check if permission is used by roles or users
 	var roleCount, userCount int64
-	s.db.Model(&models.RolePermission{}).Where("permission_id = ?", id).Count(&roleCount)
-	s.db.Model(&models.UserPermission{}).Where("permission_id = ?", id).Count(&userCount)
+	if err := s.db.Model(&models.RolePermission{}).Where("permission_id = ?", id).Count(&roleCount).Error; err != nil {
+		return fmt.Errorf("gagal memeriksa penggunaan permission pada role: %w", err)
+	}
+	if err := s.db.Model(&models.UserPermission{}).Where("permission_id = ?", id).Count(&userCount).Error; err != nil {
+		return fmt.Errorf("gagal memeriksa penggunaan permission pada user: %w", err)
+	}
 
 	if roleCount > 0 || userCount > 0 {
 		return fmt.Errorf("tidak dapat menghapus permission: masih digunakan oleh %d role(s) dan %d user(s)", roleCount, userCount)
+	}
+
+	// Invalidate cache for all affected users before deletion
+	if s.permissionCache != nil {
+		s.invalidateCacheForPermissionUsers(id)
 	}
 
 	// Delete permission
@@ -378,4 +398,38 @@ func (s *PermissionService) GetPermissionGroups() ([]models.PermissionGroupRespo
 	}
 
 	return groups, nil
+}
+
+// invalidateCacheForPermissionUsers invalidates permission cache for all users who have a specific permission
+// This includes users who have the permission directly or through roles
+func (s *PermissionService) invalidateCacheForPermissionUsers(permissionID string) {
+	// Track unique user IDs to invalidate
+	userIDs := make(map[string]bool)
+
+	// Find users with direct permission assignment
+	var userPermissions []models.UserPermission
+	if err := s.db.Where("permission_id = ? AND is_active = true", permissionID).Find(&userPermissions).Error; err == nil {
+		for _, up := range userPermissions {
+			userIDs[up.UserID] = true
+		}
+	}
+
+	// Find roles that have this permission
+	var rolePermissions []models.RolePermission
+	if err := s.db.Where("permission_id = ?", permissionID).Find(&rolePermissions).Error; err == nil {
+		for _, rp := range rolePermissions {
+			// Find users with this role
+			var userRoles []models.UserRole
+			if err := s.db.Where("role_id = ? AND is_active = true", rp.RoleID).Find(&userRoles).Error; err == nil {
+				for _, ur := range userRoles {
+					userIDs[ur.UserID] = true
+				}
+			}
+		}
+	}
+
+	// Invalidate cache for each unique user
+	for userID := range userIDs {
+		s.permissionCache.InvalidateUser(userID)
+	}
 }

@@ -9,6 +9,7 @@ import (
 	"backend/internal/database"
 	"backend/internal/handlers"
 	"backend/internal/middleware"
+	"backend/internal/models"
 	"backend/internal/services"
 
 	"github.com/gin-contrib/cors"
@@ -43,6 +44,10 @@ func main() {
 	// Initialize JWT
 	log.Println("Initializing JWT authentication...")
 	auth.InitJWT(cfg.JWT.Secret)
+
+	// Initialize Permission Services
+	log.Println("Initializing permission services...")
+	middleware.InitPermissionServices()
 
 	// Initialize CSRF protection
 	log.Println("Initializing CSRF protection...")
@@ -81,6 +86,14 @@ func setupRouter() *gin.Engine {
 	moduleService := services.NewModuleService(db)
 	userService := services.NewUserService(db)
 
+	// Inject RBAC services into services for escalation prevention and cache invalidation
+	escalationPrevention := middleware.GetEscalationPrevention()
+	permissionCache := middleware.GetPermissionCache()
+	userService.SetRBACServices(escalationPrevention, permissionCache)
+	roleService.SetRBACServices(escalationPrevention, permissionCache)
+	moduleService.SetRBACServices(permissionCache, escalationPrevention)
+	permissionService.SetRBACServices(permissionCache)
+
 	// Initialize handlers
 	schoolHandler := handlers.NewSchoolHandler(schoolService)
 	positionHandler := handlers.NewPositionHandler(positionService)
@@ -91,6 +104,7 @@ func setupRouter() *gin.Engine {
 	permissionHandler := handlers.NewPermissionHandler(permissionService)
 	moduleHandler := handlers.NewModuleHandler(moduleService)
 	userHandler := handlers.NewUserHandler(userService)
+	accessHandler := handlers.NewAccessHandler()
 
 	// Configure CORS
 	// In development: Allow localhost origins for testing
@@ -164,115 +178,134 @@ func setupRouter() *gin.Engine {
 			// User routes
 			users := protected.Group("/users")
 			{
-				users.GET("", userHandler.GetUsers)
-				users.GET("/:id", userHandler.GetUser)
-				users.PUT("/:id", userHandler.UpdateUser)
-				users.DELETE("/:id", userHandler.DeleteUser)
+				users.GET("", middleware.RequirePermission("users", models.PermissionActionRead), userHandler.GetUsers)
+				users.GET("/:id", middleware.RequirePermission("users", models.PermissionActionRead), userHandler.GetUser)
+				users.PUT("/:id", middleware.RequirePermission("users", models.PermissionActionUpdate), userHandler.UpdateUser)
+				users.DELETE("/:id", middleware.RequirePermission("users", models.PermissionActionDelete), userHandler.DeleteUser)
 
 				// User role assignment routes
-				users.GET("/:id/roles", userHandler.GetUserRoles)
-				users.POST("/:id/roles", userHandler.AssignRoleToUser)
-				users.DELETE("/:id/roles/:role_id", userHandler.RevokeRoleFromUser)
+				users.GET("/:id/roles", middleware.RequirePermission("users", models.PermissionActionRead), userHandler.GetUserRoles)
+				users.POST("/:id/roles", middleware.RequirePermission("users", models.PermissionActionUpdate), userHandler.AssignRoleToUser)
+				users.DELETE("/:id/roles/:role_id", middleware.RequirePermission("users", models.PermissionActionUpdate), userHandler.RevokeRoleFromUser)
 
 				// User position assignment routes
-				users.GET("/:id/positions", userHandler.GetUserPositions)
-				users.POST("/:id/positions", userHandler.AssignPositionToUser)
-				users.DELETE("/:id/positions/:position_id", userHandler.RevokePositionFromUser)
+				users.GET("/:id/positions", middleware.RequirePermission("users", models.PermissionActionRead), userHandler.GetUserPositions)
+				users.POST("/:id/positions", middleware.RequirePermission("users", models.PermissionActionUpdate), userHandler.AssignPositionToUser)
+				users.DELETE("/:id/positions/:position_id", middleware.RequirePermission("users", models.PermissionActionUpdate), userHandler.RevokePositionFromUser)
+
+				// User direct permission assignment routes
+				users.GET("/:id/permissions", middleware.RequirePermission("users", models.PermissionActionRead), userHandler.GetUserPermissions)
+				users.POST("/:id/permissions", middleware.RequirePermission("users", models.PermissionActionUpdate), userHandler.AssignPermissionToUser)
+				users.DELETE("/:id/permissions/:permission_id", middleware.RequirePermission("users", models.PermissionActionUpdate), userHandler.RevokePermissionFromUser)
 			}
 
 			// School routes
 			schools := protected.Group("/schools")
 			{
-				schools.POST("", schoolHandler.CreateSchool)
-				schools.GET("", schoolHandler.GetSchools)
-				schools.GET("/available-codes", schoolHandler.GetAvailableSchoolCodes)
-				schools.GET("/:id", schoolHandler.GetSchoolByID)
-				schools.PUT("/:id", schoolHandler.UpdateSchool)
-				schools.DELETE("/:id", schoolHandler.DeleteSchool)
+				schools.POST("", middleware.RequirePermission("schools", models.PermissionActionCreate), schoolHandler.CreateSchool)
+				schools.GET("", middleware.RequirePermission("schools", models.PermissionActionRead), schoolHandler.GetSchools)
+				schools.GET("/available-codes", middleware.RequirePermission("schools", models.PermissionActionRead), schoolHandler.GetAvailableSchoolCodes)
+				schools.GET("/:id", middleware.RequirePermission("schools", models.PermissionActionRead), schoolHandler.GetSchoolByID)
+				schools.PUT("/:id", middleware.RequirePermission("schools", models.PermissionActionUpdate), schoolHandler.UpdateSchool)
+				schools.DELETE("/:id", middleware.RequirePermission("schools", models.PermissionActionDelete), schoolHandler.DeleteSchool)
 			}
 
 			// Department routes
 			departments := protected.Group("/departments")
 			{
-				departments.POST("", departmentHandler.CreateDepartment)
-				departments.GET("", departmentHandler.GetDepartments)
-				departments.GET("/tree", departmentHandler.GetDepartmentTree)
-				departments.GET("/available-codes", departmentHandler.GetAvailableDepartmentCodes)
-				departments.GET("/:id", departmentHandler.GetDepartmentByID)
-				departments.PUT("/:id", departmentHandler.UpdateDepartment)
-				departments.DELETE("/:id", departmentHandler.DeleteDepartment)
+				departments.POST("", middleware.RequirePermission("departments", models.PermissionActionCreate), departmentHandler.CreateDepartment)
+				departments.GET("", middleware.RequirePermission("departments", models.PermissionActionRead), departmentHandler.GetDepartments)
+				departments.GET("/tree", middleware.RequirePermission("departments", models.PermissionActionRead), departmentHandler.GetDepartmentTree)
+				departments.GET("/available-codes", middleware.RequirePermission("departments", models.PermissionActionRead), departmentHandler.GetAvailableDepartmentCodes)
+				departments.GET("/:id", middleware.RequirePermission("departments", models.PermissionActionRead), departmentHandler.GetDepartmentByID)
+				departments.PUT("/:id", middleware.RequirePermission("departments", models.PermissionActionUpdate), departmentHandler.UpdateDepartment)
+				departments.DELETE("/:id", middleware.RequirePermission("departments", models.PermissionActionDelete), departmentHandler.DeleteDepartment)
 			}
 
 			// Position routes
 			positions := protected.Group("/positions")
 			{
-				positions.POST("", positionHandler.CreatePosition)
-				positions.GET("", positionHandler.GetPositions)
-				positions.GET("/:id", positionHandler.GetPositionByID)
-				positions.PUT("/:id", positionHandler.UpdatePosition)
-				positions.DELETE("/:id", positionHandler.DeletePosition)
+				positions.POST("", middleware.RequirePermission("positions", models.PermissionActionCreate), positionHandler.CreatePosition)
+				positions.GET("", middleware.RequirePermission("positions", models.PermissionActionRead), positionHandler.GetPositions)
+				positions.GET("/:id", middleware.RequirePermission("positions", models.PermissionActionRead), positionHandler.GetPositionByID)
+				positions.PUT("/:id", middleware.RequirePermission("positions", models.PermissionActionUpdate), positionHandler.UpdatePosition)
+				positions.DELETE("/:id", middleware.RequirePermission("positions", models.PermissionActionDelete), positionHandler.DeletePosition)
 			}
 
 			// Employee routes
 			employees := protected.Group("/employees")
 			{
-				employees.GET("/filter-options", karyawanHandler.GetFilterOptions)
-				employees.GET("", karyawanHandler.GetKaryawans)
-				employees.GET("/:nip", karyawanHandler.GetKaryawanByNIP)
+				employees.GET("/filter-options", middleware.RequirePermission("employees", models.PermissionActionRead), karyawanHandler.GetFilterOptions)
+				employees.GET("", middleware.RequirePermission("employees", models.PermissionActionRead), karyawanHandler.GetKaryawans)
+				employees.GET("/:nip", middleware.RequirePermission("employees", models.PermissionActionRead), karyawanHandler.GetKaryawanByNIP)
 			}
 
 			// Workflow Rules routes
 			workflowRules := protected.Group("/workflow-rules")
 			{
-				workflowRules.POST("", workflowRuleHandler.CreateWorkflowRule)
-				workflowRules.POST("/bulk", workflowRuleHandler.BulkCreateWorkflowRules)
-				workflowRules.GET("", workflowRuleHandler.GetWorkflowRules)
-				workflowRules.GET("/types", workflowRuleHandler.GetWorkflowTypes)
-				workflowRules.GET("/lookup", workflowRuleHandler.GetWorkflowRuleByPositionAndType)
-				workflowRules.GET("/:id", workflowRuleHandler.GetWorkflowRuleByID)
-				workflowRules.PUT("/:id", workflowRuleHandler.UpdateWorkflowRule)
-				workflowRules.DELETE("/:id", workflowRuleHandler.DeleteWorkflowRule)
+				workflowRules.POST("", middleware.RequirePermission("workflow_rules", models.PermissionActionCreate), workflowRuleHandler.CreateWorkflowRule)
+				workflowRules.POST("/bulk", middleware.RequirePermission("workflow_rules", models.PermissionActionCreate), workflowRuleHandler.BulkCreateWorkflowRules)
+				workflowRules.GET("", middleware.RequirePermission("workflow_rules", models.PermissionActionRead), workflowRuleHandler.GetWorkflowRules)
+				workflowRules.GET("/types", middleware.RequirePermission("workflow_rules", models.PermissionActionRead), workflowRuleHandler.GetWorkflowTypes)
+				workflowRules.GET("/lookup", middleware.RequirePermission("workflow_rules", models.PermissionActionRead), workflowRuleHandler.GetWorkflowRuleByPositionAndType)
+				workflowRules.GET("/:id", middleware.RequirePermission("workflow_rules", models.PermissionActionRead), workflowRuleHandler.GetWorkflowRuleByID)
+				workflowRules.PUT("/:id", middleware.RequirePermission("workflow_rules", models.PermissionActionUpdate), workflowRuleHandler.UpdateWorkflowRule)
+				workflowRules.DELETE("/:id", middleware.RequirePermission("workflow_rules", models.PermissionActionDelete), workflowRuleHandler.DeleteWorkflowRule)
 			}
 
 			// Role routes
 			roles := protected.Group("/roles")
 			{
-				roles.POST("", roleHandler.CreateRole)
-				roles.GET("", roleHandler.GetRoles)
-				roles.GET("/:id", roleHandler.GetRoleByID)
-				roles.GET("/:id/permissions", roleHandler.GetRoleWithPermissions)
-				roles.PUT("/:id", roleHandler.UpdateRole)
-				roles.DELETE("/:id", roleHandler.DeleteRole)
-				roles.POST("/:id/permissions", roleHandler.AssignPermissionToRole)
-				roles.DELETE("/:id/permissions/:permission_id", roleHandler.RevokePermissionFromRole)
+				roles.POST("", middleware.RequirePermission("roles", models.PermissionActionCreate), roleHandler.CreateRole)
+				roles.GET("", middleware.RequirePermission("roles", models.PermissionActionRead), roleHandler.GetRoles)
+				roles.GET("/:id", middleware.RequirePermission("roles", models.PermissionActionRead), roleHandler.GetRoleByID)
+				roles.GET("/:id/permissions", middleware.RequirePermission("roles", models.PermissionActionRead), roleHandler.GetRoleWithPermissions)
+				roles.PUT("/:id", middleware.RequirePermission("roles", models.PermissionActionUpdate), roleHandler.UpdateRole)
+				roles.DELETE("/:id", middleware.RequirePermission("roles", models.PermissionActionDelete), roleHandler.DeleteRole)
+				roles.POST("/:id/permissions", middleware.RequirePermission("roles", models.PermissionActionUpdate), roleHandler.AssignPermissionToRole)
+				roles.DELETE("/:id/permissions/:permission_id", middleware.RequirePermission("roles", models.PermissionActionUpdate), roleHandler.RevokePermissionFromRole)
 				// Role Module Access routes
-				roles.GET("/:id/modules", moduleHandler.GetRoleModuleAccesses)
-				roles.POST("/:id/modules", moduleHandler.AssignModuleToRole)
-				roles.DELETE("/:id/modules/:access_id", moduleHandler.RevokeModuleFromRole)
+				roles.GET("/:id/modules", middleware.RequirePermission("roles", models.PermissionActionRead), moduleHandler.GetRoleModuleAccesses)
+				roles.POST("/:id/modules", middleware.RequirePermission("roles", models.PermissionActionUpdate), moduleHandler.AssignModuleToRole)
+				roles.DELETE("/:id/modules/:access_id", middleware.RequirePermission("roles", models.PermissionActionUpdate), moduleHandler.RevokeModuleFromRole)
 			}
 
 			// Permission routes
 			permissions := protected.Group("/permissions")
 			{
-				permissions.POST("", permissionHandler.CreatePermission)
-				permissions.GET("", permissionHandler.GetPermissions)
-				permissions.GET("/groups", permissionHandler.GetPermissionGroups)
-				permissions.GET("/scopes", permissionHandler.GetPermissionScopes)
-				permissions.GET("/actions", permissionHandler.GetPermissionActions)
-				permissions.GET("/:id", permissionHandler.GetPermissionByID)
-				permissions.PUT("/:id", permissionHandler.UpdatePermission)
-				permissions.DELETE("/:id", permissionHandler.DeletePermission)
+				permissions.POST("", middleware.RequirePermission("permissions", models.PermissionActionCreate), permissionHandler.CreatePermission)
+				permissions.GET("", middleware.RequirePermission("permissions", models.PermissionActionRead), permissionHandler.GetPermissions)
+				permissions.GET("/groups", middleware.RequirePermission("permissions", models.PermissionActionRead), permissionHandler.GetPermissionGroups)
+				permissions.GET("/scopes", middleware.RequirePermission("permissions", models.PermissionActionRead), permissionHandler.GetPermissionScopes)
+				permissions.GET("/actions", middleware.RequirePermission("permissions", models.PermissionActionRead), permissionHandler.GetPermissionActions)
+				permissions.GET("/:id", middleware.RequirePermission("permissions", models.PermissionActionRead), permissionHandler.GetPermissionByID)
+				permissions.PUT("/:id", middleware.RequirePermission("permissions", models.PermissionActionUpdate), permissionHandler.UpdatePermission)
+				permissions.DELETE("/:id", middleware.RequirePermission("permissions", models.PermissionActionDelete), permissionHandler.DeletePermission)
 			}
 
 			// Module routes
 			modules := protected.Group("/modules")
 			{
-				modules.POST("", moduleHandler.CreateModule)
-				modules.GET("", moduleHandler.GetModules)
-				modules.GET("/tree", moduleHandler.GetModuleTree)
-				modules.GET("/:id", moduleHandler.GetModuleByID)
-				modules.PUT("/:id", moduleHandler.UpdateModule)
-				modules.DELETE("/:id", moduleHandler.DeleteModule)
+				modules.POST("", middleware.RequirePermission("modules", models.PermissionActionCreate), moduleHandler.CreateModule)
+				modules.GET("", middleware.RequirePermission("modules", models.PermissionActionRead), moduleHandler.GetModules)
+				modules.GET("/tree", middleware.RequirePermission("modules", models.PermissionActionRead), moduleHandler.GetModuleTree)
+				modules.GET("/:id", middleware.RequirePermission("modules", models.PermissionActionRead), moduleHandler.GetModuleByID)
+				modules.PUT("/:id", middleware.RequirePermission("modules", models.PermissionActionUpdate), moduleHandler.UpdateModule)
+				modules.DELETE("/:id", middleware.RequirePermission("modules", models.PermissionActionDelete), moduleHandler.DeleteModule)
+			}
+
+			// Access/Permission checking routes
+			access := protected.Group("/access")
+			{
+				access.POST("/check", accessHandler.CheckPermission)
+				access.POST("/check-batch", accessHandler.CheckPermissionBatch)
+				access.GET("/modules", accessHandler.GetUserModules)
+				access.GET("/permissions", accessHandler.GetUserPermissions)
+
+				// Admin-only cache management
+				access.GET("/cache/stats", accessHandler.GetCacheStats)
+				access.POST("/cache/invalidate/:user_id", accessHandler.InvalidateUserCache)
+				access.POST("/cache/invalidate-all", accessHandler.InvalidateAllCache)
 			}
 		}
 	}

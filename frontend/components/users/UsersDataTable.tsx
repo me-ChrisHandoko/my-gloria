@@ -36,6 +36,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PermissionGate } from "@/components/rbac";
 
 interface UsersDataTableProps {
   users: UserListResponse[];
@@ -143,18 +144,22 @@ export default function UsersDataTable({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Aksi</DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/user/users/${user.id}`)}
-                      >
-                        <Eye className="mr-2 h-4 w-4" />
-                        Lihat Detail
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => router.push(`/user/users/${user.id}/edit`)}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
+                      <PermissionGate resource="users" action="READ" hideOnDenied>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/user/users/${user.id}`)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          Lihat Detail
+                        </DropdownMenuItem>
+                      </PermissionGate>
+                      <PermissionGate resource="users" action="UPDATE" hideOnDenied>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/user/users/${user.id}/edit`)}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                      </PermissionGate>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

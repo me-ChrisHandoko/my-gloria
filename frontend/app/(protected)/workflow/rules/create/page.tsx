@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const stepSchema = z.object({
   step_order: z.number().min(1),
@@ -44,7 +45,7 @@ const workflowRuleSchema = z.object({
 
 type WorkflowRuleFormData = z.infer<typeof workflowRuleSchema>;
 
-export default function CreateWorkflowRulePage() {
+function CreateWorkflowRuleForm() {
   const router = useRouter();
   const [createWorkflowRule, { isLoading }] = useCreateWorkflowRuleMutation();
 
@@ -506,5 +507,13 @@ export default function CreateWorkflowRulePage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function CreateWorkflowRulePage() {
+  return (
+    <PermissionRouteGuard resource="workflow_rules" action="CREATE">
+      <CreateWorkflowRuleForm />
+    </PermissionRouteGuard>
   );
 }

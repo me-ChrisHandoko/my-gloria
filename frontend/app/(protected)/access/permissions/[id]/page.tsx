@@ -1,35 +1,64 @@
-// app/(protected)/akses/permissions/[id]/page.tsx
+// app/(protected)/access/permissions/[id]/page.tsx
 /**
- * Permission Detail Page with Hybrid SSR
- * - Server Component for initial data fetch
- * - Client islands for interactive buttons
+ * Permission Detail Page - Pure CSR Pattern
+ *
+ * Client Component that uses RTK Query for data fetching.
+ * This ensures proper token refresh handling on 401 errors.
+ *
+ * Benefits:
+ * - Automatic token refresh via baseQueryWithReauth
+ * - Consistent with other protected pages (roles, modules)
+ * - Simpler code with single data flow
+ * - Built-in caching via RTK Query
  */
+"use client";
 
+import { use } from "react";
 import { Key, Lock, Shield, Tag, Calendar, User, FileText } from "lucide-react";
 import { format } from "date-fns";
 
-import { getPermissionById } from "@/lib/server/api";
+import { useGetPermissionByIdQuery } from "@/lib/store/services/permissionsApi";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import PermissionDetailActions from "@/components/permissions/PermissionDetailActions";
 
 interface PageProps {
     params: Promise<{ id: string }>;
 }
 
-function Label({ children }: { children: React.ReactNode }) {
-    return <p className="text-sm font-medium text-muted-foreground">{children}</p>;
+function Label({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+    return <p className={`text-sm font-medium text-muted-foreground ${className}`}>{children}</p>;
 }
 
-export default async function PermissionDetailPage({ params }: PageProps) {
-    const { id } = await params;
+export default function PermissionDetailPage({ params }: PageProps) {
+    // Use React.use() for client-side param resolution
+    const { id } = use(params);
 
-    // Server-side data fetching
-    const { data: permission, error } = await getPermissionById(id);
+    // Client-side data fetching with automatic token refresh on 401
+    const { data: permission, isLoading, error } = useGetPermissionByIdQuery(id);
 
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="flex justify-center py-12">
+                <LoadingSpinner />
+            </div>
+        );
+    }
+
+    // Error state
     if (error || !permission) {
-        return <Alert variant="error">Gagal memuat data permission: {error || "Permission not found"}</Alert>;
+        const errorMessage = error
+            ? "status" in error
+                ? (error.data as { message?: string; error?: string })?.message ||
+                  (error.data as { message?: string; error?: string })?.error ||
+                  `Error ${error.status}`
+                : error.message || "Unknown error"
+            : "Permission not found";
+
+        return <Alert variant="error">Gagal memuat data permission: {errorMessage}</Alert>;
     }
 
     return (
@@ -42,8 +71,12 @@ export default async function PermissionDetailPage({ params }: PageProps) {
                     </div>
                     <p className="text-muted-foreground font-mono text-sm">{permission.code}</p>
                 </div>
-                {/* Client Island - Action Buttons */}
-                <PermissionDetailActions permissionId={id} permissionName={permission.name} isSystemPermission={permission.is_system_permission} />
+                {/* Action Buttons */}
+                <PermissionDetailActions
+                    permissionId={id}
+                    permissionName={permission.name}
+                    isSystemPermission={permission.is_system_permission}
+                />
             </div>
 
             {/* Informasi Dasar */}
@@ -69,14 +102,19 @@ export default async function PermissionDetailPage({ params }: PageProps) {
                     <div className="space-y-1">
                         <Label>Status</Label>
                         <div>
-                            <Badge variant={permission.is_active ? "success" : "destructive"}>{permission.is_active ? "Aktif" : "Non-Aktif"}</Badge>
+                            <Badge variant={permission.is_active ? "success" : "destructive"}>
+                                {permission.is_active ? "Aktif" : "Non-Aktif"}
+                            </Badge>
                         </div>
                     </div>
 
                     <div className="space-y-1">
                         <Label>Tipe</Label>
                         <div>
-                            <Badge variant={permission.is_system_permission ? "outline" : "default"} className="gap-1">
+                            <Badge
+                                variant={permission.is_system_permission ? "outline" : "default"}
+                                className="gap-1"
+                            >
                                 {permission.is_system_permission ? (
                                     <>
                                         <Shield className="h-3 w-3" />
@@ -122,7 +160,13 @@ export default async function PermissionDetailPage({ params }: PageProps) {
 
                     <div className="space-y-1">
                         <Label>Scope</Label>
-                        <div>{permission.scope ? <Badge variant="outline">{permission.scope}</Badge> : <span className="text-sm text-muted-foreground">-</span>}</div>
+                        <div>
+                            {permission.scope ? (
+                                <Badge variant="outline">{permission.scope}</Badge>
+                            ) : (
+                                <span className="text-sm text-muted-foreground">-</span>
+                            )}
+                        </div>
                     </div>
 
                     <div className="space-y-1">
@@ -191,7 +235,9 @@ export default async function PermissionDetailPage({ params }: PageProps) {
                             <User className="h-4 w-4" />
                             Dibuat Oleh
                         </Label>
-                        <p className="text-sm">{permission.created_by || <span className="text-muted-foreground">System</span>}</p>
+                        <p className="text-sm">
+                            {permission.created_by || <span className="text-muted-foreground">System</span>}
+                        </p>
                     </div>
 
                     <div className="space-y-1">
@@ -199,7 +245,11 @@ export default async function PermissionDetailPage({ params }: PageProps) {
                             <Calendar className="h-4 w-4" />
                             Dibuat Pada
                         </Label>
-                        <p className="text-sm">{permission.created_at ? format(new Date(permission.created_at), "dd MMM yyyy, HH:mm") : "-"}</p>
+                        <p className="text-sm">
+                            {permission.created_at
+                                ? format(new Date(permission.created_at), "dd MMM yyyy, HH:mm")
+                                : "-"}
+                        </p>
                     </div>
 
                     <div className="space-y-1">
@@ -207,7 +257,11 @@ export default async function PermissionDetailPage({ params }: PageProps) {
                             <Calendar className="h-4 w-4" />
                             Diperbarui Pada
                         </Label>
-                        <p className="text-sm">{permission.updated_at ? format(new Date(permission.updated_at), "dd MMM yyyy, HH:mm") : "-"}</p>
+                        <p className="text-sm">
+                            {permission.updated_at
+                                ? format(new Date(permission.updated_at), "dd MMM yyyy, HH:mm")
+                                : "-"}
+                        </p>
                     </div>
                 </CardContent>
             </Card>

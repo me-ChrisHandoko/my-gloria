@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const moduleSchema = z.object({
   code: z.string()
@@ -43,7 +44,7 @@ const moduleSchema = z.object({
 
 type ModuleFormData = z.infer<typeof moduleSchema>;
 
-export default function CreateModulePage() {
+function CreateModuleForm() {
   const router = useRouter();
   const [createModule, { isLoading }] = useCreateModuleMutation();
 
@@ -300,5 +301,13 @@ export default function CreateModulePage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function CreateModulePage() {
+  return (
+    <PermissionRouteGuard resource="modules" action="CREATE">
+      <CreateModuleForm />
+    </PermissionRouteGuard>
   );
 }

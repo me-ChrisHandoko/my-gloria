@@ -1,31 +1,60 @@
-// app/(protected)/organisasi/sekolah/[id]/page.tsx
+// app/(protected)/organization/schools/[id]/page.tsx
 /**
- * School Detail Page with Hybrid SSR
- * - Server Component for initial data fetch
- * - Client islands for interactive buttons
+ * School Detail Page - Pure CSR Pattern
+ *
+ * Client Component that uses RTK Query for data fetching.
+ * This ensures proper token refresh handling on 401 errors.
+ *
+ * Benefits:
+ * - Automatic token refresh via baseQueryWithReauth
+ * - Consistent with other protected pages (roles, modules)
+ * - Simpler code with single data flow
+ * - Built-in caching via RTK Query
  */
+"use client";
 
+import { use } from "react";
 import { Building2, MapPin, Phone, Mail, User, Calendar, Info } from "lucide-react";
 import { format } from "date-fns";
 
-import { getSchoolById } from "@/lib/server/api";
+import { useGetSchoolByIdQuery } from "@/lib/store/services/organizationApi";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import SchoolDetailActions from "@/components/schools/SchoolDetailActions";
 
 interface PageProps {
     params: Promise<{ id: string }>;
 }
 
-export default async function SchoolDetailPage({ params }: PageProps) {
-    const { id } = await params;
+export default function SchoolDetailPage({ params }: PageProps) {
+    // Use React.use() for client-side param resolution
+    const { id } = use(params);
 
-    // Server-side data fetching
-    const { data: school, error } = await getSchoolById(id);
+    // Client-side data fetching with automatic token refresh on 401
+    const { data: school, isLoading, error } = useGetSchoolByIdQuery(id);
 
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="flex justify-center py-12">
+                <LoadingSpinner />
+            </div>
+        );
+    }
+
+    // Error state
     if (error || !school) {
-        return <Alert variant="error">Gagal memuat data sekolah: {error || "School not found"}</Alert>;
+        const errorMessage = error
+            ? "status" in error
+                ? (error.data as { message?: string; error?: string })?.message ||
+                  (error.data as { message?: string; error?: string })?.error ||
+                  `Error ${error.status}`
+                : error.message || "Unknown error"
+            : "School not found";
+
+        return <Alert variant="error">Gagal memuat data sekolah: {errorMessage}</Alert>;
     }
 
     return (
@@ -38,11 +67,11 @@ export default async function SchoolDetailPage({ params }: PageProps) {
                     </div>
                     <p className="text-muted-foreground">Kode: {school.code}</p>
                 </div>
-                {/* Client Island - Action Buttons */}
+                {/* Action Buttons */}
                 <SchoolDetailActions schoolId={id} schoolName={school.name} />
             </div>
 
-            {/* Informasi Dasar - Static Content (Server Component) */}
+            {/* Informasi Dasar */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -67,7 +96,9 @@ export default async function SchoolDetailPage({ params }: PageProps) {
                             <MapPin className="h-4 w-4" />
                             Lokasi
                         </Label>
-                        <p className="text-sm">{school.lokasi || <span className="text-muted-foreground">-</span>}</p>
+                        <p className="text-sm">
+                            {school.lokasi || <span className="text-muted-foreground">-</span>}
+                        </p>
                     </div>
 
                     <div className="space-y-1">
@@ -75,12 +106,14 @@ export default async function SchoolDetailPage({ params }: PageProps) {
                             <User className="h-4 w-4" />
                             Kepala Sekolah
                         </Label>
-                        <p className="text-sm">{school.principal || <span className="text-muted-foreground">-</span>}</p>
+                        <p className="text-sm">
+                            {school.principal || <span className="text-muted-foreground">-</span>}
+                        </p>
                     </div>
                 </CardContent>
             </Card>
 
-            {/* Kontak - Static Content (Server Component) */}
+            {/* Kontak */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -92,7 +125,9 @@ export default async function SchoolDetailPage({ params }: PageProps) {
                 <CardContent className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-1 md:col-span-2">
                         <Label>Alamat Lengkap</Label>
-                        <p className="text-sm">{school.address || <span className="text-muted-foreground">-</span>}</p>
+                        <p className="text-sm">
+                            {school.address || <span className="text-muted-foreground">-</span>}
+                        </p>
                     </div>
 
                     <div className="space-y-1">
@@ -100,7 +135,9 @@ export default async function SchoolDetailPage({ params }: PageProps) {
                             <Phone className="h-4 w-4" />
                             Nomor Telepon
                         </Label>
-                        <p className="text-sm">{school.phone || <span className="text-muted-foreground">-</span>}</p>
+                        <p className="text-sm">
+                            {school.phone || <span className="text-muted-foreground">-</span>}
+                        </p>
                     </div>
 
                     <div className="space-y-1">
@@ -108,12 +145,14 @@ export default async function SchoolDetailPage({ params }: PageProps) {
                             <Mail className="h-4 w-4" />
                             Email
                         </Label>
-                        <p className="text-sm">{school.email || <span className="text-muted-foreground">-</span>}</p>
+                        <p className="text-sm">
+                            {school.email || <span className="text-muted-foreground">-</span>}
+                        </p>
                     </div>
                 </CardContent>
             </Card>
 
-            {/* Informasi Tambahan - Static Content (Server Component) */}
+            {/* Informasi Tambahan */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -162,7 +201,9 @@ export default async function SchoolDetailPage({ params }: PageProps) {
                     <div className="space-y-1">
                         <Label>Status</Label>
                         <div>
-                            <Badge variant={school.is_active ? "success" : "secondary"}>{school.is_active ? "Aktif" : "Non-Aktif"}</Badge>
+                            <Badge variant={school.is_active ? "success" : "secondary"}>
+                                {school.is_active ? "Aktif" : "Non-Aktif"}
+                            </Badge>
                         </div>
                     </div>
                 </CardContent>
@@ -180,6 +221,3 @@ function Label({ children, className = "" }: { children: React.ReactNode; classN
 function formatDisplayName(name: string): string {
     return name.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
-
-// Optional: Enable revalidation for fresh data
-export const revalidate = 0;

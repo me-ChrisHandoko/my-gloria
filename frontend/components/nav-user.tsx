@@ -38,6 +38,7 @@ import {
 import { useAppSelector, useAppDispatch } from "@/lib/store/hooks"
 import { useLogoutMutation } from "@/lib/store/services/authApi"
 import { logout as logoutAction } from "@/lib/store/features/authSlice"
+import { clearRbac } from "@/lib/store/features/rbacSlice"
 
 export function NavUser({
   user,
@@ -73,6 +74,8 @@ export function NavUser({
       console.error('Logout failed:', error)
     } finally {
       dispatch(logoutAction())
+      // Clear RBAC state (modules, permissions, cache)
+      dispatch(clearRbac())
       router.push("/login")
     }
   }

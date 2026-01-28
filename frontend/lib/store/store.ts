@@ -1,6 +1,8 @@
 // lib/store/store.ts
 import { configureStore } from '@reduxjs/toolkit';
+import { setupListeners } from '@reduxjs/toolkit/query';
 import authReducer from './features/authSlice';
+import rbacReducer from './features/rbacSlice';
 import { authApi } from './services/authApi';
 import { karyawanApi } from './services/karyawanApi';
 import { usersApi } from './services/usersApi';
@@ -11,11 +13,13 @@ import { permissionsApi } from './services/permissionsApi';
 import { delegationsApi } from './services/delegationsApi';
 import { workflowsApi } from './services/workflowsApi';
 import { auditApi } from './services/auditApi';
+import { accessApi } from './services/accessApi';
 import { storageMiddleware } from './middleware/storageMiddleware';
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
+    rbac: rbacReducer,
     [authApi.reducerPath]: authApi.reducer,
     [karyawanApi.reducerPath]: karyawanApi.reducer,
     [usersApi.reducerPath]: usersApi.reducer,
@@ -26,6 +30,7 @@ export const store = configureStore({
     [delegationsApi.reducerPath]: delegationsApi.reducer,
     [workflowsApi.reducerPath]: workflowsApi.reducer,
     [auditApi.reducerPath]: auditApi.reducer,
+    [accessApi.reducerPath]: accessApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()
@@ -39,10 +44,17 @@ export const store = configureStore({
       .concat(delegationsApi.middleware)
       .concat(workflowsApi.middleware)
       .concat(auditApi.middleware)
+      .concat(accessApi.middleware)
       .concat(storageMiddleware),
   // Don't preload state to avoid hydration mismatch
   // State will be loaded by storageMiddleware after client mount
 });
+
+// Enable refetchOnFocus and refetchOnReconnect behaviors
+// This will automatically refetch data when:
+// - Window regains focus (user comes back to tab)
+// - Network reconnects after being offline
+setupListeners(store.dispatch);
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;

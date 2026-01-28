@@ -9,6 +9,7 @@ import { useDeletePermissionMutation } from "@/lib/store/services/permissionsApi
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { ActionButton } from "@/components/rbac";
 
 interface PermissionDetailActionsProps {
     permissionId: string;
@@ -41,14 +42,28 @@ export default function PermissionDetailActions({ permissionId, permissionName, 
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Kembali ke Daftar
                 </Button>
-                <Button variant="outline" onClick={() => router.push(`/access/permissions/${permissionId}/edit`)} disabled={isSystemPermission}>
+                <ActionButton
+                    resource="permissions"
+                    action="UPDATE"
+                    variant="outline"
+                    hideOnDenied
+                    onClick={() => router.push(`/access/permissions/${permissionId}/edit`)}
+                    disabled={isSystemPermission}
+                >
                     <Edit className="mr-2 h-4 w-4" />
                     Edit
-                </Button>
-                <Button variant="destructive" onClick={() => setShowDeleteDialog(true)} disabled={isSystemPermission}>
+                </ActionButton>
+                <ActionButton
+                    resource="permissions"
+                    action="DELETE"
+                    variant="destructive"
+                    hideOnDenied
+                    onClick={() => setShowDeleteDialog(true)}
+                    disabled={isSystemPermission}
+                >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Hapus
-                </Button>
+                </ActionButton>
             </div>
 
             {/* Delete Confirmation Dialog */}

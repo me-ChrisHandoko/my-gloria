@@ -13,12 +13,29 @@ import (
 
 // UserService handles business logic for users
 type UserService struct {
-	db *gorm.DB
+	db                   *gorm.DB
+	escalationPrevention *EscalationPreventionService
+	permissionCache      *PermissionCacheService
 }
 
 // NewUserService creates a new UserService instance
 func NewUserService(db *gorm.DB) *UserService {
 	return &UserService{db: db}
+}
+
+// NewUserServiceWithRBAC creates a new UserService instance with RBAC services
+func NewUserServiceWithRBAC(db *gorm.DB, escalation *EscalationPreventionService, cache *PermissionCacheService) *UserService {
+	return &UserService{
+		db:                   db,
+		escalationPrevention: escalation,
+		permissionCache:      cache,
+	}
+}
+
+// SetRBACServices sets the RBAC services (for dependency injection after creation)
+func (s *UserService) SetRBACServices(escalation *EscalationPreventionService, cache *PermissionCacheService) {
+	s.escalationPrevention = escalation
+	s.permissionCache = cache
 }
 
 // UserListParams represents parameters for listing users
@@ -196,9 +213,11 @@ func (s *UserService) DeleteUser(id string) error {
 
 	// Business rule: Check if user has active roles
 	var activeRoleCount int64
-	s.db.Model(&models.UserRole{}).
+	if err := s.db.Model(&models.UserRole{}).
 		Where("user_id = ? AND is_active = true", id).
-		Count(&activeRoleCount)
+		Count(&activeRoleCount).Error; err != nil {
+		return fmt.Errorf("gagal memeriksa role aktif pengguna: %w", err)
+	}
 
 	if activeRoleCount > 0 {
 		return errors.New("tidak dapat menghapus pengguna yang memiliki role aktif")
@@ -206,9 +225,11 @@ func (s *UserService) DeleteUser(id string) error {
 
 	// Business rule: Check if user has active positions
 	var activePositionCount int64
-	s.db.Model(&models.UserPosition{}).
+	if err := s.db.Model(&models.UserPosition{}).
 		Where("user_id = ? AND is_active = true", id).
-		Count(&activePositionCount)
+		Count(&activePositionCount).Error; err != nil {
+		return fmt.Errorf("gagal memeriksa posisi aktif pengguna: %w", err)
+	}
 
 	if activePositionCount > 0 {
 		return errors.New("tidak dapat menghapus pengguna yang memiliki posisi aktif")
@@ -303,6 +324,20 @@ func (s *UserService) AssignRoleToUser(userID string, req models.AssignRoleToUse
 		return nil, fmt.Errorf("gagal memeriksa role assignment: %w", err)
 	}
 
+	// Self-Escalation Prevention: Users cannot assign roles to themselves
+	if s.escalationPrevention != nil {
+		if err := s.escalationPrevention.ValidateSelfEscalation(assignedBy, userID); err != nil {
+			return nil, fmt.Errorf("escalation prevention: %w", err)
+		}
+	}
+
+	// Escalation Prevention: Validate that assignedBy user can assign this role
+	if s.escalationPrevention != nil {
+		if err := s.escalationPrevention.ValidateRoleAssignment(assignedBy, userID, req.RoleID); err != nil {
+			return nil, fmt.Errorf("escalation prevention: %w", err)
+		}
+	}
+
 	// Create user role assignment
 	userRole := models.UserRole{
 		ID:         generateID(),
@@ -321,6 +356,11 @@ func (s *UserService) AssignRoleToUser(userID string, req models.AssignRoleToUse
 	// Save to database
 	if err := s.db.Create(&userRole).Error; err != nil {
 		return nil, fmt.Errorf("gagal assign role ke pengguna: %w", err)
+	}
+
+	// Invalidate permission cache for the user
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateUser(userID)
 	}
 
 	// Reload with role details
@@ -355,6 +395,11 @@ func (s *UserService) RevokeRoleFromUser(userID string, roleAssignmentID string)
 	// Delete the role assignment
 	if err := s.db.Delete(&userRole).Error; err != nil {
 		return fmt.Errorf("gagal revoke role dari pengguna: %w", err)
+	}
+
+	// Invalidate permission cache for the user
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateUser(userID)
 	}
 
 	return nil
@@ -420,6 +465,20 @@ func (s *UserService) AssignPositionToUser(userID string, req models.AssignPosit
 		return nil, fmt.Errorf("gagal memeriksa position assignment: %w", err)
 	}
 
+	// Self-Escalation Prevention: Users cannot assign positions to themselves
+	if s.escalationPrevention != nil {
+		if err := s.escalationPrevention.ValidateSelfEscalation(appointedBy, userID); err != nil {
+			return nil, fmt.Errorf("escalation prevention: %w", err)
+		}
+	}
+
+	// Escalation Prevention: Validate that appointedBy user can assign this position
+	if s.escalationPrevention != nil {
+		if err := s.escalationPrevention.ValidatePositionAssignment(appointedBy, userID, req.PositionID); err != nil {
+			return nil, fmt.Errorf("escalation prevention: %w", err)
+		}
+	}
+
 	// Create user position assignment
 	userPosition := models.UserPosition{
 		ID:          uuid.New().String(),
@@ -442,6 +501,11 @@ func (s *UserService) AssignPositionToUser(userID string, req models.AssignPosit
 	// Save to database
 	if err := s.db.Create(&userPosition).Error; err != nil {
 		return nil, fmt.Errorf("gagal assign posisi ke pengguna: %w", err)
+	}
+
+	// Invalidate permission cache for the user
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateUser(userID)
 	}
 
 	// Reload with position details
@@ -476,6 +540,213 @@ func (s *UserService) RevokePositionFromUser(userID string, positionAssignmentID
 	// Delete the position assignment
 	if err := s.db.Delete(&userPosition).Error; err != nil {
 		return fmt.Errorf("gagal revoke posisi dari pengguna: %w", err)
+	}
+
+	// Invalidate permission cache for the user
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateUser(userID)
+	}
+
+	return nil
+}
+
+// GetUserPermissions retrieves all direct permissions assigned to a user
+func (s *UserService) GetUserPermissions(userID string) ([]*models.UserPermissionResponse, error) {
+	// Check if user exists
+	var user models.User
+	if err := s.db.First(&user, "id = ?", userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("pengguna tidak ditemukan")
+		}
+		return nil, fmt.Errorf("gagal mengambil data pengguna: %w", err)
+	}
+
+	// Get user permissions with permission details
+	var userPermissions []models.UserPermission
+	if err := s.db.
+		Preload("Permission").
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Find(&userPermissions).Error; err != nil {
+		return nil, fmt.Errorf("gagal mengambil permissions pengguna: %w", err)
+	}
+
+	// Convert to response
+	permissionResponses := make([]*models.UserPermissionResponse, len(userPermissions))
+	for i, up := range userPermissions {
+		permissionResponses[i] = up.ToResponse()
+	}
+
+	return permissionResponses, nil
+}
+
+// AssignPermissionToUser assigns a direct permission to a user
+func (s *UserService) AssignPermissionToUser(userID string, req models.AssignPermissionToUserRequest, grantedBy string) (*models.UserPermissionResponse, error) {
+	// Check if user exists
+	var user models.User
+	if err := s.db.First(&user, "id = ?", userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("pengguna tidak ditemukan")
+		}
+		return nil, fmt.Errorf("gagal mengambil data pengguna: %w", err)
+	}
+
+	// Check if permission exists
+	var permission models.Permission
+	if err := s.db.First(&permission, "id = ?", req.PermissionID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("permission tidak ditemukan")
+		}
+		return nil, fmt.Errorf("gagal mengambil data permission: %w", err)
+	}
+
+	// Self-Escalation Prevention: Users cannot assign permissions to themselves
+	if s.escalationPrevention != nil {
+		if err := s.escalationPrevention.ValidateSelfEscalation(grantedBy, userID); err != nil {
+			return nil, fmt.Errorf("escalation prevention: %w", err)
+		}
+	}
+
+	// Escalation Prevention: Validate that grantedBy user can grant this permission
+	if s.escalationPrevention != nil {
+		if err := s.escalationPrevention.ValidatePermissionGrant(grantedBy, userID, req.PermissionID); err != nil {
+			return nil, fmt.Errorf("escalation prevention: %w", err)
+		}
+	}
+
+	// Check for existing assignment
+	var existingAssignment models.UserPermission
+	err := s.db.Where("user_id = ? AND permission_id = ?", userID, req.PermissionID).
+		First(&existingAssignment).Error
+	if err == nil {
+		// Update existing assignment
+		if req.IsGranted != nil {
+			existingAssignment.IsGranted = *req.IsGranted
+		}
+		if req.Conditions != nil {
+			existingAssignment.Conditions = req.Conditions
+		}
+		existingAssignment.GrantReason = req.GrantReason
+		if req.Priority != nil {
+			existingAssignment.Priority = *req.Priority
+		}
+		if req.IsTemporary != nil {
+			existingAssignment.IsTemporary = *req.IsTemporary
+		}
+		if req.ResourceID != nil {
+			existingAssignment.ResourceID = req.ResourceID
+		}
+		if req.ResourceType != nil {
+			existingAssignment.ResourceType = req.ResourceType
+		}
+		if req.EffectiveFrom != nil {
+			existingAssignment.EffectiveFrom = *req.EffectiveFrom
+		}
+		if req.EffectiveUntil != nil {
+			existingAssignment.EffectiveUntil = req.EffectiveUntil
+		}
+
+		if err := s.db.Save(&existingAssignment).Error; err != nil {
+			return nil, fmt.Errorf("gagal mengupdate permission pengguna: %w", err)
+		}
+
+		// Invalidate permission cache
+		if s.permissionCache != nil {
+			s.permissionCache.InvalidateUser(userID)
+		}
+
+		// Reload with permission details
+		if err := s.db.Preload("Permission").First(&existingAssignment, "id = ?", existingAssignment.ID).Error; err != nil {
+			return nil, fmt.Errorf("gagal mengambil data permission assignment: %w", err)
+		}
+
+		return existingAssignment.ToResponse(), nil
+	}
+
+	// Create new user permission assignment
+	// Note: Escalation prevention checks already performed above (applies to both update and create)
+	isGranted := true
+	if req.IsGranted != nil {
+		isGranted = *req.IsGranted
+	}
+
+	priority := 100
+	if req.Priority != nil {
+		priority = *req.Priority
+	}
+
+	isTemporary := false
+	if req.IsTemporary != nil {
+		isTemporary = *req.IsTemporary
+	}
+
+	userPermission := models.UserPermission{
+		ID:             uuid.New().String(),
+		UserID:         userID,
+		PermissionID:   req.PermissionID,
+		IsGranted:      isGranted,
+		Conditions:     req.Conditions,
+		GrantedBy:      grantedBy,
+		GrantReason:    req.GrantReason,
+		Priority:       priority,
+		IsTemporary:    isTemporary,
+		ResourceID:     req.ResourceID,
+		ResourceType:   req.ResourceType,
+	}
+
+	// Set effective dates
+	if req.EffectiveFrom != nil {
+		userPermission.EffectiveFrom = *req.EffectiveFrom
+	}
+	userPermission.EffectiveUntil = req.EffectiveUntil
+
+	// Save to database
+	if err := s.db.Create(&userPermission).Error; err != nil {
+		return nil, fmt.Errorf("gagal assign permission ke pengguna: %w", err)
+	}
+
+	// Invalidate permission cache
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateUser(userID)
+	}
+
+	// Reload with permission details
+	if err := s.db.Preload("Permission").First(&userPermission, "id = ?", userPermission.ID).Error; err != nil {
+		return nil, fmt.Errorf("gagal mengambil data permission assignment: %w", err)
+	}
+
+	return userPermission.ToResponse(), nil
+}
+
+// RevokePermissionFromUser revokes a direct permission from a user
+func (s *UserService) RevokePermissionFromUser(userID string, permissionAssignmentID string) error {
+	// Check if user exists
+	var user models.User
+	if err := s.db.First(&user, "id = ?", userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("pengguna tidak ditemukan")
+		}
+		return fmt.Errorf("gagal mengambil data pengguna: %w", err)
+	}
+
+	// Find the permission assignment
+	var userPermission models.UserPermission
+	if err := s.db.Where("id = ? AND user_id = ?", permissionAssignmentID, userID).
+		First(&userPermission).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("permission assignment tidak ditemukan")
+		}
+		return fmt.Errorf("gagal mengambil data permission assignment: %w", err)
+	}
+
+	// Delete the permission assignment
+	if err := s.db.Delete(&userPermission).Error; err != nil {
+		return fmt.Errorf("gagal revoke permission dari pengguna: %w", err)
+	}
+
+	// Invalidate permission cache
+	if s.permissionCache != nil {
+		s.permissionCache.InvalidateUser(userID)
 	}
 
 	return nil

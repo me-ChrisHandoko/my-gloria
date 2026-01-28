@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Alert } from "@/components/ui/alert";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const karyawanSchema = z.object({
   nama: z.string().optional(),
@@ -44,7 +45,7 @@ interface PageProps {
   params: Promise<{ nip: string }>;
 }
 
-export default function EditKaryawanPage({ params }: PageProps) {
+function EditKaryawanForm({ params }: PageProps) {
   const { nip } = use(params);
   const router = useRouter();
 
@@ -306,5 +307,13 @@ export default function EditKaryawanPage({ params }: PageProps) {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function EditKaryawanPage({ params }: PageProps) {
+  return (
+    <PermissionRouteGuard resource="employees" action="UPDATE">
+      <EditKaryawanForm params={params} />
+    </PermissionRouteGuard>
   );
 }

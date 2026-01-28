@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useDeleteModuleMutation } from "@/lib/store/services/modulesApi";
 import { Button } from "@/components/ui/button";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { ActionButton } from "@/components/rbac";
 
 interface ModuleDetailActionsProps {
   moduleId: string;
@@ -37,11 +38,24 @@ export default function ModuleDetailActions({ moduleId, moduleName }: ModuleDeta
         <ArrowLeft className="mr-2 h-4 w-4" />
         Kembali
       </Button>
-      <Button variant="outline" onClick={() => router.push(`/access/modules/${moduleId}/edit`)}>
+      <ActionButton
+        resource="modules"
+        action="UPDATE"
+        variant="outline"
+        hideOnDenied
+        onClick={() => router.push(`/access/modules/${moduleId}/edit`)}
+      >
         <Edit className="mr-2 h-4 w-4" />
         Edit
-      </Button>
-      <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+      </ActionButton>
+      <ActionButton
+        resource="modules"
+        action="DELETE"
+        variant="destructive"
+        hideOnDenied
+        onClick={handleDelete}
+        disabled={isDeleting}
+      >
         {isDeleting ? (
           <>
             <LoadingSpinner />
@@ -53,7 +67,7 @@ export default function ModuleDetailActions({ moduleId, moduleName }: ModuleDeta
             Hapus
           </>
         )}
-      </Button>
+      </ActionButton>
     </div>
   );
 }

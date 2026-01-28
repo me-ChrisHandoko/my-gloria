@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const schoolSchema = z.object({
   code: z.string()
@@ -43,7 +44,7 @@ const schoolSchema = z.object({
 
 type SchoolFormData = z.infer<typeof schoolSchema>;
 
-export default function CreateSchoolPage() {
+function CreateSchoolForm() {
   const router = useRouter();
   const [createSchool, { isLoading }] = useCreateSchoolMutation();
   const { data: availableCodes, isLoading: isLoadingCodes } = useGetAvailableSchoolCodesQuery();
@@ -236,5 +237,13 @@ export default function CreateSchoolPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function CreateSchoolPage() {
+  return (
+    <PermissionRouteGuard resource="schools" action="CREATE">
+      <CreateSchoolForm />
+    </PermissionRouteGuard>
   );
 }

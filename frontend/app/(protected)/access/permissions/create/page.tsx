@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const permissionSchema = z.object({
   code: z.string()
@@ -64,7 +65,7 @@ const permissionSchema = z.object({
 
 type PermissionFormData = z.infer<typeof permissionSchema>;
 
-export default function CreatePermissionPage() {
+function CreatePermissionForm() {
   const router = useRouter();
   const [createPermission, { isLoading }] = useCreatePermissionMutation();
   const { data: scopes, isLoading: scopesLoading } = useGetPermissionScopesQuery();
@@ -382,5 +383,13 @@ export default function CreatePermissionPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function CreatePermissionPage() {
+  return (
+    <PermissionRouteGuard resource="permissions" action="CREATE">
+      <CreatePermissionForm />
+    </PermissionRouteGuard>
   );
 }

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { useDeleteRoleMutation } from "@/lib/store/services/rolesApi";
 import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/rbac";
 import {
   Dialog,
   DialogContent,
@@ -47,22 +48,46 @@ export default function RoleDetailActions({ roleId, roleName }: RoleDetailAction
           <ArrowLeft className="mr-2 h-4 w-4" />
           Kembali
         </Button>
-        <Button variant="outline" onClick={() => router.push(`/access/roles/${roleId}/permissions`)}>
+        <ActionButton
+          resource="roles"
+          action="READ"
+          variant="outline"
+          hideOnDenied
+          onClick={() => router.push(`/access/roles/${roleId}/permissions`)}
+        >
           <Key className="mr-2 h-4 w-4" />
           Permissions
-        </Button>
-        <Button variant="outline" onClick={() => router.push(`/access/roles/${roleId}/modules`)}>
+        </ActionButton>
+        <ActionButton
+          resource="roles"
+          action="READ"
+          variant="outline"
+          hideOnDenied
+          onClick={() => router.push(`/access/roles/${roleId}/modules`)}
+        >
           <LayoutGrid className="mr-2 h-4 w-4" />
           Modules
-        </Button>
-        <Button variant="outline" onClick={() => router.push(`/access/roles/${roleId}/edit`)}>
+        </ActionButton>
+        <ActionButton
+          resource="roles"
+          action="UPDATE"
+          variant="outline"
+          hideOnDenied
+          onClick={() => router.push(`/access/roles/${roleId}/edit`)}
+        >
           <Edit className="mr-2 h-4 w-4" />
           Edit
-        </Button>
-        <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+        </ActionButton>
+        <ActionButton
+          resource="roles"
+          action="DELETE"
+          variant="destructive"
+          hideOnDenied
+          onClick={() => setShowDeleteDialog(true)}
+        >
           <Trash2 className="mr-2 h-4 w-4" />
           Hapus
-        </Button>
+        </ActionButton>
       </div>
 
       {/* Delete Confirmation Dialog */}

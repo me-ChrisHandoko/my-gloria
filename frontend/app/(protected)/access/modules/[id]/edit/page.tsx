@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { Alert } from "@/components/ui/alert";
+import { PermissionRouteGuard } from "@/components/rbac";
 
 const moduleSchema = z.object({
   code: z.string()
@@ -50,7 +51,7 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function EditModulePage({ params }: PageProps) {
+function EditModuleForm({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
 
@@ -386,5 +387,13 @@ export default function EditModulePage({ params }: PageProps) {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function EditModulePage({ params }: PageProps) {
+  return (
+    <PermissionRouteGuard resource="modules" action="UPDATE">
+      <EditModuleForm params={params} />
+    </PermissionRouteGuard>
   );
 }
