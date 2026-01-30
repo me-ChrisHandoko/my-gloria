@@ -62,7 +62,8 @@ export default function RegisterForm() {
 
         // Store credentials in Redux
         // Store user info in Redux (tokens handled by httpOnly cookies)
-        dispatch(setCredentials({ user: result.user }));
+        // Backend returns { message, data } format, where data contains user info
+        dispatch(setCredentials({ user: result.data }));
 
         toast.success(t('success'));
         // Redirect to dashboard

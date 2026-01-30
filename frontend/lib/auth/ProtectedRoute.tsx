@@ -64,7 +64,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const router = useRouter();
   const pathname = usePathname();
   const dispatch = useAppDispatch();
-  const { isAuthenticated, isLoading: isAuthLoading } = useAppSelector((state) => state.auth);
+  const { isAuthenticated, isLoading: isAuthLoading, isInitialized } = useAppSelector((state) => state.auth);
   const { modules, modulesLastFetched, permissionsLastFetched } = useAppSelector((state) => state.rbac);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -78,13 +78,14 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }, []);
 
   // Redirect to login if not authenticated
+  // IMPORTANT: Wait for isInitialized to prevent race condition with localStorage restore
   useEffect(() => {
-    if (isMounted && !isAuthLoading && !isAuthenticated) {
+    if (isMounted && isInitialized && !isAuthLoading && !isAuthenticated) {
       // Clear RBAC data on logout
       dispatch(clearRbac());
       router.push('/login');
     }
-  }, [isMounted, isAuthLoading, isAuthenticated, router, dispatch]);
+  }, [isMounted, isInitialized, isAuthLoading, isAuthenticated, router, dispatch]);
 
   // Fetch RBAC data when authenticated (only once per session)
   useEffect(() => {
@@ -125,10 +126,15 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     }
   }, [isMounted, isAuthenticated, modulesLastFetched, hasModuleAccess, router]);
 
-  // Combined loading state
-  const isLoading = isAuthLoading || isLoadingModules || isLoadingPermissions;
+  // Check if RBAC data has been fetched (not just loading)
+  // This fixes race condition where isLoadingModules/isLoadingPermissions are false
+  // before the lazy queries are triggered, causing children to render with empty permissionCache
+  const rbacInitialized = modulesLastFetched !== null && permissionsLastFetched !== null;
 
-  // Show loading on server-side render and initial client mount
+  // Combined loading state - wait for both auth AND rbac initialization
+  const isLoading = !isInitialized || isAuthLoading || isLoadingModules || isLoadingPermissions || !rbacInitialized;
+
+  // Show loading on server-side render, initial client mount, or while initializing auth
   if (!isMounted || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">

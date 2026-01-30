@@ -14,6 +14,7 @@ import { delegationsApi } from './services/delegationsApi';
 import { workflowsApi } from './services/workflowsApi';
 import { auditApi } from './services/auditApi';
 import { accessApi } from './services/accessApi';
+import { apiKeysApi } from './services/apiKeysApi';
 import { storageMiddleware } from './middleware/storageMiddleware';
 
 export const store = configureStore({
@@ -31,6 +32,7 @@ export const store = configureStore({
     [workflowsApi.reducerPath]: workflowsApi.reducer,
     [auditApi.reducerPath]: auditApi.reducer,
     [accessApi.reducerPath]: accessApi.reducer,
+    [apiKeysApi.reducerPath]: apiKeysApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()
@@ -45,6 +47,7 @@ export const store = configureStore({
       .concat(workflowsApi.middleware)
       .concat(auditApi.middleware)
       .concat(accessApi.middleware)
+      .concat(apiKeysApi.middleware)
       .concat(storageMiddleware),
   // Don't preload state to avoid hydration mismatch
   // State will be loaded by storageMiddleware after client mount

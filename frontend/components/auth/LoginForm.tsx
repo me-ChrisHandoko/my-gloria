@@ -106,9 +106,10 @@ export default function LoginForm() {
         const result = await login({ email, password }).unwrap();
 
         // Store user info in Redux (tokens handled by httpOnly cookies)
+        // Backend returns { message, data } format, where data contains user info
         dispatch(
           setCredentials({
-            user: result.user,
+            user: result.data,
           })
         );
 

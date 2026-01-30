@@ -18,23 +18,50 @@ import { Middleware } from '@reduxjs/toolkit';
 export const storageMiddleware: Middleware = (store) => (next) => (action: any) => {
   const result = next(action);
 
-  // Save only user info to localStorage on auth actions (NO TOKENS)
-  // localStorage is shared across all tabs, enabling multi-tab sessions
-  if (action.type?.startsWith('auth/')) {
-    const authState = store.getState().auth;
+  // Only run on client-side (localStorage is not available on server)
+  if (typeof window === 'undefined') {
+    return result;
+  }
 
-    if (authState.isAuthenticated && authState.user) {
-      // SECURITY: Only store non-sensitive user info, NEVER tokens
-      localStorage.setItem(
-        'gloria_user',
-        JSON.stringify({
+  // Log all auth actions for debugging
+  const actionType = action.type as string;
+  if (actionType?.startsWith('auth/')) {
+    console.log('[Auth Middleware] Action received:', actionType);
+  }
+
+  // Only handle setCredentials and logout actions for localStorage persistence
+  // DO NOT handle initializeAuth or other auth actions that don't change auth state
+  if (actionType === 'auth/setCredentials') {
+    // User logged in - save to localStorage
+    const authState = store.getState().auth;
+    console.log('[Auth Middleware] setCredentials - authState:', {
+      hasUser: !!authState.user,
+      isAuthenticated: authState.isAuthenticated,
+      email: authState.user?.email
+    });
+
+    if (authState.user) {
+      try {
+        const dataToStore = {
           user: authState.user,
           isAuthenticated: authState.isAuthenticated,
-        })
-      );
+        };
+        localStorage.setItem('gloria_user', JSON.stringify(dataToStore));
+        console.log('[Auth Middleware] ✅ Saved to localStorage:', authState.user.email);
+
+        // Verify it was saved
+        const verify = localStorage.getItem('gloria_user');
+        console.log('[Auth Middleware] Verification:', verify ? 'OK' : 'FAILED');
+      } catch (error) {
+        console.error('[Auth Middleware] ❌ Failed to save:', error);
+      }
     } else {
-      localStorage.removeItem('gloria_user');
+      console.log('[Auth Middleware] ⚠️ No user in state, skipping save');
     }
+  } else if (actionType === 'auth/logout') {
+    // User logged out - remove from localStorage
+    localStorage.removeItem('gloria_user');
+    console.log('[Auth Middleware] 🚪 Removed from localStorage (logout)');
   }
 
   return result;

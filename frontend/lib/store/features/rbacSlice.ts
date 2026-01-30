@@ -215,6 +215,10 @@ const rbacSlice = createSlice({
         state.isLoadingPermissions = false;
         state.permissionsError = null;
 
+        // Clear permission cache before rebuilding to handle revoked permissions
+        // This ensures removed permissions don't stay in cache
+        state.permissionCache = {};
+
         // Build permission cache from resolved permissions
         action.payload.permissions.forEach((perm) => {
           if (perm.is_granted) {

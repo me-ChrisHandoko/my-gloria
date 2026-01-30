@@ -53,6 +53,10 @@ func main() {
 	log.Println("Initializing CSRF protection...")
 	auth.InitCSRFSecret(cfg.CSRF.Secret)
 
+	// Initialize API Key service for external API access (n8n, etc.)
+	log.Println("Initializing API Key service...")
+	middleware.InitApiKeyService()
+
 	// Setup router
 	router := setupRouter()
 
@@ -89,6 +93,7 @@ func setupRouter() *gin.Engine {
 	permissionService := services.NewPermissionService(db)
 	moduleService := services.NewModuleService(db)
 	userService := services.NewUserService(db)
+	apiKeyService := services.NewApiKeyService(db)
 
 	// Inject RBAC services into services for escalation prevention and cache invalidation
 	escalationPrevention := middleware.GetEscalationPrevention()
@@ -109,6 +114,7 @@ func setupRouter() *gin.Engine {
 	moduleHandler := handlers.NewModuleHandler(moduleService)
 	userHandler := handlers.NewUserHandler(userService)
 	accessHandler := handlers.NewAccessHandler()
+	apiKeyHandler := handlers.NewApiKeyHandler(apiKeyService)
 
 	// Configure CORS
 	// In development: Allow localhost origins for testing
@@ -132,6 +138,7 @@ func setupRouter() *gin.Engine {
 			"Content-Type",
 			"Accept",
 			"X-CSRF-Token", // CSRF protection header
+			"X-API-Key",    // API Key authentication header for external access (n8n, etc.)
 		},
 		ExposeHeaders: []string{
 			"Content-Length",
@@ -311,6 +318,42 @@ func setupRouter() *gin.Engine {
 				access.POST("/cache/invalidate/:user_id", accessHandler.InvalidateUserCache)
 				access.POST("/cache/invalidate-all", accessHandler.InvalidateAllCache)
 			}
+
+			// API Key management routes (for users to manage their API keys)
+			apiKeys := protected.Group("/api-keys")
+			{
+				apiKeys.POST("", middleware.RequirePermission("api-keys", models.PermissionActionCreate), apiKeyHandler.CreateApiKey)
+				apiKeys.GET("", middleware.RequirePermission("api-keys", models.PermissionActionRead), apiKeyHandler.GetApiKeys)
+				apiKeys.GET("/:id", middleware.RequirePermission("api-keys", models.PermissionActionRead), apiKeyHandler.GetApiKey)
+				apiKeys.POST("/:id/revoke", middleware.RequirePermission("api-keys", models.PermissionActionUpdate), apiKeyHandler.RevokeApiKey)
+				apiKeys.DELETE("/:id", middleware.RequirePermission("api-keys", models.PermissionActionDelete), apiKeyHandler.DeleteApiKey)
+			}
+		}
+
+		// =============================================================
+		// External API routes (for n8n, third-party integrations, etc.)
+		// These routes use API Key authentication instead of JWT/CSRF
+		// =============================================================
+		external := v1.Group("/external")
+		external.Use(middleware.ApiKeyAuth())
+		{
+			// Schools endpoints for external access
+			external.GET("/schools", schoolHandler.GetSchools)
+			external.GET("/schools/:id", schoolHandler.GetSchoolByID)
+
+			// Employees endpoints for external access
+			external.GET("/employees", karyawanHandler.GetKaryawans)
+			external.GET("/employees/filter-options", karyawanHandler.GetFilterOptions)
+			external.GET("/employees/:nip", karyawanHandler.GetKaryawanByNIP)
+
+			// Departments endpoints for external access
+			external.GET("/departments", departmentHandler.GetDepartments)
+			external.GET("/departments/tree", departmentHandler.GetDepartmentTree)
+			external.GET("/departments/:id", departmentHandler.GetDepartmentByID)
+
+			// Positions endpoints for external access
+			external.GET("/positions", positionHandler.GetPositions)
+			external.GET("/positions/:id", positionHandler.GetPositionByID)
 		}
 	}
 

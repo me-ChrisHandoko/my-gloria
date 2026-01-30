@@ -26,7 +26,7 @@ const permissionSchema = z.object({
   code: z.string()
     .min(2, { message: "Kode minimal 2 karakter" })
     .max(100, { message: "Kode maksimal 100 karakter" })
-    .regex(/^[A-Z0-9_:]+$/, { message: "Kode harus uppercase dengan underscore atau colon" }),
+    .regex(/^[A-Za-z0-9_:\-\.]+$/, { message: "Kode hanya boleh berisi huruf, angka, underscore, colon, hyphen, atau titik" }),
   name: z.string()
     .min(2, { message: "Nama minimal 2 karakter" })
     .max(255, { message: "Nama maksimal 255 karakter" }),
@@ -158,17 +158,12 @@ function CreatePermissionForm() {
               </Label>
               <Input
                 id="code"
-                placeholder="USER_READ"
+                placeholder="api-keys.read.all"
                 className={`w-full ${errors.code ? "border-destructive" : ""}`}
                 {...register("code")}
-                onChange={(e) => {
-                  const value = e.target.value.toUpperCase();
-                  setValue("code", value);
-                  trigger("code");
-                }}
               />
               <p className="text-sm text-muted-foreground">
-                Format: UPPERCASE dengan underscore (RESOURCE_ACTION)
+                Format: huruf, angka, underscore, colon, hyphen, atau titik
               </p>
               {errors.code && (
                 <p className="text-sm text-destructive">{errors.code.message}</p>

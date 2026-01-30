@@ -230,7 +230,7 @@ function EditPermissionForm({ params }: PageProps) {
               </Label>
               <Input
                 id="code"
-                placeholder="USER_READ"
+                placeholder="api-keys.read.all"
                 className={`w-full ${errors.code ? "border-destructive" : ""}`}
                 {...register("code")}
                 disabled={isSystemPermission}

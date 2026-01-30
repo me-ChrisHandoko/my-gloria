@@ -41,6 +41,15 @@ func (e *EscalationError) Error() string {
 // 2. Assigner can only assign roles at same level or lower (higher hierarchy_level number)
 // 3. Cannot assign system roles unless assigner has system admin privileges
 func (s *EscalationPreventionService) ValidateRoleAssignment(assignerID, targetUserID, roleID string) error {
+	// 0. SUPERADMIN bypass - users with hierarchy_level = 0 can assign any role
+	assignerLevel, err := s.resolver.GetUserHighestRoleLevel(assignerID)
+	if err != nil {
+		return fmt.Errorf("failed to get assigner role level: %w", err)
+	}
+	if assignerLevel == 0 {
+		return nil // SUPERADMIN bypasses all escalation checks
+	}
+
 	// 1. Check ASSIGN permission
 	hasPermission, err := s.resolver.HasPermission(assignerID, "roles", models.PermissionActionAssign)
 	if err != nil {
@@ -82,11 +91,6 @@ func (s *EscalationPreventionService) ValidateRoleAssignment(assignerID, targetU
 	}
 
 	// 4. Check hierarchy level
-	assignerLevel, err := s.resolver.GetUserHighestRoleLevel(assignerID)
-	if err != nil {
-		return fmt.Errorf("failed to get assigner role level: %w", err)
-	}
-
 	if role.HierarchyLevel < assignerLevel {
 		return &EscalationError{
 			Message:  fmt.Sprintf("privilege escalation denied: cannot assign role with hierarchy level %d (your level: %d)", role.HierarchyLevel, assignerLevel),
@@ -105,6 +109,15 @@ func (s *EscalationPreventionService) ValidateRoleAssignment(assignerID, targetU
 // 2. Granter must have ASSIGN permission on permissions resource
 // 3. Cannot grant permissions with higher scope than granter has
 func (s *EscalationPreventionService) ValidatePermissionGrant(granterID, targetUserID, permissionID string) error {
+	// 0. SUPERADMIN bypass - users with hierarchy_level = 0 can grant any permission
+	granterLevel, err := s.resolver.GetUserHighestRoleLevel(granterID)
+	if err != nil {
+		return fmt.Errorf("failed to get granter role level: %w", err)
+	}
+	if granterLevel == 0 {
+		return nil // SUPERADMIN bypasses all escalation checks
+	}
+
 	// 1. Get permission being granted
 	var permission models.Permission
 	if err := s.db.First(&permission, "id = ?", permissionID).Error; err != nil {
@@ -183,6 +196,15 @@ func (s *EscalationPreventionService) validateScopeEscalation(granterID string, 
 // 2. Assigner's hierarchy level must be higher (lower number) than position's level
 // 3. Cannot assign positions in departments/schools without appropriate scope
 func (s *EscalationPreventionService) ValidatePositionAssignment(assignerID, targetUserID, positionID string) error {
+	// 0. SUPERADMIN bypass - users with hierarchy_level = 0 can assign any position
+	assignerLevel, err := s.resolver.GetUserHighestRoleLevel(assignerID)
+	if err != nil {
+		return fmt.Errorf("failed to get assigner role level: %w", err)
+	}
+	if assignerLevel == 0 {
+		return nil // SUPERADMIN bypasses all escalation checks
+	}
+
 	// 1. Check ASSIGN permission
 	hasPermission, err := s.resolver.HasPermission(assignerID, "positions", models.PermissionActionAssign)
 	if err != nil {
@@ -286,6 +308,15 @@ func (s *EscalationPreventionService) validateDepartmentScope(userID, department
 
 // ValidateModuleAccessGrant validates if granter can grant module access to target
 func (s *EscalationPreventionService) ValidateModuleAccessGrant(granterID, targetUserID, moduleID string, permissions []string) error {
+	// 0. SUPERADMIN bypass - users with hierarchy_level = 0 can grant any module access
+	granterLevel, err := s.resolver.GetUserHighestRoleLevel(granterID)
+	if err != nil {
+		return fmt.Errorf("failed to get granter role level: %w", err)
+	}
+	if granterLevel == 0 {
+		return nil // SUPERADMIN bypasses all escalation checks
+	}
+
 	// 1. Get module
 	var module models.Module
 	if err := s.db.First(&module, "id = ?", moduleID).Error; err != nil {
@@ -318,6 +349,18 @@ func (s *EscalationPreventionService) ValidateModuleAccessGrant(granterID, targe
 
 // ValidateRolePermissionAssignment validates if user can assign a permission to a role
 func (s *EscalationPreventionService) ValidateRolePermissionAssignment(assignerID, roleID, permissionID string) error {
+	// 0. SUPERADMIN bypass - users with hierarchy_level = 0 can manage all permissions
+	assignerLevel, err := s.resolver.GetUserHighestRoleLevel(assignerID)
+	if err != nil {
+		fmt.Printf("[DEBUG] ValidateRolePermissionAssignment: failed to get assigner role level for userID=%s, error=%v\n", assignerID, err)
+		return fmt.Errorf("failed to get assigner role level: %w", err)
+	}
+	fmt.Printf("[DEBUG] ValidateRolePermissionAssignment: userID=%s, assignerLevel=%d\n", assignerID, assignerLevel)
+	if assignerLevel == 0 {
+		fmt.Printf("[DEBUG] ValidateRolePermissionAssignment: SUPERADMIN bypass activated for userID=%s\n", assignerID)
+		return nil // SUPERADMIN bypasses all escalation checks
+	}
+
 	// 1. Get the role
 	var role models.Role
 	if err := s.db.First(&role, "id = ?", roleID).Error; err != nil {
@@ -342,11 +385,6 @@ func (s *EscalationPreventionService) ValidateRolePermissionAssignment(assignerI
 	}
 
 	// 3. Check hierarchy - cannot modify roles with higher privilege
-	assignerLevel, err := s.resolver.GetUserHighestRoleLevel(assignerID)
-	if err != nil {
-		return fmt.Errorf("failed to get assigner role level: %w", err)
-	}
-
 	if role.HierarchyLevel < assignerLevel {
 		return &EscalationError{
 			Message:  fmt.Sprintf("privilege escalation denied: cannot modify role with hierarchy level %d (your level: %d)", role.HierarchyLevel, assignerLevel),
@@ -383,6 +421,15 @@ func (s *EscalationPreventionService) ValidateRolePermissionAssignment(assignerI
 
 // ValidateRoleModification validates if user can modify a role (e.g., assign modules)
 func (s *EscalationPreventionService) ValidateRoleModification(modifierID, roleID string) error {
+	// 0. SUPERADMIN bypass - users with hierarchy_level = 0 can modify all roles
+	modifierLevel, err := s.resolver.GetUserHighestRoleLevel(modifierID)
+	if err != nil {
+		return fmt.Errorf("failed to get modifier role level: %w", err)
+	}
+	if modifierLevel == 0 {
+		return nil // SUPERADMIN bypasses all escalation checks
+	}
+
 	// 1. Get the role
 	var role models.Role
 	if err := s.db.First(&role, "id = ?", roleID).Error; err != nil {
@@ -407,11 +454,6 @@ func (s *EscalationPreventionService) ValidateRoleModification(modifierID, roleI
 	}
 
 	// 3. Check hierarchy - cannot modify roles with higher privilege
-	modifierLevel, err := s.resolver.GetUserHighestRoleLevel(modifierID)
-	if err != nil {
-		return fmt.Errorf("failed to get modifier role level: %w", err)
-	}
-
 	if role.HierarchyLevel < modifierLevel {
 		return &EscalationError{
 			Message:  fmt.Sprintf("privilege escalation denied: cannot modify role with hierarchy level %d (your level: %d)", role.HierarchyLevel, modifierLevel),

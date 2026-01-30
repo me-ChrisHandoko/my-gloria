@@ -8,6 +8,7 @@
 
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { baseQueryWithReauth } from '../baseApi';
+import { accessApi } from './accessApi';
 import {
   Role,
   RoleListResponse,
@@ -115,6 +116,15 @@ export const rolesApi = createApi({
         { type: 'RolePermissions', id: roleId },
         { type: 'RoleDetail', id: roleId },
       ],
+      // Invalidate accessApi to refresh user's RBAC cache
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(accessApi.util.invalidateTags(['UserModules', 'UserPermissions']));
+        } catch {
+          // Error is handled by invalidatesTags
+        }
+      },
     }),
 
     // Revoke permission from role
@@ -127,6 +137,15 @@ export const rolesApi = createApi({
         { type: 'RolePermissions', id: roleId },
         { type: 'RoleDetail', id: roleId },
       ],
+      // Invalidate accessApi to refresh user's RBAC cache
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(accessApi.util.invalidateTags(['UserModules', 'UserPermissions']));
+        } catch {
+          // Error is handled by invalidatesTags
+        }
+      },
     }),
   }),
 });

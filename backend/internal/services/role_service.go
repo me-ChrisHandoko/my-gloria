@@ -374,29 +374,39 @@ func (s *RoleService) DeleteRole(id string) error {
 
 // AssignPermissionToRole assigns a permission to a role
 func (s *RoleService) AssignPermissionToRole(roleID string, req models.AssignPermissionToRoleRequest, userID string) (*models.RolePermission, error) {
+	fmt.Printf("[DEBUG] RoleService.AssignPermissionToRole: roleID=%s, permissionID=%s, userID=%s\n", roleID, req.PermissionID, userID)
+
 	// Validate role exists
 	var role models.Role
 	if err := s.db.First(&role, "id = ?", roleID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			fmt.Printf("[DEBUG] RoleService: role not found\n")
 			return nil, errors.New("role tidak ditemukan")
 		}
 		return nil, fmt.Errorf("gagal mengambil data role: %w", err)
 	}
+	fmt.Printf("[DEBUG] RoleService: role found, name=%s\n", role.Name)
 
 	// Validate permission exists
 	var permission models.Permission
 	if err := s.db.First(&permission, "id = ?", req.PermissionID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			fmt.Printf("[DEBUG] RoleService: permission not found\n")
 			return nil, errors.New("permission tidak ditemukan")
 		}
 		return nil, fmt.Errorf("gagal mengambil data permission: %w", err)
 	}
+	fmt.Printf("[DEBUG] RoleService: permission found, code=%s\n", permission.Code)
 
 	// Escalation Prevention: Validate that userID can grant this permission to the role
+	fmt.Printf("[DEBUG] RoleService: escalationPrevention is nil? %v\n", s.escalationPrevention == nil)
 	if s.escalationPrevention != nil {
+		fmt.Printf("[DEBUG] RoleService: calling ValidateRolePermissionAssignment\n")
 		if err := s.escalationPrevention.ValidateRolePermissionAssignment(userID, roleID, req.PermissionID); err != nil {
+			fmt.Printf("[DEBUG] RoleService: escalation prevention error=%v\n", err)
 			return nil, fmt.Errorf("escalation prevention: %w", err)
 		}
+		fmt.Printf("[DEBUG] RoleService: escalation prevention passed\n")
 	}
 
 	// Check if permission is already assigned

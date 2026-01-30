@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -249,24 +250,30 @@ func (h *RoleHandler) DeleteRole(c *gin.Context) {
 func (h *RoleHandler) AssignPermissionToRole(c *gin.Context) {
 	// HTTP: Get role ID from URL
 	roleID := c.Param("id")
+	fmt.Printf("[DEBUG] AssignPermissionToRole: roleID=%s\n", roleID)
 
 	// HTTP: Parse and validate request
 	var req models.AssignPermissionToRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Printf("[DEBUG] AssignPermissionToRole: JSON bind error=%v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	fmt.Printf("[DEBUG] AssignPermissionToRole: permissionID=%s\n", req.PermissionID)
 
 	// HTTP: Get authenticated user
 	userID, exists := c.Get("user_id")
 	if !exists {
+		fmt.Printf("[DEBUG] AssignPermissionToRole: user_id not found in context\n")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
+	fmt.Printf("[DEBUG] AssignPermissionToRole: userID=%s\n", userID.(string))
 
 	// Business logic: Assign permission via service
 	rolePermission, err := h.roleService.AssignPermissionToRole(roleID, req, userID.(string))
 	if err != nil {
+		fmt.Printf("[DEBUG] AssignPermissionToRole: service error=%v\n", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

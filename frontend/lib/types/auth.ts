@@ -34,12 +34,11 @@ export interface User {
   }>;
 }
 
+// Backend response format for login/register
+// Note: Tokens are NOT in response body - they're set via httpOnly cookies
 export interface AuthResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-  user: User;
+  message: string;
+  data: User;
 }
 
 export interface LoginRequest {
